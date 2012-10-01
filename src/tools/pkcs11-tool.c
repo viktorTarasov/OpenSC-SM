@@ -837,6 +837,9 @@ int main(int argc, char * argv[])
 			 util_fatal("You should specify at least one of the "
 					 "object ID, object label, application label or application ID\n");
 		delete_object(session);
+
+		printf("Now list public keys ...\n");
+		list_objects(session, CKO_PUBLIC_KEY);
 	}
 
 	if (do_set_id) {

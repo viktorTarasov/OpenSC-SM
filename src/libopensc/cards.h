@@ -191,6 +191,10 @@ enum {
 
 	/* SmartCard-HSM */
 	SC_CARD_TYPE_SC_HSM = 26000,
+
+	/* Athena */
+	SC_CARD_TYPE_ATHENA = 27000,
+	SC_CARD_TYPE_ATHENA_LASER
 };
 
 extern sc_card_driver_t *sc_get_default_driver(void);
@@ -227,6 +231,7 @@ extern sc_card_driver_t *sc_get_itacns_driver(void);
 extern sc_card_driver_t *sc_get_authentic_driver(void);
 extern sc_card_driver_t *sc_get_iasecc_driver(void);
 extern sc_card_driver_t *sc_get_epass2003_driver(void);
+extern sc_card_driver_t *sc_get_laser_driver(void);
 
 #ifdef __cplusplus
 }

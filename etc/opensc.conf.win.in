@@ -320,12 +320,9 @@ app default {
                 secure_messaging = local_amos;
         }
         card_atr 3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:01:0B:03:52:00:05:38 {
-                type = 25004;
-                driver = "iasecc";
-                name = "Amos IAS/ECC v1.0.1";
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
-                secure_messaging = local_amos_eid;
+                type = 27001;
+                driver = "laser";
+                name = "Athena Laser";
         }
 
 	secure_messaging local_authentic  {

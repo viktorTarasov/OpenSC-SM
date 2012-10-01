@@ -2758,7 +2758,7 @@ pkcs15_any_destroy(struct sc_pkcs11_session *session, void *object)
 	struct pkcs15_any_object *any_obj = (struct pkcs15_any_object*) object;
 	struct sc_pkcs11_slot *slot = session->slot;
 	struct sc_pkcs11_card *p11card = slot->card;
-        struct pkcs15_fw_data *fw_data = NULL;
+	struct pkcs15_fw_data *fw_data = NULL;
 	struct sc_aid *aid = NULL;
 	struct sc_profile *profile = NULL;
 	int rv;
@@ -2780,6 +2780,7 @@ pkcs15_any_destroy(struct sc_pkcs11_session *session, void *object)
 
 	if(slot->app_info)
 		aid = &slot->app_info->aid;
+
 	rv = sc_pkcs15init_finalize_profile(p11card->card, profile, aid);
 	if (rv) {
 		sc_log(context, "Cannot finalize profile: %i", rv);
