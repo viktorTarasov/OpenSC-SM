@@ -563,10 +563,34 @@ laser_chv_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd,
 		int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
+	}
+	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
+		apdu.data = pin_cmd->pin1.data;
+		apdu.datalen = pin_cmd->pin1.len;
+		apdu.lc = pin_cmd->pin1.len;
+	}
+	else   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+        rv = sc_transmit_apdu(card, &apdu);
+        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+
+        if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
+		*tries_left = apdu.sw2 & 0x0F;
+        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+
+        LOG_FUNC_RETURN(ctx, rv);
+
 }
 
 
@@ -575,11 +599,37 @@ laser_pin_is_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd_data
 		int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_pin_cmd_data pin_cmd;
+	int rv = SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
 
 	LOG_FUNC_CALLED(ctx);
+	if (!pin_cmd_data)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
 	if (pin_cmd_data->pin_type != SC_AC_CHV)
-		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "PIN type is not supported for the verification");
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Non CHV PIN type is not supported for verification");
+
+	pin_cmd = *pin_cmd_data;
+	pin_cmd.pin1.data = (unsigned char *)"";
+	pin_cmd.pin1.len = 0;
+	rv = laser_chv_verify(card, &pin_cmd, tries_left);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_select_global_pin(struct sc_card *card, unsigned reference)
+{
+	struct sc_path path;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Select global PIN file %X", reference);
+
+	sc_format_path("3F0000FF", &path);
+	path.value[path.len - 1] = reference;
+
+	rv = laser_select_file(card, &path, NULL);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -588,19 +638,47 @@ laser_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 		const unsigned char *data, size_t data_len, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_pin_cmd_data pin_cmd;
+	unsigned chv_ref = reference;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Verify PIN(type:%X,ref:%i,data(len:%i,%p)", type, reference, data_len, data);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-}
+	if (type == SC_AC_AUT)   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+	else if (type == SC_AC_SCB)   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+	else if (type == SC_AC_CHV)   {
+		if (!(reference & 0x80))   {
+			rv =  laser_select_global_pin(card, reference);
+			LOG_TEST_RET(ctx, rv, "Select PIN file error");
+			chv_ref = 0;
+		}
+	}
+	else   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
 
+	memset(&pin_cmd, 0, sizeof(pin_cmd));
+	pin_cmd.pin_type = SC_AC_CHV;
+	pin_cmd.pin_reference = chv_ref;
+	pin_cmd.cmd = SC_PIN_CMD_VERIFY;
+	pin_cmd.pin1.data = data;
+	pin_cmd.pin1.len = data_len;
 
-static int
-laser_pin_get_policy (struct sc_card *card, struct sc_pin_cmd_data *data)
-{
-	struct sc_context *ctx = card->ctx;
-	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	rv = laser_pin_is_verified(card, &pin_cmd, tries_left);
+	if (data && !data_len)
+		LOG_FUNC_RETURN(ctx, rv);
+
+	if (rv != SC_ERROR_PIN_CODE_INCORRECT && rv != SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)
+		LOG_FUNC_RETURN(ctx, rv);
+
+	rv = laser_chv_verify(card, &pin_cmd, tries_left);
+	LOG_TEST_RET(ctx, rv, "PIN CHV verification error");
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -640,6 +718,15 @@ laser_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_lef
 	sc_log(ctx, "laser_pin_cmd() cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
 			data->cmd, data->pin_type, data->pin_reference,
 			data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
+	switch (data->cmd)   {
+	case SC_PIN_CMD_VERIFY:
+		rv = laser_pin_verify(card, data->pin_type, data->pin_reference, data->pin1.data, data->pin1.len, tries_left);
+		LOG_FUNC_RETURN(ctx, rv);
+	default:
+		sc_log(ctx, "PIN command 0x%X do not yet supported.", data->cmd);
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Non-supported PIN command");
+	}
+
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
