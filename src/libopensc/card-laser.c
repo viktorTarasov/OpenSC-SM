@@ -481,8 +481,90 @@ static int
 laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
+	unsigned char buf[0x80];
+	size_t offs = 0;
+	unsigned char  ops_df[6] = {
+		SC_AC_OP_CREATE_EF, SC_AC_OP_CREATE_DF, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_ACTIVATE, SC_AC_OP_DEACTIVATE
+	};
+	unsigned char  ops_ef[4] = {
+		SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF
+	};
+	unsigned char *ops = NULL;
+	size_t ii, ops_len, file_size;
+
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	if (file->type == SC_FILE_TYPE_DF)   {
+		ops = &ops_df[0];
+		ops_len = sizeof(ops_df);
+		file_size = 0;
+	}
+	else if (file->type == SC_FILE_TYPE_WORKING_EF)   {
+		ops = &ops_ef[0];
+		ops_len = sizeof(ops_ef);
+		file_size = file->size;
+	}
+	else   {
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create of the non DF and non EF file types is not supported.");
+	}
+
+	memset(buf, 0, sizeof(buf));
+	offs = 0;
+
+	buf[offs++] = 0x83;
+	buf[offs++] = 2;
+	buf[offs++] = (file->id >> 8) & 0xFF;
+	buf[offs++] = file->id & 0xFF;
+
+	buf[offs++] = 0x80;
+	buf[offs++] = 2;
+	buf[offs++] = (file_size >> 8) & 0xFF;
+	buf[offs++] = file_size & 0xFF;
+
+	if (file->type == SC_FILE_TYPE_DF && file->namelen)   {
+		buf[offs++] = 0x84;
+		buf[offs++] = file->namelen;
+		memcpy(buf + offs, file->name, file->namelen);
+		offs += file->namelen;
+	}
+
+	buf[offs++] = 0x8A;
+	buf[offs++] = 1;
+	buf[offs++] = 0x04;
+
+	buf[offs++] = 0x86;
+	buf[offs++] = ops_len * 2;;
+	for (ii = 0; ii < ops_len; ii++) {
+		const struct sc_acl_entry *entry = sc_file_get_acl_entry(file, ops[ii]);
+
+		if (entry)
+			sc_log(ctx, "ops 0x%X: method %X, reference %X", ops[ii], entry->method, entry->key_ref);
+		else
+			sc_log(ctx, "ops 0x%X: no ACL entry", ops[ii]);
+
+		if (!entry || entry->method == SC_AC_NEVER)   {
+			buf[offs++] = 0x00;
+			buf[offs++] = 0xFF;
+		}
+		else if (entry->method == SC_AC_NONE)   {
+			buf[offs++] = 0x00;
+			buf[offs++] = 0x00;
+		}
+		else if (entry->method == SC_AC_SCB)   {
+			buf[offs++] = (entry->key_ref >> 8) & 0xFF;
+			buf[offs++] = entry->key_ref & 0xFF;
+		}
+		else   {
+			LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Non supported AC method");
+		}
+	}
+
+	if (out)   {
+		if (out_len < offs)
+			LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small to encode FCP");
+		memcpy(out, buf, offs);
+	}
+
+	LOG_FUNC_RETURN(ctx, offs);
 }
 
 
@@ -490,14 +572,40 @@ static int
 laser_create_file(struct sc_card *card, struct sc_file *file)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	const struct sc_acl_entry *entry = NULL;
+	unsigned char sbuf[0x100];
+	size_t sbuf_len;
+	int rv;
+	unsigned char file_type;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_print_cache(card);
 
-	if (file->type != SC_FILE_TYPE_WORKING_EF)
-		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Creation of the file with of this type is not supported");
+	if (file->type != SC_FILE_TYPE_WORKING_EF && file->type != SC_FILE_TYPE_DF)
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Only DF or EF file can be created");
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	sbuf_len = laser_fcp_encode(card, file, sbuf + 2, sizeof(sbuf)-2);
+	LOG_TEST_RET(ctx, sbuf_len, "FCP encode error");
+
+	sbuf[0] = ISO7816_TAG_FCP;
+	sbuf[1] = sbuf_len;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xE0, 0, 0);
+	apdu.p1 = file->type == SC_FILE_TYPE_DF ? 0x38 : 0x01;
+	apdu.data = sbuf;
+	apdu.datalen = sbuf_len + 2;
+	apdu.lc = sbuf_len + 2;
+
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "laser_create_file() create file error");
+
+	rv = laser_select_file(card, &file->path, NULL);
+	LOG_TEST_RET(ctx, rv, "Cannot select newly created file");
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -532,6 +640,54 @@ laser_delete_file(struct sc_card *card, const struct sc_path *path)
 	LOG_FUNC_CALLED(ctx);
 	sc_print_cache(card);
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+}
+
+
+static int
+laser_list_files(struct sc_card *card, unsigned char *buf, size_t buflen)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	unsigned char rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	unsigned char p1s[] = {0x01, 0x38, 0x08};
+	int rv, ii;
+	size_t offs;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_2_SHORT, 0x30, 0, 0);
+	apdu.cla = 0x80;
+	apdu.le = 0x00;
+
+	for (ii = 0, offs = 0; ii < sizeof(p1s); ii++)   {
+		unsigned char tmp[SC_MAX_APDU_BUFFER_SIZE];
+		size_t oo;
+		int jj;
+
+		apdu.p1 = p1s[ii];
+		apdu.resplen = sizeof(rbuf);
+		apdu.resp = rbuf;
+
+		rv = sc_transmit_apdu(card, &apdu);
+		LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+		rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+		LOG_TEST_RET(ctx, rv, "list files error");
+
+		if (apdu.resplen < 4)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+		if (rbuf[3]*2 + offs > buflen)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+		for (oo=4, jj=0; jj < rbuf[3]; jj++)   {
+			if (rbuf[oo] != 0xD2)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+			memcpy(buf + offs, rbuf + oo + 2, 2);
+			oo += 2 + rbuf[oo+1];
+			offs += 2;
+		}
+	}
+
+	LOG_FUNC_RETURN(ctx, offs);
 }
 
 
@@ -620,7 +776,9 @@ laser_pin_is_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd_data
 static int
 laser_select_global_pin(struct sc_card *card, unsigned reference)
 {
+	struct sc_context *ctx = card->ctx;
 	struct sc_path path;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Select global PIN file %X", reference);
@@ -907,7 +1065,7 @@ sc_get_driver(void)
 	laser_ops.compute_signature = laser_compute_signature;
 	laser_ops.create_file = laser_create_file;
 	laser_ops.delete_file = laser_delete_file;
-	/*	list_files	*/
+	laser_ops.list_files = laser_list_files;
 	laser_ops.check_sw = laser_check_sw;
 	laser_ops.card_ctl = laser_card_ctl;
 	laser_ops.process_fci = laser_process_fci;
