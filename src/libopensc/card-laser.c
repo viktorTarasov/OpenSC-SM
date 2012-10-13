@@ -59,7 +59,7 @@ static struct sc_card_driver laser_drv = {
 
 static struct sc_atr_table laser_known_atrs[] = {
 	{ "3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:01:0B:03:52:00:05:38", NULL,
-		"Athena Laser", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+		"Athena LASER", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
 	{ NULL, NULL, NULL, 0, 0, NULL }
 };
 

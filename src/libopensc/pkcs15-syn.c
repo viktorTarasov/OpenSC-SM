@@ -31,7 +31,7 @@
 #include "asn1.h"
 #include "pkcs15.h"
 
-extern int sc_pkcs15emu_westcos_init_ex(sc_pkcs15_card_t *p15card, 
+extern int sc_pkcs15emu_westcos_init_ex(sc_pkcs15_card_t *p15card,
 					sc_pkcs15emu_opt_t *opts);
 extern int sc_pkcs15emu_openpgp_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
@@ -67,6 +67,8 @@ extern int sc_pkcs15emu_itacns_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
 extern int sc_pkcs15emu_sc_hsm_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_laser_init_ex(sc_pkcs15_card_t *,
+					sc_pkcs15emu_opt_t *);
 
 static struct {
 	const char *		name;
@@ -89,7 +91,8 @@ static struct {
 	{ "entersafe",  sc_pkcs15emu_entersafe_init_ex  },
 	{ "pteid",	sc_pkcs15emu_pteid_init_ex	},
 	{ "oberthur",   sc_pkcs15emu_oberthur_init_ex	},
-	{ "sc-hsm",   sc_pkcs15emu_sc_hsm_init_ex	},
+	{ "sc-hsm",     sc_pkcs15emu_sc_hsm_init_ex	},
+	{ "laser",	sc_pkcs15emu_laser_init_ex	},
 	{ NULL, NULL }
 };
 
