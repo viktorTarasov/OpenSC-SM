@@ -385,7 +385,7 @@ int sc_pkcs15emu_add_ec_pubkey(sc_pkcs15_card_t *p15card,
 	const sc_pkcs15_object_t *obj, const sc_pkcs15_pubkey_info_t *in_key)
 {
 	sc_pkcs15_pubkey_info_t key = *in_key;
-	
+
 	if (key.access_flags == 0)
 		key.access_flags = SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE;
 
@@ -407,13 +407,15 @@ int sc_pkcs15emu_add_data_object(sc_pkcs15_card_t *p15card,
 int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 	const sc_pkcs15_object_t *in_obj, const void *data)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	sc_pkcs15_object_t *obj;
 	unsigned int	df_type;
 	size_t		data_len;
 
+	LOG_FUNC_CALLED(ctx);
 	obj = calloc(1, sizeof(*obj));
 	if (!obj)
-		return SC_ERROR_OUT_OF_MEMORY;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 	memcpy(obj, in_obj, sizeof(*obj));
 	obj->type  = type;
 
@@ -439,22 +441,21 @@ int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 		data_len = sizeof(struct sc_pkcs15_data_info);
 		break;
 	default:
-		sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL,
-			"Unknown PKCS15 object type %d\n", type);
+		sc_log(ctx, "Unknown PKCS15 object type %d\n", type);
 		free(obj);
-		return SC_ERROR_INVALID_ARGUMENTS;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 	}
 
 	obj->data = calloc(1, data_len);
 	if (obj->data == NULL) {
 		free(obj);
-		return SC_ERROR_OUT_OF_MEMORY;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 	}
 	memcpy(obj->data, data, data_len);
 
 	obj->df = sc_pkcs15emu_get_df(p15card, df_type);
 	sc_pkcs15_add_object(p15card, obj);
 
-	return SC_SUCCESS;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 

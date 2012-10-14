@@ -2991,6 +2991,7 @@ pkcs15_cert_get_attribute(struct sc_pkcs11_session *session, void *object, CK_AT
 		break;
 	case CKA_MODIFIABLE:
 		check_attribute_buffer(attr, sizeof(CK_BBOOL));
+		/* TODO: Why? */
 		*(CK_BBOOL*)attr->pValue = FALSE;
 		break;
 	case CKA_LABEL:

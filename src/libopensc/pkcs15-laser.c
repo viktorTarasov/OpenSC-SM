@@ -32,8 +32,17 @@
 #include "common/compat_strlcpy.h"
 
 #define PATH_TOKENINFO	"3F003000C000"
+#define PATH_PUBLICDIR	"3F0030003001"
+#define PATH_PRIVATEDIR	"3F0030003002"
 #define PATH_USERPIN	"3F000020"
 #define PATH_SOPIN	"3F000010"
+
+#define LASER_BASEFID_MASK		0xFFF0
+#define LASER_BASEFID_KXS		0x0200
+#define LASER_BASEFID_KXC		0x0400
+#define LASER_BASEFID_KXC_PUBKEY	0x0140
+#define LASER_BASEFID_PUBKEY		0x0080
+#define LASER_BASEFID_PRVKEY		0x0040
 
 struct laser_ko_props {
 	unsigned char class;
@@ -55,6 +64,14 @@ struct laser_ko_props {
 		unsigned char occurrence;
 		unsigned char sequence;
 	} pin_policy;
+};
+
+struct laser_cka {
+	unsigned cka;
+	unsigned char internal_cka;
+
+	unsigned char *val;
+	size_t len;
 };
 
 int sc_pkcs15emu_laser_init_ex(struct sc_pkcs15_card *, struct sc_pkcs15emu_opt *);
@@ -138,16 +155,569 @@ _create_pin(struct sc_pkcs15_card * p15card, char *label,
 }
 
 
+static size_t
+_get_attr(unsigned char *data, size_t length, size_t *in_offs, struct laser_cka *attr)
+{
+	size_t offs;
+
+	if (!attr || !data || !in_offs)
+		return 0;
+
+	/*
+	 * At the end of kxc/s files there are misterious 4 bytes (like 'OD OO OD OO').
+	 * TODO: Get know what for they are.
+	 */
+	for (offs = *in_offs; (*(data + offs) == 0xFF) && (offs < length - 4); offs++)
+		;
+	if (offs >= length - 4)
+		return 0;
+
+	attr->cka = *(data + offs + 0) * 0x100 + *(data + offs + 1);
+	attr->internal_cka = *(data + offs + 2);
+	attr->len = *(data + offs + 3) * 0x100 + *(data + offs + 4);
+	attr->val = data + offs + 5;
+
+	*in_offs = offs + 5 + attr->len;
+	return 0;
+}
+
+
+static int
+_cka_get_unsigned(struct laser_cka *attr, unsigned *out)
+{
+	int ii;
+
+	if (!attr || !out)
+		return SC_ERROR_INVALID_ARGUMENTS;
+	if (attr->len != 4)
+		return SC_ERROR_INVALID_DATA;
+
+	for (ii=0, *out = 0; ii < 4; ii++)
+		*out = *out * 0x100 + *(attr->val + 3 - ii);
+
+	return SC_SUCCESS;
+}
+
+
+static int
+_cka_set_label(struct laser_cka *attr, struct sc_pkcs15_object *obj)
+{
+	size_t len;
+
+	if (!attr || !obj)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	memset(obj->label, 0, sizeof(obj->label));
+	len = (attr->len < sizeof(obj->label) - 1) ? attr->len : sizeof(obj->label) - 1;
+	if (len)
+		memcpy(obj->label, attr->val, len);
+
+	return SC_SUCCESS;
+}
+
+
+static int
+_cka_get_blob(struct laser_cka *attr, struct sc_pkcs15_der *out)
+{
+	struct sc_pkcs15_der der;
+
+	if (!attr || !out)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	der.value = malloc(attr->len);
+	if (!der.value)
+		return SC_ERROR_MEMORY_FAILURE;
+	memcpy(der.value, attr->val, attr->len);
+	der.len = attr->len;
+
+	*out = der;
+	return SC_SUCCESS;
+}
+
+
+static int
+_cka_set_id(struct laser_cka *attr, struct sc_pkcs15_id *out)
+{
+	if (!attr || !out)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	if (attr->len > SC_PKCS15_MAX_ID_SIZE)
+		return SC_ERROR_INVALID_DATA;
+
+	memcpy(out->value, attr->val, attr->len);
+	out->len = attr->len;
+
+	return SC_SUCCESS;
+}
+
+
+static int
+_create_certificate(struct sc_pkcs15_card * p15card, unsigned file_id)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object obj;
+	struct sc_pkcs15_cert_info info;
+	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
+	unsigned char *data = NULL;
+	size_t len, offs, next;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&info, 0, sizeof(info));
+	memset(&obj, 0, sizeof(obj));
+
+	sc_format_path(PATH_PUBLICDIR, &info.path);
+	sc_append_path_id(&info.path, fid, sizeof(fid));
+
+	rv = sc_pkcs15_read_file(p15card, &info.path, &data, &len);
+	LOG_TEST_RET(ctx, rv, "Error while getting file content.");
+
+	if (len < 7)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "certificate attributes file is too short");
+
+	for (next = offs = 7; offs < len - 4; offs = next)   {
+		struct laser_cka attr;
+		unsigned uval;
+
+		rv = _get_attr(data, len, &next, &attr);
+		LOG_TEST_RET(ctx, rv, "parsing error of laser object's attribute");
+		if (next == offs)
+			break;
+		sc_log(ctx, "Attribute(%X) to parse '%s'", attr.cka, sc_dump_hex(attr.val, attr.len));
+
+		switch (attr.cka)   {
+		case CKA_CLASS:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CLASS");
+			if (uval != CKO_CERTIFICATE)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid CKA_CLASS");
+			break;
+		case CKA_TOKEN:
+			if (*attr.val == 0)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Has to be token object");
+			break;
+		case CKA_PRIVATE:
+			if (*attr.val)
+				obj.flags |= SC_PKCS15_CO_FLAG_PRIVATE;
+			break;
+		case CKA_LABEL:
+			rv = _cka_set_label(&attr, &obj);
+			LOG_TEST_RET(ctx, rv, "Cannot set certificate object label");
+			break;
+		case CKA_VALUE:
+			rv = _cka_get_blob(&attr, &info.value);
+			LOG_TEST_RET(ctx, rv, "Cannot set certificate object value");
+			break;
+		case CKA_CERTIFICATE_TYPE:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CERTIFICATE_TYPE");
+			if (uval != CKC_X_509)
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Other then CKC_X_509 cert type is not supported");
+			break;
+		case CKA_ISSUER:
+			break;
+		case CKA_SUBJECT:
+			break;
+		case CKA_SERIAL_NUMBER:
+			break;
+		case CKA_TRUSTED:
+			info.authority = (*attr.val != 0);
+			break;
+		case CKA_ID:
+			rv = _cka_set_id(&attr, &info.id);
+			LOG_TEST_RET(ctx, rv, "Cannot get CKA_ID");
+			break;
+		case CKA_MODIFIABLE:
+			if (*attr.val)
+				obj.flags |= SC_PKCS15_CO_FLAG_MODIFIABLE;
+			break;
+		}
+	}
+
+	rv = sc_pkcs15emu_add_x509_cert(p15card, &obj, &info);
+	LOG_TEST_RET(ctx, rv, "Failed to emu-add certificate object");
+
+	free(data);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+_create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object obj;
+	struct sc_pkcs15_pubkey_info info;
+	struct sc_pkcs15_pubkey_rsa key_rsa;
+	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PUBKEY) + 1;
+	struct sc_path path;
+	struct sc_pkcs15_der der;
+	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
+	unsigned char *data = NULL;
+	size_t len, offs, next;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&info, 0, sizeof(info));
+	memset(&obj, 0, sizeof(obj));
+	memset(&key_rsa, 0, sizeof(key_rsa));
+
+	sc_format_path(PATH_PUBLICDIR, &path);
+	sc_append_path_id(&path, fid, sizeof(fid));
+
+	rv = sc_pkcs15_read_file(p15card, &path, &data, &len);
+	LOG_TEST_RET(ctx, rv, "Error while getting file content.");
+
+	/* set info path to public key KO */
+	path.value[path.len - 2] = (ko_fid >> 8) & 0xFF;
+	path.value[path.len - 1] = ko_fid & 0xFF;
+	info.path = path;
+
+	if (len < 7)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "public key attributes file is too short");
+
+	for (next = offs = 7; offs < len - 4; offs = next)   {
+		struct laser_cka attr;
+		unsigned uval;
+
+		rv = _get_attr(data, len, &next, &attr);
+		LOG_TEST_RET(ctx, rv, "parsing error of laser object's attribute");
+		if (next == offs)
+			break;
+		sc_log(ctx, "Attribute(%X) to parse '%s'", attr.cka, sc_dump_hex(attr.val, attr.len));
+
+		switch (attr.cka)   {
+		case CKA_CLASS:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CLASS");
+
+			if (uval != CKO_PUBLIC_KEY)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Need to be CKO_PUBLIC_KEY CKA_CLASS");
+			break;
+		case CKA_TOKEN:
+			if (*attr.val == 0)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Has to be token object");
+			break;
+		case CKA_PRIVATE:
+			if (*attr.val)
+				obj.flags |= SC_PKCS15_CO_FLAG_PRIVATE;
+			break;
+		case CKA_LABEL:
+			rv = _cka_set_label(&attr, &obj);
+			LOG_TEST_RET(ctx, rv, "Cannot set certificate object label");
+			break;
+		case CKA_KEY_TYPE:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CERTIFICATE_TYPE");
+
+			if (uval == CKK_RSA)
+				obj.type = SC_PKCS15_TYPE_PUBKEY_RSA;
+			else if (uval == CKK_EC)
+				obj.type = SC_PKCS15_TYPE_PUBKEY_EC;
+			else if (uval == CKK_GOSTR3410)
+				obj.type = SC_PKCS15_TYPE_PUBKEY_GOSTR3410;
+			else
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported public key type");
+			break;
+		case CKA_SUBJECT:
+			break;
+		case CKA_TRUSTED:
+			break;
+		case CKA_ID:
+			rv = _cka_set_id(&attr, &info.id);
+			LOG_TEST_RET(ctx, rv, "Cannot get CKA_ID");
+			break;
+		case CKA_MODIFIABLE:
+			if (*attr.val)
+				obj.flags |= SC_PKCS15_CO_FLAG_MODIFIABLE;
+			break;
+		case CKA_ENCRYPT:
+			if (*attr.val)
+				info.usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT;
+			break;
+		case CKA_WRAP:
+			if (*attr.val)
+				info.usage |= SC_PKCS15_PRKEY_USAGE_WRAP;
+			break;
+		case CKA_VERIFY:
+			if (*attr.val)
+				info.usage |= SC_PKCS15_PRKEY_USAGE_VERIFY;
+			break;
+		case CKA_VERIFY_RECOVER:
+			if (*attr.val)
+				info.usage |= SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER;
+			break;
+		case CKA_DERIVE:
+			if (*attr.val)
+				info.usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
+			break;
+		case CKA_START_DATE:
+		case CKA_END_DATE:
+			break;
+		case CKA_MODULUS:
+			rv = _cka_get_blob(&attr, &der);
+			LOG_TEST_RET(ctx, rv, "Cannot get public key modulus");
+
+			key_rsa.modulus.data = der.value;
+			key_rsa.modulus.len = der.len;
+			break;
+		case CKA_MODULUS_BITS:
+			rv = _cka_get_unsigned(&attr, &info.modulus_length);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_MODULUS_BITS");
+			break;
+		case CKA_PUBLIC_EXPONENT:
+			rv = _cka_get_blob(&attr, &der);
+			LOG_TEST_RET(ctx, rv, "Cannot get public exponent");
+
+			key_rsa.exponent.data = der.value;
+			key_rsa.exponent.len = der.len;
+			break;
+		case CKA_LOCAL:
+			break;
+		case CKA_KEY_GEN_MECHANISM:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_KEY_GEN_MECHANISM");
+			sc_log(ctx, "CKA_KEY_GEN_MECHANISM: %X", uval);
+			break;
+		}
+	}
+	free(data);
+
+	if (key_rsa.exponent.len && key_rsa.modulus.len)   {
+		rv = sc_pkcs15_encode_pubkey_rsa(ctx, &key_rsa, &obj.content.value, &obj.content.len);
+		LOG_TEST_RET(ctx, rv, "Encode RSA public key content error");
+	}
+
+	rv = sc_pkcs15emu_add_rsa_pubkey(p15card, &obj, &info);
+	LOG_TEST_RET(ctx, rv, "Failed to emu-add public key object");
+
+	sc_log(ctx, "Key path %s", sc_print_path(&info.path));
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+_create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object obj;
+	struct sc_pkcs15_prkey_info info;
+	struct sc_pkcs15_prkey_rsa key_rsa;
+	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PRVKEY) + 1;
+	struct sc_path path;
+	struct sc_pkcs15_der der;
+	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
+	unsigned char *data = NULL;
+	size_t len, offs, next;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&info, 0, sizeof(info));
+	memset(&obj, 0, sizeof(obj));
+	memset(&key_rsa, 0, sizeof(key_rsa));
+
+	sc_format_path(PATH_PRIVATEDIR, &path);
+	sc_append_path_id(&path, fid, sizeof(fid));
+
+	rv = sc_pkcs15_read_file(p15card, &path, &data, &len);
+	LOG_TEST_RET(ctx, rv, "Error while getting file content.");
+
+	/* set info path to private key KO */
+	path.value[path.len - 2] = ko_fid / 0x100;
+	path.value[path.len - 1] = ko_fid % 0x100;
+	info.path = path;
+
+	if (len < 7)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "private key attributes file is too short");
+
+	for (next = offs = 7; offs < len - 4; offs = next)   {
+		struct laser_cka attr;
+		unsigned uval;
+
+		rv = _get_attr(data, len, &next, &attr);
+		LOG_TEST_RET(ctx, rv, "parsing error of laser object's attribute");
+		if (next == offs)
+			break;
+		sc_log(ctx, "Attribute(%X) to parse '%s'", attr.cka, sc_dump_hex(attr.val, attr.len));
+
+		switch (attr.cka)   {
+		case CKA_CLASS:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CLASS");
+
+			if (uval != CKO_PRIVATE_KEY)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Need to be CKO_PRIVATE_KEY CKA_CLASS");
+			break;
+		case CKA_TOKEN:
+			if (*attr.val == 0)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Has to be token object");
+			break;
+		case CKA_PRIVATE:
+			if (*attr.val)
+				obj.flags |= SC_PKCS15_CO_FLAG_PRIVATE;
+			break;
+		case CKA_LABEL:
+			rv = _cka_set_label(&attr, &obj);
+			LOG_TEST_RET(ctx, rv, "Cannot set certificate object label");
+			break;
+		case CKA_TRUSTED:
+			break;
+		case CKA_KEY_TYPE:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CERTIFICATE_TYPE");
+
+			if (uval == CKK_RSA)
+				obj.type = SC_PKCS15_TYPE_PRKEY_RSA;
+			else if (uval == CKK_EC)
+				obj.type = SC_PKCS15_TYPE_PRKEY_EC;
+			else if (uval == CKK_GOSTR3410)
+				obj.type = SC_PKCS15_TYPE_PRKEY_GOSTR3410;
+			else
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported private key type");
+			break;
+		case CKA_SUBJECT:
+			rv = _cka_get_blob(&attr, &info.subject);
+			LOG_TEST_RET(ctx, rv, "Cannot set private key subject");
+			break;
+		case CKA_ID:
+			rv = _cka_set_id(&attr, &info.id);
+			LOG_TEST_RET(ctx, rv, "Cannot get CKA_ID");
+			break;
+		case CKA_SENSITIVE:
+			sc_log(ctx, "CKA_SENSITIVE: %s", (*attr.val) ? "yes" : "no");
+			info.access_flags |= (*attr.val) ? SC_PKCS15_PRKEY_ACCESS_SENSITIVE : 0;
+			break;
+		case CKA_DECRYPT:
+			info.usage |= (*attr.val) ? SC_PKCS15_PRKEY_USAGE_DECRYPT : 0;
+			break;
+		case CKA_UNWRAP:
+			info.usage |= (*attr.val) ? SC_PKCS15_PRKEY_USAGE_UNWRAP : 0;
+			break;
+		case CKA_SIGN:
+			info.usage |= (*attr.val) ? SC_PKCS15_PRKEY_USAGE_SIGN : 0;
+			break;
+		case CKA_SIGN_RECOVER:
+			info.usage |= (*attr.val) ? SC_PKCS15_PRKEY_USAGE_SIGNRECOVER : 0;
+			break;
+		case CKA_DERIVE:
+			info.usage |= (*attr.val) ? SC_PKCS15_PRKEY_USAGE_DERIVE : 0;
+			break;
+		case CKA_START_DATE:
+		case CKA_END_DATE:
+			break;
+		case CKA_PUBLIC_EXPONENT:
+			rv = _cka_get_blob(&attr, &der);
+			LOG_TEST_RET(ctx, rv, "Cannot get public exponent");
+			/*
+			key_rsa.exponent.data = der.value;
+			key_rsa.exponent.len = der.len;
+			*/
+			break;
+		case CKA_EXTRACTABLE:
+			sc_log(ctx, "CKA_EXTRACTABLE: %s", (*attr.val) ? "yes" : "no");
+			info.access_flags |= (*attr.val) ? SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE : 0;
+			break;
+		case CKA_LOCAL:
+			sc_log(ctx, "CKA_LOCAL: %s", (*attr.val) ? "yes" : "no");
+			info.access_flags |= (*attr.val) ? SC_PKCS15_PRKEY_ACCESS_LOCAL : 0;
+			break;
+		case CKA_NEVER_EXTRACTABLE:
+			sc_log(ctx, "CKA_NEVER_EXTRACTABLE: %s", (*attr.val) ? "yes" : "no");
+			info.access_flags |= (*attr.val) ? SC_PKCS15_PRKEY_ACCESS_NEVEREXTRACTABLE : 0;
+			break;
+		case CKA_ALWAYS_SENSITIVE:
+			sc_log(ctx, "CKA_ALWAYS_SENSITIVE: %s", (*attr.val) ? "yes" : "no");
+			info.access_flags |= (*attr.val) ? SC_PKCS15_PRKEY_ACCESS_ALWAYSSENSITIVE : 0;
+			break;
+		case CKA_KEY_GEN_MECHANISM:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_KEY_GEN_MECHANISM");
+			sc_log(ctx, "CKA_KEY_GEN_MECHANISM: %X", uval);
+			break;
+		case CKA_MODIFIABLE:
+			obj.flags |= (*attr.val) ? SC_PKCS15_CO_FLAG_MODIFIABLE : 0;
+			break;
+		}
+	}
+	free(data);
+
+	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &obj, &info);
+	LOG_TEST_RET(ctx, rv, "Failed to emu-add private key object");
+
+	sc_log(ctx, "Key path %s", sc_print_path(&info.path));
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+_parse_fs_data(struct sc_pkcs15_card * p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	unsigned char buf[SC_MAX_APDU_BUFFER_SIZE];
+	size_t ii, count;
+	char *df_paths[3] = {PATH_PUBLICDIR, PATH_PRIVATEDIR, NULL};
+	int rv, df;
+
+	LOG_FUNC_CALLED(ctx);
+
+	for (df=0; df_paths[df]; df++)   {
+		struct sc_path path;
+
+		sc_format_path(df_paths[df], &path);
+		rv = sc_select_file(card, &path, NULL);
+		LOG_TEST_RET(ctx, rv, "Cannot select object's DF");
+
+		rv = sc_list_files(card, buf, sizeof(buf));
+		LOG_TEST_RET(ctx, rv, "'List file' error in object's DF");
+
+		count = rv/2;
+		/* TODO:
+		 * Laser's EF may have the 'DF name' attribute.
+		 * Normally here this attribute has to be used to identify
+		 * the kxc and kxs files.
+		 * But, for a while, for the sake of simplicity,
+		 * the FID/mask (0x0400/0xFFF0) is used instead.
+		 */
+		for (ii=0; ii<count; ii++)   {
+			unsigned fid = *(buf + ii*2) * 0x100 + *(buf + ii*2 + 1);
+			switch (fid & LASER_BASEFID_MASK)   {
+			case LASER_BASEFID_KXS:
+				sc_log(ctx, "parse private key attributes FID:%04X", fid);
+				rv = _create_prvkey(p15card, fid);
+				LOG_TEST_RET(ctx, rv, "Cannot create private key PKCS#15 object");
+				break;
+			case LASER_BASEFID_KXC:
+				sc_log(ctx, "parse certificate attributes FID:%04X", fid);
+				rv = _create_certificate(p15card, fid);
+				LOG_TEST_RET(ctx, rv, "Cannot create certificate PKCS#15 object");
+				break;
+			case LASER_BASEFID_KXC_PUBKEY:
+				sc_log(ctx, "parse public key attributes FID:%04X", fid);
+				rv = _create_pubkey(p15card, fid);
+				LOG_TEST_RET(ctx, rv, "Cannot create public key PKCS#15 object");
+				break;
+			default:
+				break;
+			}
+		}
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 static int
 sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_card *card = p15card->card;
-	struct sc_file *file = NULL;
 	struct sc_path path;
 	unsigned char *buf = NULL;
 	size_t buflen = 0;
-	int rv, ii;
+	int rv;
 	CK_TOKEN_INFO *ck_ti = NULL;
 
 	LOG_FUNC_CALLED(ctx);
@@ -179,133 +749,10 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	rv = _create_pin(p15card, "SO PIN", PATH_SOPIN, 0x01, SC_PKCS15_PIN_FLAG_SO_PIN);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'SO PIN' object");
 
-	rv = _create_certs(p15card, );
-	LOG_TEST_RET(ctx, rv, "Cannot create 'SO PIN' object");
+	rv = _parse_fs_data(p15card);
+	LOG_TEST_RET(ctx, rv, "Error while creating 'certificate' objects");
 
-
-
-#if 0
-	sc_format_path("0002", &path);
-	r = sc_select_file(card, &path, &file);
-	if (r) 
-	{
-		goto out;
-	}
-	else
-	{
-		/* certificate file */
-		struct sc_pkcs15_cert_info cert_info;
-		struct sc_pkcs15_object cert_obj;
-		struct sc_pkcs15_pubkey_info pubkey_info;
-		struct sc_pkcs15_object pubkey_obj;
-		struct sc_pkcs15_pubkey *pkey = NULL;
-		memset(&cert_info, 0, sizeof(cert_info));
-		memset(&cert_obj, 0, sizeof(cert_obj));
-		cert_info.id.len = 1;
-		cert_info.id.value[0] = 0x45;
-		cert_info.authority = 0;
-		cert_info.path = path;
-		r = sc_pkcs15_read_certificate(p15card, &cert_info,
-					       (sc_pkcs15_cert_t
-						**) (&cert_obj.data));
-		if (!r) {
-			sc_pkcs15_cert_t *cert =
-			    (sc_pkcs15_cert_t *) (cert_obj.data);
-			strlcpy(cert_obj.label, "User certificat",
-				sizeof(cert_obj.label));
-			cert_obj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE;
-			r = sc_pkcs15emu_add_x509_cert(p15card, &cert_obj,
-						       &cert_info);
-			if (r)
-				goto out;
-			pkey = cert->key;
-			
-			if (pkey->algorithm == SC_ALGORITHM_RSA) {
-				modulus_length = (int)(pkey->u.rsa.modulus.len * 8);
-			}
-
-		}
-		else
-		{
-			/* or public key */
-			memset(&pubkey_info, 0, sizeof(pubkey_info));
-			memset(&pubkey_obj, 0, sizeof(pubkey_obj));
-			pubkey_info.id.len = 1;
-			pubkey_info.id.value[0] = 0x45;
-			pubkey_info.modulus_length = modulus_length;
-			pubkey_info.key_reference = 1;
-			pubkey_info.native = 1;
-			pubkey_info.usage =
-			    SC_PKCS15_PRKEY_USAGE_VERIFY |
-			    SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER |
-			    SC_PKCS15_PRKEY_USAGE_ENCRYPT |
-			    SC_PKCS15_PRKEY_USAGE_WRAP;
-			pubkey_info.path = path;
-			strlcpy(pubkey_obj.label, "Public Key",
-				sizeof(pubkey_obj.label));
-			pubkey_obj.auth_id.len = 1;
-			pubkey_obj.auth_id.value[0] = 1;
-			pubkey_obj.flags = SC_PKCS15_CO_FLAG_PRIVATE;
-			pubkey_obj.type = SC_PKCS15_TYPE_PUBKEY_RSA;
-			if (pkey == NULL) {
-				pubkey_obj.data = &pubkey_info;
-				r = sc_pkcs15_read_pubkey(p15card, &pubkey_obj, &pkey);
-				if (r)
-					goto out;
-				/* not sure if necessary */
-				pubkey_obj.flags = 0;
-			}
-			if (pkey->algorithm == SC_ALGORITHM_RSA) {
-				modulus_length = (int)(pkey->u.rsa.modulus.len * 8);
-			}
-			pubkey_info.modulus_length = modulus_length;
-			pubkey_obj.data = pkey;
-			r = sc_pkcs15emu_add_rsa_pubkey(p15card, &pubkey_obj,
-							&pubkey_info);
-			if (r < 0)
-				goto out;
-		}
-	}
-	if (file)
-		sc_file_free(file);
-	file = NULL;
-	sc_format_path("0001", &path);
-	r = sc_select_file(card, &path, &file);
-	if (r) 
-	{
-		goto out;
-	}
-	else
-	{
-		struct sc_pkcs15_prkey_info prkey_info;
-		struct sc_pkcs15_object prkey_obj;
-		memset(&prkey_info, 0, sizeof(prkey_info));
-		memset(&prkey_obj, 0, sizeof(prkey_obj));
-		prkey_info.id.len = 1;
-		prkey_info.id.value[0] = 0x45;
-		prkey_info.usage =
-			SC_PKCS15_PRKEY_USAGE_SIGN | SC_PKCS15_PRKEY_USAGE_DECRYPT
-			| SC_PKCS15_PRKEY_USAGE_NONREPUDIATION;
-		prkey_info.native = 1;
-		prkey_info.key_reference = 1;
-		prkey_info.modulus_length = modulus_length;
-		prkey_info.path = path;
-		strlcpy(prkey_obj.label, "Private Key",
-			sizeof(prkey_obj.label));
-		prkey_obj.flags = SC_PKCS15_CO_FLAG_PRIVATE;
-		prkey_obj.auth_id.len = 1;
-		prkey_obj.auth_id.value[0] = 1;
-		r = sc_pkcs15emu_add_rsa_prkey(p15card, &prkey_obj,
-					&prkey_info);
-		if (r < 0)
-			goto out;
-	}
-	r = 0;
-out:
-	if (file)
-		sc_file_free(file);
-#endif
-	return rv;
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -327,7 +774,6 @@ int
 sc_pkcs15emu_laser_init_ex(struct sc_pkcs15_card *p15card, struct sc_pkcs15emu_opt *opts)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_card *card = p15card->card;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
