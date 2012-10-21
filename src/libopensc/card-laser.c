@@ -68,6 +68,19 @@ static struct sc_aid laser_aid = {
 	12
 };
 
+const unsigned char laser_ops_df[6] = {
+	SC_AC_OP_CREATE_EF, SC_AC_OP_CREATE_DF, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_ACTIVATE, SC_AC_OP_DEACTIVATE
+};
+const unsigned char laser_ops_ef[4] = {
+	SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF
+};
+const unsigned char laser_ops_do[3] = {
+	SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN
+};
+const unsigned char laser_ops_ko[7] = {
+	SC_AC_OP_READ, SC_AC_OP_PIN_CHANGE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_CHANGE, SC_AC_OP_CRYPTO
+};
+
 struct laser_card_capabilities  {
 	unsigned char supported_keys[5];
 	unsigned char crypto[3];
@@ -90,7 +103,9 @@ struct laser_private_data {
 	struct laser_card_capabilities caps;
 };
 
-static int laser_get_serialnr(struct sc_card *card, struct sc_serial_number *serial);
+static int laser_get_serialnr(struct sc_card *, struct sc_serial_number *);
+static int laser_parse_sec_attrs(struct sc_card *, struct sc_file *);
+static int laser_process_fci(struct sc_card *, struct sc_file *, const unsigned char *, size_t);
 
 static int
 laser_get_capability(struct sc_card *card, unsigned tag,
@@ -360,8 +375,14 @@ laser_select_file(struct sc_card *card, const struct sc_path *in_path,
 			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 		}
 
-		if ((size_t)apdu.resp[1] + 2 <= apdu.resplen)
-			card->ops->process_fci(card, file, apdu.resp+2, apdu.resp[1]);
+		if ((size_t)apdu.resp[1] + 2 <= apdu.resplen)   {
+			rv = laser_process_fci(card, file, apdu.resp+2, apdu.resp[1]);
+			LOG_TEST_RET(ctx, rv, "Process FCI error");
+
+			rv = laser_parse_sec_attrs(card, file);
+			LOG_TEST_RET(ctx, rv, "Security attributes parse error");
+		}
+
 		*file_out = file;
 		break;
 	case 0x00: /* proprietary coding */
@@ -378,7 +399,7 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 {
 	struct sc_context *ctx = card->ctx;
 	size_t taglen, len = buflen;
-	const u8 *tag = NULL, *p = buf;
+	const unsigned char *tag = NULL, *p = buf;
 
 	LOG_FUNC_CALLED(ctx);
 	tag = sc_asn1_find_tag(ctx, p, len, 0x83, &taglen);
@@ -478,29 +499,62 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 
 
 static int
+laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
+{
+	struct sc_context *ctx = card->ctx;
+	unsigned type = file->type;
+	unsigned char *attrs = file->sec_attr, *ops;
+	size_t len = file->sec_attr_len, ii, ops_len;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "file type:%i, sec.attrs (%p,len:%i)", type, attrs, len);
+	if(type == SC_FILE_TYPE_INTERNAL_EF && len == sizeof(laser_ops_ko) * 2)   {
+		ops = &laser_ops_ko[0];
+		ops_len = sizeof(laser_ops_ko)/sizeof(laser_ops_ko[0]);
+	}
+	else if (type == SC_FILE_TYPE_INTERNAL_EF && len == sizeof(laser_ops_do) * 2)   {
+		ops = &laser_ops_do[0];
+		ops_len = sizeof(laser_ops_do)/sizeof(laser_ops_do[0]);
+	}
+	else if (type == SC_FILE_TYPE_WORKING_EF)   {
+		ops = &laser_ops_ef[0];
+		ops_len = sizeof(laser_ops_ef)/sizeof(laser_ops_ef[0]);
+	}
+	else if (type == SC_FILE_TYPE_DF)   {
+		ops = &laser_ops_df[0];
+		ops_len = sizeof(laser_ops_df)/sizeof(laser_ops_df[0]);
+	}
+	else   {
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported file type");
+	}
+
+	for (ii=0; ii<ops_len; ii++)   {
+		unsigned val = *(attrs + ii*2) * 0x100 + *(attrs + ii*2 + 1);
+		sc_file_add_acl_entry(file, *(ops + ii), SC_AC_SCB, val);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
 laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
 	unsigned char buf[0x80];
 	size_t offs = 0;
-	unsigned char  ops_df[6] = {
-		SC_AC_OP_CREATE_EF, SC_AC_OP_CREATE_DF, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_ACTIVATE, SC_AC_OP_DEACTIVATE
-	};
-	unsigned char  ops_ef[4] = {
-		SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF
-	};
 	unsigned char *ops = NULL;
 	size_t ii, ops_len, file_size;
 
 	LOG_FUNC_CALLED(ctx);
 	if (file->type == SC_FILE_TYPE_DF)   {
-		ops = &ops_df[0];
-		ops_len = sizeof(ops_df);
+		ops = &laser_ops_df[0];
+		ops_len = sizeof(laser_ops_df);
 		file_size = 0;
 	}
 	else if (file->type == SC_FILE_TYPE_WORKING_EF)   {
-		ops = &ops_ef[0];
-		ops_len = sizeof(ops_ef);
+		ops = &laser_ops_ef[0];
+		ops_len = sizeof(laser_ops_ef);
 		file_size = file->size;
 	}
 	else   {
@@ -774,7 +828,7 @@ laser_pin_is_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd_data
 
 
 static int
-laser_select_global_pin(struct sc_card *card, unsigned reference)
+laser_select_global_pin(struct sc_card *card, unsigned reference, struct sc_file **out_file)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_path path;
@@ -786,7 +840,7 @@ laser_select_global_pin(struct sc_card *card, unsigned reference)
 	sc_format_path("3F0000FF", &path);
 	path.value[path.len - 1] = reference;
 
-	rv = laser_select_file(card, &path, NULL);
+	rv = laser_select_file(card, &path, out_file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -810,7 +864,7 @@ laser_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 	}
 	else if (type == SC_AC_CHV)   {
 		if (!(reference & 0x80))   {
-			rv =  laser_select_global_pin(card, reference);
+			rv =  laser_select_global_pin(card, reference, NULL);
 			LOG_TEST_RET(ctx, rv, "Select PIN file error");
 			chv_ref = 0;
 		}
@@ -844,8 +898,54 @@ static int
 laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	struct sc_file *pin_file = NULL;
+	unsigned char pin_data[SC_MAX_APDU_BUFFER_SIZE];
+	unsigned chv_ref = data->pin_reference;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Change PIN(type:%i,ref:%i,lengths:%i/%i)", data->pin_type, data->pin_reference, data->pin1.len, data->pin2.len);
+
+	if (data->pin_type == SC_AC_AUT)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	else if (data->pin_type == SC_AC_SCB)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	else if (data->pin_type != SC_AC_CHV)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	if (!(data->pin_reference & 0x80))   {
+		const struct sc_acl_entry *entry;
+
+		rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
+		LOG_TEST_RET(ctx, rv, "Select PIN file error");
+
+		entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_CHANGE);
+		if (entry)   {
+			if (entry->key_ref & 0xC000)
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Change PIN protectd by SM: not supported");
+		}
+		chv_ref = 0;
+	}
+
+	if (!data->pin1.len || !data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Unblock procedure needs both new and old PINs defined");
+	if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
+		LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
+
+	memcpy(pin_data, data->pin1.data, data->pin1.len);
+	memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, chv_ref);
+	apdu.data = pin_data;
+	apdu.datalen = data->pin1.len + data->pin2.len;
+	apdu.lc = apdu.datalen;
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PIN change failed");
+
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
@@ -879,6 +979,9 @@ laser_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_lef
 	switch (data->cmd)   {
 	case SC_PIN_CMD_VERIFY:
 		rv = laser_pin_verify(card, data->pin_type, data->pin_reference, data->pin1.data, data->pin1.len, tries_left);
+		LOG_FUNC_RETURN(ctx, rv);
+	case SC_PIN_CMD_CHANGE:
+		rv = laser_pin_change(card, data, tries_left);
 		LOG_FUNC_RETURN(ctx, rv);
 	default:
 		sc_log(ctx, "PIN command 0x%X do not yet supported.", data->cmd);
