@@ -78,7 +78,7 @@ const unsigned char laser_ops_do[3] = {
 	SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN
 };
 const unsigned char laser_ops_ko[7] = {
-	SC_AC_OP_READ, SC_AC_OP_PIN_CHANGE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_CHANGE, SC_AC_OP_CRYPTO
+	SC_AC_OP_READ, SC_AC_OP_PIN_CHANGE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_RESET, SC_AC_OP_CRYPTO
 };
 
 struct laser_card_capabilities  {
@@ -907,11 +907,7 @@ laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Change PIN(type:%i,ref:%i,lengths:%i/%i)", data->pin_type, data->pin_reference, data->pin1.len, data->pin2.len);
 
-	if (data->pin_type == SC_AC_AUT)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-	else if (data->pin_type == SC_AC_SCB)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-	else if (data->pin_type != SC_AC_CHV)
+	if (data->pin_type == SC_AC_AUT	|| data->pin_type == SC_AC_SCB || data->pin_type != SC_AC_CHV)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	if (!(data->pin_reference & 0x80))   {
@@ -923,7 +919,7 @@ laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 		entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_CHANGE);
 		if (entry)   {
 			if (entry->key_ref & 0xC000)
-				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Change PIN protectd by SM: not supported");
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Change PIN protectd by SM: not supported (TODO)");
 		}
 		chv_ref = 0;
 	}
@@ -946,7 +942,7 @@ laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "PIN change failed");
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -954,14 +950,56 @@ static int
 laser_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	struct sc_file *pin_file = NULL;
+	unsigned char pin_data[SC_MAX_APDU_BUFFER_SIZE];
+	unsigned chv_ref = data->pin_reference;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Reset PIN(ref:%i,lengths:%i/%i)", data->pin_reference, data->pin1.len, data->pin2.len);
+	sc_log(ctx, "Reset PIN(type:%i,ref:%i,lengths:%i/%i)", data->pin_type, data->pin_reference, data->pin1.len, data->pin2.len);
 
 	if (data->pin_type != SC_AC_CHV)
-		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Unblock procedure can be used only with the PINs of type CHV");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	if (data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Not supported reset PIN with assigning of a new value (TODO)");
+
+	if (!(data->pin_reference & 0x80))   {
+		const struct sc_acl_entry *entry;
+
+		rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
+		LOG_TEST_RET(ctx, rv, "Select PIN file error");
+
+		entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_RESET);
+		if (entry)   {
+			sc_log(ctx, "Acl(PIN_RESET): %04X", entry->key_ref);
+			if ((entry->key_ref & 0x00FF) == 0xFF)   {
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_ALLOWED, "Reset PIN not allowed");
+			}
+			else if (entry->key_ref & 0xC000)   {
+				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Reset PIN protectd by SM: not supported (TODO)");
+			}
+			else if (entry->key_ref & 0x00FF)   {
+				rv = laser_pin_verify(card, SC_AC_CHV, entry->key_ref & 0x00FF, data->pin1.data, data->pin1.len, tries_left);
+				LOG_TEST_RET(ctx, rv, "Verify PUK failed");
+
+				rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
+				LOG_TEST_RET(ctx, rv, "Select PIN file error");
+			}
+		}
+		chv_ref = 0;
+	}
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x2C, 0, 0);
+	apdu.cla = 0x80;
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PIN change failed");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -982,6 +1020,9 @@ laser_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_lef
 		LOG_FUNC_RETURN(ctx, rv);
 	case SC_PIN_CMD_CHANGE:
 		rv = laser_pin_change(card, data, tries_left);
+		LOG_FUNC_RETURN(ctx, rv);
+	case SC_PIN_CMD_UNBLOCK:
+		rv = laser_pin_reset(card, data, tries_left);
 		LOG_FUNC_RETURN(ctx, rv);
 	default:
 		sc_log(ctx, "PIN command 0x%X do not yet supported.", data->cmd);
