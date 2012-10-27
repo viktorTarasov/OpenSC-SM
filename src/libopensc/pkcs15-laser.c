@@ -37,6 +37,9 @@
 #define PATH_USERPIN	"3F000020"
 #define PATH_SOPIN	"3F000010"
 
+#define AUTH_ID_PIN	0x20
+#define AUTH_ID_SOPIN	0x10
+
 #define LASER_BASEFID_MASK		0xFFF0
 #define LASER_BASEFID_KXS		0x0200
 #define LASER_BASEFID_KXC		0x0400
@@ -644,6 +647,9 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	}
 	free(data);
 
+	obj.auth_id.len = 1;
+	obj.auth_id.value[0] = AUTH_ID_PIN; 
+
 	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add private key object");
 
@@ -743,10 +749,10 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	p15card->tokeninfo->version = 0;
 	p15card->tokeninfo->flags = ck_ti->flags;
 
-	rv = _create_pin(p15card, "User PIN", PATH_USERPIN, 0xC1, 0);
+	rv = _create_pin(p15card, "User PIN", PATH_USERPIN, AUTH_ID_PIN, 0);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'User PIN' object");
 
-	rv = _create_pin(p15card, "SO PIN", PATH_SOPIN, 0x01, SC_PKCS15_PIN_FLAG_SO_PIN);
+	rv = _create_pin(p15card, "SO PIN", PATH_SOPIN, AUTH_ID_SOPIN, SC_PKCS15_PIN_FLAG_SO_PIN);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'SO PIN' object");
 
 	rv = _parse_fs_data(p15card);
