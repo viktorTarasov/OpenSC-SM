@@ -664,9 +664,10 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
 	unsigned char buf[SC_MAX_APDU_BUFFER_SIZE];
-	size_t ii, count;
+	size_t ii, count, pubkey_num;
 	char *df_paths[3] = {PATH_PUBLICDIR, PATH_PRIVATEDIR, NULL};
 	int rv, df;
+	struct sc_pkcs15_object *pubkeys[12];
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -710,6 +711,16 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 				break;
 			}
 		}
+	}
+
+	pubkey_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PUBKEY, pubkeys, 12);
+	for (ii = 0; ii < pubkey_num; ii++)   {
+		struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)pubkeys[ii]->data;
+		struct sc_pkcs15_object *prkey_obj = NULL;
+
+		if (!sc_pkcs15_find_prkey_by_id(p15card, &info->id, &prkey_obj))
+			if (strlen(prkey_obj->label) && !strlen(pubkeys[ii]->label))
+				memcpy(pubkeys[ii]->label, prkey_obj->label, sizeof(pubkeys[ii]->label));
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
