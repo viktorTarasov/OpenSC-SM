@@ -353,6 +353,7 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_object obj;
 	struct sc_pkcs15_pubkey_info info;
 	struct sc_pkcs15_pubkey_rsa key_rsa;
+	struct sc_file *key_file = NULL;
 	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PUBKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
@@ -377,6 +378,14 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	path.value[path.len - 2] = (ko_fid >> 8) & 0xFF;
 	path.value[path.len - 1] = ko_fid & 0xFF;
 	info.path = path;
+
+	rv = sc_select_file(p15card->card, &info.path, &key_file);
+	LOG_TEST_RET(ctx, rv, "Cannot select key file");
+
+	info.modulus_length = key_file->size * 8;
+	sc_file_free(key_file);
+
+	info.native = 1;
 
 	if (len < 7)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "public key attributes file is too short");
@@ -484,6 +493,9 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_KEY_GEN_MECHANISM");
 			sc_log(ctx, "CKA_KEY_GEN_MECHANISM: %X", uval);
 			break;
+		default:
+			sc_log(ctx, "Unknown CKA attribute: %X", attr.cka);
+			break;
 		}
 	}
 	free(data);
@@ -508,6 +520,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_object obj;
 	struct sc_pkcs15_prkey_info info;
 	struct sc_pkcs15_prkey_rsa key_rsa;
+	struct sc_file *key_file = NULL;
 	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PRVKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
@@ -528,13 +541,21 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	rv = sc_pkcs15_read_file(p15card, &path, &data, &len);
 	LOG_TEST_RET(ctx, rv, "Error while getting file content.");
 
+	if (len < 7)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "private key attributes file is too short");
+
 	/* set info path to private key KO */
 	path.value[path.len - 2] = ko_fid / 0x100;
 	path.value[path.len - 1] = ko_fid % 0x100;
 	info.path = path;
 
-	if (len < 7)
-		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "private key attributes file is too short");
+	rv = sc_select_file(p15card->card, &info.path, &key_file);
+	LOG_TEST_RET(ctx, rv, "Cannot select key file");
+
+	info.modulus_length = key_file->size * 8;
+	sc_file_free(key_file);
+
+	info.native = 1;
 
 	for (next = offs = 7; offs < len - 4; offs = next)   {
 		struct laser_cka attr;
@@ -642,6 +663,9 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 			break;
 		case CKA_MODIFIABLE:
 			obj.flags |= (*attr.val) ? SC_PKCS15_CO_FLAG_MODIFIABLE : 0;
+			break;
+		default:
+			sc_log(ctx, "Unknown CKA attribute: %X", attr.cka);
 			break;
 		}
 	}

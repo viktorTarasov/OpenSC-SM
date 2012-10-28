@@ -130,6 +130,7 @@ int sc_pkcs15_decipher(struct sc_pkcs15_card *p15card,
 
 	r = sc_get_encoding_flags(ctx, flags, alg_info->flags, &pad_flags, &sec_flags);
 	LOG_TEST_RET(ctx, r, "cannot encode security operation flags");
+	sc_log(ctx, "flags:0x%8.8x alg_info->flags:0x%8.8x pad:0x%8.8x sec:0x%8.8x", flags, alg_info->flags, pad_flags, sec_flags);
 
 	senv.algorithm_flags = sec_flags;
 	senv.operation       = SC_SEC_OPERATION_DECIPHER;
@@ -236,6 +237,7 @@ int sc_pkcs15_derive(struct sc_pkcs15_card *p15card,
 
 	r = sc_get_encoding_flags(ctx, flags, alg_info->flags, &pad_flags, &sec_flags);
 	LOG_TEST_RET(ctx, r, "cannot encode security operation flags");
+	sc_log(ctx, "flags:0x%8.8x alg_info->flags:0x%8.8x pad:0x%8.8x sec:0x%8.8x", flags, alg_info->flags, pad_flags, sec_flags);
 
 	senv.algorithm_flags = sec_flags;
 	senv.operation       = SC_SEC_OPERATION_DERIVE;
@@ -439,9 +441,7 @@ int sc_pkcs15_compute_signature(struct sc_pkcs15_card *p15card,
 		LOG_FUNC_RETURN(ctx, r);
 	}
 	senv.algorithm_flags = sec_flags;
-
-	sc_log(ctx, "DEE flags:0x%8.8x alg_info->flags:0x%8.8x pad:0x%8.8x sec:0x%8.8x",
-		flags, alg_info->flags, pad_flags, sec_flags);
+	sc_log(ctx, "flags:0x%8.8x alg_info->flags:0x%8.8x pad:0x%8.8x sec:0x%8.8x", flags, alg_info->flags, pad_flags, sec_flags);
 
 	/* add the padding bytes (if necessary) */
 	if (pad_flags != 0) {

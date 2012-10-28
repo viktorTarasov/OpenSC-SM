@@ -44,6 +44,14 @@
 #include "iso7816.h"
 #include "pkcs15.h"
 
+#define LASER_CARD_DEFAULT_FLAGS ( SC_ALGORITHM_ONBOARD_KEY_GEN	\
+		| SC_ALGORITHM_RSA_RAW		\
+		| SC_ALGORITHM_RSA_PAD_ISO9796	\
+		| SC_ALGORITHM_RSA_PAD_PKCS1	\
+		| SC_ALGORITHM_RSA_HASH_NONE	\
+		| SC_ALGORITHM_RSA_HASH_SHA1	\
+		| SC_ALGORITHM_RSA_HASH_SHA256)
+
 /* generic iso 7816 operations table */
 static const struct sc_card_operations *iso_ops = NULL;
 
@@ -98,7 +106,7 @@ struct laser_card_capabilities  {
 
 struct laser_private_data {
 	struct sc_security_env security_env;
-	size_t key_size;
+	struct sc_file *last_ko;
 
 	struct laser_card_capabilities caps;
 };
@@ -169,6 +177,37 @@ laser_get_caps(struct sc_card *card)
 
 
 static int
+laser_tlv_parse(unsigned char *buf, size_t buf_len, struct sc_tlv_data *tlv)
+{
+	size_t offs;
+
+	if (!buf || !tlv)
+		return SC_ERROR_INVALID_ARGUMENTS;
+	if (buf_len < 2)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	offs = 0;
+	tlv->tag = *(buf + offs++);
+	if (!(*(buf + offs) & 0x80))   {
+		tlv->len = *(buf + offs++);
+		tlv->value = buf + offs;
+	}
+	else   {
+		size_t ii, nn = *(buf + offs++) & 0x7F;
+
+		if (buf_len < 2 + nn)
+			return SC_ERROR_INVALID_ARGUMENTS;
+
+		for (ii = 0, tlv->len = 0; ii < nn; ii++)
+			tlv->len = tlv->len * 0x100 + *(buf + offs++);
+		tlv->value = buf + offs;
+	}
+
+	return SC_SUCCESS;
+}
+
+
+static int
 laser_match_card(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
@@ -192,6 +231,7 @@ laser_init(struct sc_card *card)
 	struct sc_context *ctx = card->ctx;
 	struct laser_private_data *private_data = NULL;
 	struct sc_path path;
+	unsigned int flags;
 	int rv = SC_ERROR_NO_CARD_SUPPORT;
 
 	LOG_FUNC_CALLED(ctx);
@@ -211,6 +251,10 @@ laser_init(struct sc_card *card)
 
 	rv = laser_get_caps(card);
 	LOG_TEST_RET(ctx, rv, "Cannot get card capabilities");
+
+	flags = LASER_CARD_DEFAULT_FLAGS;
+	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
+	_sc_card_add_rsa_alg(card, 2048, flags, 0x10001);
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -338,29 +382,35 @@ laser_select_file(struct sc_card *card, const struct sc_path *in_path,
 	apdu.data = path;
 	apdu.datalen = pathlen;
 
-	if (file_out != NULL) {
+//	if (file_out != NULL) {
 		apdu.p2 = 0x0C;		/* not ISO 7816-4 */
 		apdu.resp = buf;
 		apdu.resplen = sizeof(buf);
 		apdu.le = card->max_recv_size > 0 ? card->max_recv_size : 256;
-	}
-	else {
-		apdu.p2 = 0x00;		/* not ISO7816-4 */
-		apdu.cse = (apdu.lc == 0) ? SC_APDU_CASE_1 : SC_APDU_CASE_3_SHORT;
-	}
+//	}
+//	else {
+//		apdu.p2 = 0x00;		/* not ISO7816-4 */
+//		apdu.cse = (apdu.lc == 0) ? SC_APDU_CASE_1 : SC_APDU_CASE_3_SHORT;
+//	}
 
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+/*
 	if (file_out == NULL) {
 		if (apdu.sw1 == 0x61)
 			LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 		LOG_FUNC_RETURN(ctx, rv);
 	}
+*/
 	LOG_TEST_RET(ctx, rv, "Select file error");
 
-	if (apdu.resplen < 2)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED);
+	if (apdu.resplen < 2)   {
+		if (file_out)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED);
+		else
+			LOG_FUNC_RETURN(ctx, rv);
+	}
 
 	switch (apdu.resp[0]) {
 	case ISO7816_TAG_FCI:
@@ -376,20 +426,32 @@ laser_select_file(struct sc_card *card, const struct sc_path *in_path,
 		}
 
 		if ((size_t)apdu.resp[1] + 2 <= apdu.resplen)   {
+			struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
+
 			rv = laser_process_fci(card, file, apdu.resp+2, apdu.resp[1]);
 			LOG_TEST_RET(ctx, rv, "Process FCI error");
 
 			rv = laser_parse_sec_attrs(card, file);
 			LOG_TEST_RET(ctx, rv, "Security attributes parse error");
+
+			if (file->type == SC_FILE_TYPE_INTERNAL_EF)   {
+				if (prv->last_ko)
+					sc_file_free(prv->last_ko);
+				sc_file_dup(&prv->last_ko, file);
+			}
 		}
 
-		*file_out = file;
+		if (file_out)
+			*file_out = file;
+		else
+			sc_file_free(file);
 		break;
 	case 0x00: /* proprietary coding */
 		LOG_TEST_RET(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED, "Proprietary encoding in 'SELECT' APDU response not supported");
 	default:
 		LOG_TEST_RET(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED, "Unknown 'SELECT' APDU response tag");
 	}
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -757,14 +819,20 @@ laser_check_sw(struct sc_card *card, unsigned int sw1, unsigned int sw2)
 
 static int
 laser_set_security_env(struct sc_card *card,
-		const struct sc_security_env *env, int se_num)
+		const struct sc_security_env *senv, int se_num)
 {
 	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
+	struct sc_security_env *env = &prv->security_env;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "laser_set_security_env(card:%p) operation 0x%X; senv.algorithm 0x%X, senv.algorithm_ref 0x%X",
-			card, env->operation, env->algorithm, env->algorithm_ref);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	if (!senv)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	sc_log(ctx, "laser_set_security_env() op:%X,flags:%X,algo:(%X,ref:%X,flags:%X)",
+			senv->operation, senv->flags, senv->algorithm, senv->algorithm_ref, senv->algorithm_flags);
+	*env = *senv;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1111,13 +1179,74 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 		unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
+	struct sc_security_env *env = &prv->security_env;
+	struct sc_apdu apdu;
+	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	struct sc_tlv_data tlv;
+	int rv;
+	size_t offs;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(card->ctx, "crgram_len %i;  outlen %i", in_len, out_len);
+	sc_log(ctx, "in-length:%i,key-size:%i,out-length:%i", in_len, prv->last_ko ? prv->last_ko->size : -1, out_len);
 	if (!out || !out_len || in_len > SC_MAX_APDU_BUFFER_SIZE)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "laser_decipher() in_len:%i, out_len:%i", in_len, out_len);
+	if (env->operation != SC_SEC_OPERATION_DECIPHER)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "has to be SC_SEC_OPERATION_DECIPHER");
+	else if (in_len > (sizeof(sbuf) - 4))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "invalid data length");
+
+	offs = 0;
+	sbuf[offs++] = 0x82;
+	if (in_len >= 0x100)   {
+		sbuf[offs++] = 0x82;
+		sbuf[offs++] = in_len/0x100;
+		sbuf[offs++] = in_len%0x100;
+	}
+	else   {
+		sbuf[offs++] = 0x81;
+		sbuf[offs++] = in_len;
+	}
+	memcpy(sbuf + offs, in, in_len);
+	offs += in_len;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x80,
+			(env->algorithm_flags & SC_ALGORITHM_RSA_PAD_PKCS1) ? 0x0A : 0x0C);
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.datalen = offs;
+	apdu.data = sbuf;
+	apdu.lc = offs;
+	apdu.le = 256;
+	apdu.resp = rbuf;
+	apdu.resplen = sizeof(rbuf);
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	rv = laser_tlv_parse(apdu.resp, apdu.resplen, &tlv);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	sc_log(ctx, "response(%i) %s", apdu.resplen, sc_dump_hex(apdu.resp, apdu.resplen));
+	if (tlv.tag != 0x80)   {
+		sc_log(ctx, "invalid decrypted data tag. response(%i) %s ...", apdu.resplen, sc_dump_hex(apdu.resp, 12));
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+	}
+
+	if (tlv.len > out_len)   {
+		sc_log(ctx, "PSO Decipher failed: response data too long: %i\n", tlv.len);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+	}
+
+	sc_log(ctx, "returns(%i) %s", tlv.len, sc_dump_hex(tlv.value, tlv.len));
+	memcpy(out, tlv.value, tlv.len);
+
+	LOG_FUNC_RETURN(ctx, tlv.len);
 }
 
 
@@ -1128,14 +1257,48 @@ laser_compute_signature_dst(struct sc_card *card,
 	struct sc_context *ctx = card->ctx;
 	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
 	struct sc_security_env *env = &prv->security_env;
+	struct sc_apdu apdu;
+	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	int rv;
+	size_t offs;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "laser_compute_signature_dst() input length %i", in_len);
+	sc_log(ctx, "in-length:%i,key-size:%i", in_len, prv->last_ko ? prv->last_ko->size : -1);
 	if (env->operation != SC_SEC_OPERATION_SIGN)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "It's not SC_SEC_OPERATION_SIGN");
-	else if (!(prv->key_size & 0x1E0) || (prv->key_size & ~0x1E0))
-		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid key size for SC_SEC_OPERATION_SIGN");
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	else if (env->algorithm_flags & SC_ALGORITHM_RSA_RAW)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "RAW sign mechanism not supported");
+	else if (prv->last_ko && in_len > (prv->last_ko->size - 11))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "too much of the input data");
+
+	offs = 0;
+	sbuf[offs++] = 0x80;
+	sbuf[offs++] = 0x81;
+	sbuf[offs++] = in_len;
+	memcpy(sbuf + offs, in, in_len);
+	offs += in_len;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, 0x8A);
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.datalen = offs;
+	apdu.data = sbuf;
+	apdu.lc = offs;
+	apdu.le = out_len > 256 ? 256 : out_len;
+	apdu.resp = rbuf;
+	apdu.resplen = out_len;
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	if (apdu.resplen > out_len)   {
+		sc_log(ctx, "Compute signature failed: invalide response length %i\n", apdu.resplen);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CARD_CMD_FAILED);
+	}
+
+	memcpy(out, apdu.resp, apdu.resplen);
+	LOG_FUNC_RETURN(ctx, apdu.resplen);
 }
 
 
@@ -1164,7 +1327,7 @@ laser_compute_signature(struct sc_card *card,
 	struct sc_security_env *env = &prv->security_env;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
+	sc_log(ctx, "op:%x, inlen %i, outlen %i", env->operation, in_len, out_len);
 	if (!card || !in || !out)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
 

@@ -94,7 +94,7 @@ static int sc_pkcs1_add_01_padding(const u8 *in, size_t in_len,
 	memmove(out + i, in, in_len);
 	*out++ = 0x00;
 	*out++ = 0x01;
-	
+
 	memset(out, 0xFF, i - 3);
 	out += i - 3;
 	*out = 0x00;
@@ -278,7 +278,7 @@ int sc_get_encoding_flags(sc_context_t *ctx,
 	for (i = 0; digest_info_prefix[i].algorithm != 0; i++) {
 		if (iflags & digest_info_prefix[i].algorithm) {
 			if (digest_info_prefix[i].algorithm != SC_ALGORITHM_RSA_HASH_NONE &&
-			    caps & digest_info_prefix[i].algorithm)
+					caps & digest_info_prefix[i].algorithm)
 				*sflags |= digest_info_prefix[i].algorithm;
 			else
 				*pflags |= digest_info_prefix[i].algorithm;
@@ -291,15 +291,16 @@ int sc_get_encoding_flags(sc_context_t *ctx,
 			*sflags |= SC_ALGORITHM_RSA_PAD_PKCS1;
 		else
 			*pflags |= SC_ALGORITHM_RSA_PAD_PKCS1;
-	} else if ((iflags & SC_ALGORITHM_RSA_PADS) == SC_ALGORITHM_RSA_PAD_NONE) {
-		
+	}
+	else if ((iflags & SC_ALGORITHM_RSA_PADS) == SC_ALGORITHM_RSA_PAD_NONE) {
 		/* Work with RSA, EC and maybe GOSTR? */
 		if (!(caps & SC_ALGORITHM_RAW_MASK))
 			LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "raw encryption is not supported");
 
 		*sflags |= (caps & SC_ALGORITHM_RAW_MASK); /* adds in the one raw type */
 		*pflags = 0;
-	} else {
+	}
+	else {
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "unsupported algorithm");
 	}
 
