@@ -1189,12 +1189,6 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "in-length:%i,key-size:%i,out-length:%i", in_len, prv->last_ko ? prv->last_ko->size : -1, out_len);
-	if (!out || !out_len || in_len > SC_MAX_APDU_BUFFER_SIZE)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-
-
-	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "laser_decipher() in_len:%i, out_len:%i", in_len, out_len);
 	if (env->operation != SC_SEC_OPERATION_DECIPHER)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "has to be SC_SEC_OPERATION_DECIPHER");
 	else if (in_len > (sizeof(sbuf) - 4))
@@ -1232,7 +1226,6 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 	rv = laser_tlv_parse(apdu.resp, apdu.resplen, &tlv);
 	LOG_TEST_RET(ctx, rv, "PSO DST failed");
 
-	sc_log(ctx, "response(%i) %s", apdu.resplen, sc_dump_hex(apdu.resp, apdu.resplen));
 	if (tlv.tag != 0x80)   {
 		sc_log(ctx, "invalid decrypted data tag. response(%i) %s ...", apdu.resplen, sc_dump_hex(apdu.resp, 12));
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
@@ -1243,9 +1236,7 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
 	}
 
-	sc_log(ctx, "returns(%i) %s", tlv.len, sc_dump_hex(tlv.value, tlv.len));
 	memcpy(out, tlv.value, tlv.len);
-
 	LOG_FUNC_RETURN(ctx, tlv.len);
 }
 
@@ -1259,6 +1250,7 @@ laser_compute_signature_dst(struct sc_card *card,
 	struct sc_security_env *env = &prv->security_env;
 	struct sc_apdu apdu;
 	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	unsigned char algo;
 	int rv;
 	size_t offs;
 
@@ -1271,6 +1263,13 @@ laser_compute_signature_dst(struct sc_card *card,
 	else if (prv->last_ko && in_len > (prv->last_ko->size - 11))
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "too much of the input data");
 
+	if (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1)
+		algo = 0x0A;	/* ALG_RSA_SHA_PKCS1 */
+	else if (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA256)
+		algo = 0x28;	/* ALG_RSA_SHA_256_PKCS1 */
+	else
+		algo = 0x8A;	/* ALG_RSA_PKCS1 */
+
 	offs = 0;
 	sbuf[offs++] = 0x80;
 	sbuf[offs++] = 0x81;
@@ -1278,7 +1277,7 @@ laser_compute_signature_dst(struct sc_card *card,
 	memcpy(sbuf + offs, in, in_len);
 	offs += in_len;
 
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, 0x8A);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, algo);
 	apdu.flags |= SC_APDU_FLAGS_CHAINING;
 	apdu.datalen = offs;
 	apdu.data = sbuf;
