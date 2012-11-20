@@ -40,7 +40,6 @@
 	<Icon Id="OpenSC.ico" SourceFile="OpenSC.ico" />
 	<Property Id="ARPPRODUCTICON" Value="OpenSC.ico" />
 
-
     <Media Id="1" Cabinet="OpenSC.cab" EmbedCab="yes" CompressionLevel="high"/>
     <MajorUpgrade DowngradeErrorMessage="Can't downgrade." AllowSameVersionUpgrades="yes"/>
     <Directory Id="TARGETDIR" Name="SourceDir">
@@ -51,6 +50,14 @@
         </Component>
         <Component Id="opensc_minidriver.dll" Guid="*" Win64="$(var.Win64YesNo)">
           <File Source="$(var.SOURCE_DIR)\src\minidriver\opensc-minidriver.dll" Vital="yes"/>
+          <RegistryKey Id="Calais_Laser" Root="HKLM" Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Laser v0.0.1"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR" Value="3bdc18ff8191fe1fc38073c8211366010b0352000538"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffffffffffffffffffffffffffffffffffffffffffff"/>
+          </RegistryKey>
         </Component>
       </Directory>
       <!-- Install tools and profiles to Program Files -->
