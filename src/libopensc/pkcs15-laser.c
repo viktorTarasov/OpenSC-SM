@@ -25,6 +25,10 @@
 #include <stdlib.h>
 #include <stdio.h>
 
+#ifdef ENABLE_OPENSSL
+#include <openssl/sha.h>
+#endif
+
 #include "internal.h"
 #include "pkcs15.h"
 #include "cardctl.h"
@@ -40,12 +44,22 @@
 #define AUTH_ID_PIN	0x20
 #define AUTH_ID_SOPIN	0x10
 
-#define LASER_BASEFID_MASK		0xFFF0
-#define LASER_BASEFID_KXS		0x0200
-#define LASER_BASEFID_KXC		0x0400
-#define LASER_BASEFID_KXC_PUBKEY	0x0140
+#define LASER_BASEFID_MASK		0xFFE0
 #define LASER_BASEFID_PUBKEY		0x0080
+/* TODO: Private key can have different 'BASEFID's */
 #define LASER_BASEFID_PRVKEY		0x0040
+
+#define LASER_BASEFID_MASK		0xFFE0
+#define LASER_BASEKX_MASK		0x7F00
+#define LASER_TYPE_KX_CERT		0x11
+#define LASER_TYPE_KX_PRVKEY		0x12
+#define LASER_TYPE_KX_PUBKEY		0x13
+#define LASER_TYPE_KX_SKEY		0x14
+#define LASER_TYPE_CERT			0x20
+#define LASER_TYPE_PRVKEY		0x30
+#define LASER_TYPE_PUBKEY		0x40
+#define LASER_TYPE_SKEY			0x50
+#define LASER_TYPE_DATA			0x60
 
 struct laser_ko_props {
 	unsigned char class;
@@ -79,6 +93,45 @@ struct laser_cka {
 
 int sc_pkcs15emu_laser_init_ex(struct sc_pkcs15_card *, struct sc_pkcs15emu_opt *);
 
+
+static int
+_laser_type(int id)
+{
+	int type = 0;
+
+	switch (id & LASER_BASEFID_MASK)   {
+	case 0x0000 :
+	case 0x0020 :
+	case 0x0040 :
+	case 0x0060 :
+		type = LASER_TYPE_PRVKEY;
+		break;
+	case 0x0080 :
+		type = LASER_TYPE_PUBKEY;
+		break;
+	}
+
+	if (type)
+		return type;
+
+	switch (id & LASER_BASEKX_MASK)   {
+	case 0x0100 :
+		type = LASER_TYPE_KX_PUBKEY;
+		break;
+	case 0x0200 :
+		type = LASER_TYPE_KX_PRVKEY;
+		break;
+	case 0x0300 :
+		type = LASER_TYPE_KX_SKEY;
+		break;
+	case 0x0400 :
+	case 0x0500 :
+		type = LASER_TYPE_KX_CERT;
+		break;
+	}
+
+	return type;
+}
 static int
 _alloc_ck_string(unsigned char *data, size_t max_len, char ** out)
 {
@@ -338,6 +391,22 @@ _create_certificate(struct sc_pkcs15_card * p15card, unsigned file_id)
 		}
 	}
 
+#ifdef ENABLE_OPENSSL
+	if (info.value.len)   {
+		/* TODO: get certificate authority:
+		 * make the procedure 'sc_oberthur_get_certificate_authority' public and use it here.
+		 */
+		if (!info.id.len)   {
+			struct sc_pkcs15_pubkey *pubkey = NULL;
+
+			rv = sc_pkcs15_pubkey_from_cert(ctx, &info.value, &pubkey);
+			LOG_TEST_RET(ctx, rv, "Cannot get public key from certificate data");
+
+			SHA1(pubkey->u.rsa.modulus.data, pubkey->u.rsa.modulus.len, info.id.value);
+			info.id.len = SHA_DIGEST_LENGTH;
+		}
+	}
+#endif
 	rv = sc_pkcs15emu_add_x509_cert(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add certificate object");
 
@@ -521,6 +590,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_prkey_info info;
 	struct sc_pkcs15_prkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
+	/* TODO: Private key can have different 'BASEFID's */
 	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PRVKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
@@ -714,19 +784,22 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		 * the FID/mask (0x0400/0xFFF0) is used instead.
 		 */
 		for (ii=0; ii<count; ii++)   {
-			unsigned fid = *(buf + ii*2) * 0x100 + *(buf + ii*2 + 1);
-			switch (fid & LASER_BASEFID_MASK)   {
-			case LASER_BASEFID_KXS:
+			unsigned fid, type;
+
+			fid = *(buf + ii*2) * 0x100 + *(buf + ii*2 + 1);
+			type = _laser_type(fid);
+			switch (type)   {
+			case LASER_TYPE_KX_PRVKEY:
 				sc_log(ctx, "parse private key attributes FID:%04X", fid);
 				rv = _create_prvkey(p15card, fid);
 				LOG_TEST_RET(ctx, rv, "Cannot create private key PKCS#15 object");
 				break;
-			case LASER_BASEFID_KXC:
+			case LASER_TYPE_KX_CERT:
 				sc_log(ctx, "parse certificate attributes FID:%04X", fid);
 				rv = _create_certificate(p15card, fid);
 				LOG_TEST_RET(ctx, rv, "Cannot create certificate PKCS#15 object");
 				break;
-			case LASER_BASEFID_KXC_PUBKEY:
+			case LASER_TYPE_KX_PUBKEY:
 				sc_log(ctx, "parse public key attributes FID:%04X", fid);
 				rv = _create_pubkey(p15card, fid);
 				LOG_TEST_RET(ctx, rv, "Cannot create public key PKCS#15 object");
