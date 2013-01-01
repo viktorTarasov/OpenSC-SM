@@ -44,17 +44,17 @@
 #define AUTH_ID_PIN	0x20
 #define AUTH_ID_SOPIN	0x10
 
-#define LASER_BASEFID_MASK		0xFFE0
+#define LASER_BASEFID_MASK		0xFFC0
 #define LASER_BASEFID_PUBKEY		0x0080
 /* TODO: Private key can have different 'BASEFID's */
 #define LASER_BASEFID_PRVKEY		0x0040
 
-#define LASER_BASEFID_MASK		0xFFE0
 #define LASER_BASEKX_MASK		0x7F00
 #define LASER_TYPE_KX_CERT		0x11
 #define LASER_TYPE_KX_PRVKEY		0x12
 #define LASER_TYPE_KX_PUBKEY		0x13
 #define LASER_TYPE_KX_SKEY		0x14
+#define LASER_TYPE_KX_DATA		0x15
 #define LASER_TYPE_CERT			0x20
 #define LASER_TYPE_PRVKEY		0x30
 #define LASER_TYPE_PUBKEY		0x40
@@ -99,38 +99,28 @@ _laser_type(int id)
 {
 	int type = 0;
 
-	switch (id & LASER_BASEFID_MASK)   {
-	case 0x0000 :
-	case 0x0020 :
-	case 0x0040 :
-	case 0x0060 :
-		type = LASER_TYPE_PRVKEY;
-		break;
-	case 0x0080 :
-		type = LASER_TYPE_PUBKEY;
-		break;
+	if ((id & 0xFF00) == 0x0)   {
+		if ((id & LASER_BASEFID_MASK) == 0x0080)
+			return LASER_TYPE_PUBKEY;
+		else
+			return LASER_TYPE_PRVKEY;
 	}
-
-	if (type)
-		return type;
 
 	switch (id & LASER_BASEKX_MASK)   {
 	case 0x0100 :
-		type = LASER_TYPE_KX_PUBKEY;
-		break;
+		return LASER_TYPE_KX_PUBKEY;
 	case 0x0200 :
-		type = LASER_TYPE_KX_PRVKEY;
-		break;
+		return LASER_TYPE_KX_PRVKEY;
 	case 0x0300 :
-		type = LASER_TYPE_KX_SKEY;
-		break;
+		return LASER_TYPE_KX_SKEY;
 	case 0x0400 :
 	case 0x0500 :
-		type = LASER_TYPE_KX_CERT;
-		break;
+		return LASER_TYPE_KX_CERT;
+	case 0x0600 :
+		return LASER_TYPE_KX_DATA;
 	}
 
-	return type;
+	return -1;
 }
 static int
 _alloc_ck_string(unsigned char *data, size_t max_len, char ** out)
@@ -590,7 +580,6 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_prkey_info info;
 	struct sc_pkcs15_prkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
-	/* TODO: Private key can have different 'BASEFID's */
 	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PRVKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
