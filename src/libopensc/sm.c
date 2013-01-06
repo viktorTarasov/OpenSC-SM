@@ -49,9 +49,11 @@ sc_sm_parse_answer(struct sc_card *card, unsigned char *resp_data, size_t resp_l
 	size_t mac_len = sizeof(mac);
 	int rv;
 
+	sc_log(card->ctx, "sc_sm_parse_answer %p %i %p", resp_data, resp_len, out);
 	if (!resp_data || !resp_len || !out)
 		return SC_ERROR_INVALID_ARGUMENTS;
 
+	sc_log(card->ctx, "sc_sm_parse_answer %s", sc_dump_hex(resp_data, resp_len));
 	sc_copy_asn1_entry(c_asn1_sm_response, asn1_sm_response);
 
 	sc_format_asn1_entry(asn1_sm_response + 0, data, &data_len, 0);

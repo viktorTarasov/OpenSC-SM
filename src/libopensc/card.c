@@ -85,12 +85,16 @@ sc_allocate_apdu(struct sc_apdu *copy_from, unsigned flags)
 		apdu->allocation_flags |= SC_APDU_ALLOCATE_FLAG_DATA;
 	}
 
-	if ((flags & SC_APDU_ALLOCATE_FLAG_RESP) && copy_from->resp && copy_from->resplen)   {
-		apdu->resp = malloc(copy_from->resplen);
+	if (flags & SC_APDU_ALLOCATE_FLAG_RESP)   {
+		/* Always ready to acquire the SM return data. */
+		size_t len = copy_from->resplen + 48;
+
+		apdu->resp = malloc(len);
 		if (!apdu->resp)
 			return NULL;
-		memcpy(apdu->resp, copy_from->resp, copy_from->resplen);
-		apdu->resplen = copy_from->resplen;
+		if (copy_from->resp && copy_from->resplen)
+			memcpy(apdu->resp, copy_from->resp, copy_from->resplen);
+		apdu->resplen = len;
 		apdu->allocation_flags |= SC_APDU_ALLOCATE_FLAG_RESP;
 	}
 	return apdu;
