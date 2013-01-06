@@ -43,7 +43,7 @@ opensc.dll: $(OBJECTS) ..\scconf\scconf.lib ..\common\common.lib ..\common\libsc
 	echo EXPORTS >> $*.def
 	type lib$*.exports >> $*.def
 	link $(LINKFLAGS) /dll /def:$*.def /implib:$*.lib /out:opensc.dll $(OBJECTS) ..\scconf\scconf.lib \
-		..\common\common.lib ..\common\libscdl.lib ...\libsm\libsm.lib .\pkcs15init\pkcs15init.lib \
+		..\common\common.lib ..\common\libscdl.lib ..\libsm\libsm.lib ..\pkcs15init\pkcs15init.lib \
 		$(OPENSSL_LIB) $(ZLIB_LIB) gdi32.lib advapi32.lib ws2_32.lib
 	if EXIST opensc.dll.manifest mt -manifest opensc.dll.manifest -outputresource:opensc.dll;2
 
