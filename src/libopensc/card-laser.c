@@ -297,8 +297,8 @@ laser_init(struct sc_card *card)
 	card->sm_ctx.ops.get_sm_apdu = laser_sm_wrap_apdu;
 	card->sm_ctx.ops.free_sm_apdu = laser_sm_free_apdu;
 	card->sm_ctx.ops.close = laser_sm_close;
-#endif
 	sc_log(ctx, "card->sm_ctx.ops.open %p", card->sm_ctx.ops.open);
+#endif
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -990,6 +990,7 @@ laser_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 }
 
 
+#ifdef ENABLE_SM
 static int
 laser_sm_chv_change(struct sc_card *card, unsigned chv_ref, struct sc_pin_cmd_pin *pin,
 		int *tries_left, unsigned op_acl)
@@ -1039,6 +1040,8 @@ laser_sm_chv_change(struct sc_card *card, unsigned chv_ref, struct sc_pin_cmd_pi
 	LOG_TEST_RET(ctx, rv, "SM change CHV failed");
 	LOG_FUNC_RETURN(ctx, rv);
 }
+#else
+#endif
 
 
 static int
@@ -1081,14 +1084,14 @@ laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 		entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_CHANGE);
 		if (entry)   {
 			if (entry->key_ref & 0xC000)   {
-				if (card->sm_ctx.sm_mode == SM_MODE_NONE)   {
 #ifdef ENABLE_SM
+				if (card->sm_ctx.sm_mode == SM_MODE_NONE)   {
 					rv = laser_sm_chv_change(card, chv_ref, &data->pin2, tries_left, entry->key_ref);
 					LOG_FUNC_RETURN(ctx, rv);
-#else
-					LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-#endif /* ifdef ENABLE_SM */
 				}
+#else
+				LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+#endif /* ifdef ENABLE_SM */
 			}
 		}
 	}
