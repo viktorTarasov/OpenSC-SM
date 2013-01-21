@@ -266,78 +266,107 @@ int sc_apdu_set_resp(sc_context_t *ctx, sc_apdu_t *apdu, const u8 *buf,
  *  @return SC_SUCCESS on success and an error code otherwise
  */
 int
-sc_check_apdu(sc_card_t *card, const sc_apdu_t *apdu)
+sc_check_apdu(struct sc_card *card, const struct sc_apdu *apdu)
 {
+	struct sc_context *ctx = card->ctx;
+
 	if ((apdu->cse & ~SC_APDU_SHORT_MASK) == 0) {
 		/* length check for short APDU    */
-		if (apdu->le > 256 || (apdu->lc > 255 && (apdu->flags & SC_APDU_FLAGS_CHAINING) == 0))
+		if (apdu->le > 256 || (apdu->lc > 255 && (apdu->flags & SC_APDU_FLAGS_CHAINING) == 0))   {
+			sc_log(ctx, "Invalid lengths in short APDU");
 			goto error;
+		}
 	}
 	else if ((apdu->cse & SC_APDU_EXT) != 0) {
 		/* check if the card supports extended APDUs */
 		if ((card->caps & SC_CARD_CAP_APDU_EXT) == 0) {
-			sc_log(card->ctx, "card doesn't support extended APDUs");
+			sc_log(ctx, "card doesn't support extended APDUs");
 			goto error;
 		}
 		/* length check for extended APDU */
-		if (apdu->le > 65536 || apdu->lc > 65535)
+		if (apdu->le > 65536 || apdu->lc > 65535)   {
+			sc_log(ctx, "Invalid lengths in extended APDU");
 			goto error;
+		}
 	}
 	else   {
+		sc_log(ctx, "Invalid CSE 0x%X", apdu->cse);
 		goto error;
 	}
 
 	switch (apdu->cse & SC_APDU_SHORT_MASK) {
 	case SC_APDU_CASE_1:
 		/* no data is sent or received */
-		if (apdu->datalen != 0 || apdu->lc != 0 || apdu->le != 0)
+		if (apdu->datalen != 0 || apdu->lc != 0 || apdu->le != 0)   {
+			sc_log(ctx, "APDU parameters incompatibles with CASE_1");
 			goto error;
+		}
 		break;
 	case SC_APDU_CASE_2_SHORT:
 		/* no data is sent        */
-		if (apdu->datalen != 0 || apdu->lc != 0)
+		if (apdu->datalen != 0 || apdu->lc != 0)   {
+			sc_log(ctx, "APDU CASE_2 should not have data defined");
 			goto error;
+		}
 		/* data is expected       */
-		if (apdu->resplen == 0 || apdu->resp == NULL)
+		if (apdu->resplen == 0 || apdu->resp == NULL)    {
+			sc_log(ctx, "Response data is expected for APDU CASE_2");
 			goto error;
+		}
 		/* return buffer to small */
 		if ((apdu->le == 0 && apdu->resplen < SC_MAX_APDU_BUFFER_SIZE-2)
-				|| (apdu->resplen < apdu->le))
+				|| (apdu->resplen < apdu->le))   {
+			sc_log(ctx, "Return buffer is too small for APDU CASE_2");
 			goto error;
+		}
 		break;
 	case SC_APDU_CASE_3_SHORT:
 		/* data is sent           */
-		if (apdu->datalen == 0 || apdu->data == NULL || apdu->lc == 0)
+		if (apdu->datalen == 0 || apdu->data == NULL || apdu->lc == 0)   {
+			sc_log(ctx, "Command data is expected for APDU CASE_3");
 			goto error;
+		}
 		/* no data is expected    */
-		if (apdu->le != 0)
+		if (apdu->le != 0)   {
+			sc_log(ctx, "No response data is expected for APDU CASE_3");
 			goto error;
+		}
 		/* inconsistent datalen   */
-		if (apdu->datalen != apdu->lc)
+		if (apdu->datalen != apdu->lc)   {
+			sc_log(ctx, "Inconsistent data length for APDU CASE_3");
 			goto error;
+		}
 		break;
 	case SC_APDU_CASE_4_SHORT:
 		/* data is sent           */
-		if (apdu->datalen == 0 || apdu->data == NULL || apdu->lc == 0)
+		if (apdu->datalen == 0 || apdu->data == NULL || apdu->lc == 0)   {
+			sc_log(ctx, "Command data is expected for APDU CASE_4");
 			goto error;
+		}
 		/* data is expected       */
-		if (apdu->resplen == 0 || apdu->resp == NULL)
+		if (apdu->resplen == 0 || apdu->resp == NULL)   {
+			sc_log(ctx, "Response data is expected for APDU CASE_4");
 			goto error;
+		}
 		/* return buffer to small */
 		if ((apdu->le == 0 && apdu->resplen < SC_MAX_APDU_BUFFER_SIZE-2)
-				|| (apdu->resplen < apdu->le))
+				|| (apdu->resplen < apdu->le))   {
+			sc_log(ctx, "Return buffer is too small for APDU CASE_4");
 			goto error;
+		}
 		/* inconsistent datalen   */
-		if (apdu->datalen != apdu->lc)
+		if (apdu->datalen != apdu->lc)   {
+			sc_log(ctx, "Inconsistent data length for APDU CASE_4");
 			goto error;
+		}
 		break;
 	default:
-		sc_log(card->ctx, "Invalid APDU case %d", apdu->cse);
+		sc_log(ctx, "Invalid APDU case %d", apdu->cse);
 		return SC_ERROR_INVALID_ARGUMENTS;
 	}
 	return SC_SUCCESS;
 error:
-	sc_log(card->ctx, "Invalid Case %d %s APDU:\n"
+	sc_log(ctx, "Invalid Case %d %s APDU:\n"
 		"cse=%02x cla=%02x ins=%02x p1=%02x p2=%02x lc=%lu le=%lu\n"
 		"resp=%p resplen=%lu data=%p datalen=%lu",
 		apdu->cse & SC_APDU_SHORT_MASK,
@@ -381,8 +410,8 @@ sc_single_transmit(struct sc_card *card, struct sc_apdu *apdu)
 	if (card->reader->ops->transmit == NULL)
 		LOG_TEST_RET(card->ctx, SC_ERROR_NOT_SUPPORTED, "cannot transmit APDU");
 
-	sc_log(ctx, "CLA:%X, INS:%X, P1:%X, P2:%X, data(%i) %p",
-			apdu->cla, apdu->ins, apdu->p1, apdu->p2, apdu->datalen, apdu->data);
+	sc_log(ctx, "CSE:%i CLA:%X INS:%X P1:%X P2:%X data(%i)%p",
+			apdu->cse, apdu->cla, apdu->ins, apdu->p1, apdu->p2, apdu->datalen, apdu->data);
 #ifdef ENABLE_SM
 	if (card->sm_ctx.sm_mode == SM_MODE_TRANSMIT)
 		return sc_sm_single_transmit(card, apdu);
@@ -575,9 +604,9 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 	if ((apdu->flags & SC_APDU_FLAGS_CHAINING) != 0) {
 		/* divide et impera: transmit APDU in chunks with Lc <= max_send_size
 		 * bytes using command chaining */
-		size_t    len  = apdu->datalen;
-		const u8  *buf = apdu->data;
-		size_t    max_send_size = card->max_send_size > 0 ? card->max_send_size : 255;
+		size_t len  = apdu->datalen;
+		const unsigned char *buf = apdu->data;
+		size_t max_send_size = card->max_send_size > 0 ? card->max_send_size : 255;
 
 		while (len != 0) {
 			size_t    plen;

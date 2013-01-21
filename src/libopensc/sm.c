@@ -179,3 +179,49 @@ sc_sm_single_transmit(struct sc_card *card, struct sc_apdu *apdu)
 	return SC_ERROR_NOT_SUPPORTED;
 }
 #endif
+
+
+struct sc_apdu *
+sc_sm_allocate_apdu(struct sc_apdu *in_apdu)
+{
+	struct sc_apdu *apdu = NULL;
+	size_t resp_len = SC_MAX_APDU_BUFFER_SIZE * 2;
+
+	assert(in_apdu != NULL);
+	apdu = (struct sc_apdu *)malloc(sizeof(struct sc_apdu));
+	if (!in_apdu || !apdu)
+		return apdu;
+	memcpy(apdu, in_apdu, sizeof(struct sc_apdu));
+	apdu->data = apdu->resp = NULL;
+	apdu->next = NULL;
+	apdu->datalen = apdu->resplen = 0;
+	apdu->allocation_flags = SC_APDU_ALLOCATE_FLAG;
+
+	/* Always ready to acquire the SM input data. */
+	apdu->data = malloc(in_apdu->datalen + 48);
+	if (!apdu->data)
+		return NULL;
+	memcpy(apdu->data, in_apdu->data, in_apdu->datalen);
+	apdu->datalen = in_apdu->datalen;
+
+	apdu->resp = malloc(resp_len);
+	if (!apdu->resp)
+		return NULL;
+	if (in_apdu->resp && in_apdu->resplen)
+		memcpy(apdu->resp, in_apdu->resp, in_apdu->resplen);
+	apdu->resplen = resp_len;
+
+	return apdu;
+}
+
+void
+sc_sm_free_apdu(struct sc_apdu *apdu)
+{
+	if (!apdu)
+		return;
+	if (apdu->data)
+		free (apdu->data);
+	if (apdu->resp)
+		free (apdu->resp);
+	free (apdu);
+}

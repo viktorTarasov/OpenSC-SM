@@ -61,6 +61,7 @@ void sc_format_apdu(sc_card_t *card, sc_apdu_t *apdu,
 	apdu->p2 = (u8) p2;
 }
 
+#if 0
 struct sc_apdu *
 sc_allocate_apdu(struct sc_apdu *copy_from, unsigned flags)
 {
@@ -76,18 +77,23 @@ sc_allocate_apdu(struct sc_apdu *copy_from, unsigned flags)
 	apdu->datalen = apdu->resplen = 0;
 	apdu->allocation_flags = SC_APDU_ALLOCATE_FLAG;
 
+	printf("%s +%i: flags 0x%X, copy_from->datalen %i\n", __FILE__,__LINE__, flags, copy_from->datalen);
+	/* TODO: introduce SM dedicated flag */
 	if ((flags & SC_APDU_ALLOCATE_FLAG_DATA) && copy_from->data && copy_from->datalen)   {
-		apdu->data = malloc(copy_from->datalen);
+		/* Always ready to acquire the SM input data. */
+		apdu->data = malloc(copy_from->datalen + 48);
 		if (!apdu->data)
 			return NULL;
 		memcpy(apdu->data, copy_from->data, copy_from->datalen);
 		apdu->datalen = copy_from->datalen;
 		apdu->allocation_flags |= SC_APDU_ALLOCATE_FLAG_DATA;
+		printf("%s +%i: apdu->data %i\n", __FILE__,__LINE__, apdu->data);
 	}
 
 	if (flags & SC_APDU_ALLOCATE_FLAG_RESP)   {
 		/* Always ready to acquire the SM return data. */
-		size_t len = copy_from->resplen + 48;
+		/* TODO ############################## */
+		size_t len = SC_MAX_APDU_BUFFER_SIZE * 2;
 
 		apdu->resp = malloc(len);
 		if (!apdu->resp)
@@ -112,7 +118,7 @@ sc_free_apdu(struct sc_apdu *apdu)
 	if (apdu->allocation_flags & SC_APDU_ALLOCATE_FLAG)
 		free (apdu);
 }
-
+#endif
 
 static sc_card_t * sc_card_new(sc_context_t *ctx)
 {

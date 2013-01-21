@@ -30,6 +30,9 @@ extern "C" {
 
 #include "libopensc/sm.h"
 
+#define SC_SM_PADDING_OPTIONAL	1
+#define SC_SM_PADDING_MANDATORY 0
+
 DES_LONG DES_cbc_cksum_3des(const unsigned char *in, DES_cblock *output, long length,
 		DES_key_schedule *schedule, DES_key_schedule *schedule2, const_DES_cblock *ivec);
 DES_LONG DES_cbc_cksum_3des_emv96(const unsigned char *in, DES_cblock *output,
