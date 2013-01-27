@@ -1576,6 +1576,15 @@ laser_sm_open(struct sc_card *card)
 
 
 static int
+laser_sm_ignore(struct sc_apdu *apdu)
+{
+	if (apdu->cla == 0x00 && apdu->ins == 0xC0 && apdu->p1 == 0x00 && apdu->p2 == 0x00)
+		return 1;
+	return 0;
+}
+
+
+static int
 laser_sm_wrap_apdu(struct sc_card *card, struct sc_apdu *in_apdu, struct sc_apdu **out_apdu)
 {
 	struct sc_context *ctx = card->ctx;
@@ -1597,6 +1606,9 @@ laser_sm_wrap_apdu(struct sc_card *card, struct sc_apdu *in_apdu, struct sc_apdu
 	sc_log(ctx, "ACL 0x%X", card->sm_ctx.info.security_condition);
 	if (card->sm_ctx.info.security_condition & LASER_SM_ACCESS_INPUT)
 		sm_level = 3;
+
+	if (sm_level == 3 && laser_sm_ignore(apdu))
+		sm_level = 1;
 
 	sc_log(ctx, "Using SM level %i", sm_level);
 	if (sm_level == 3)   {
