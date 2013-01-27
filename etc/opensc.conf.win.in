@@ -324,14 +324,14 @@ app default {
                 driver = "laser";
                 name = "Athena Laser";
 		# Minimal SM level:
-		# '0' -- secure messaging not initialized and not used for the current operations.
-                #        Nevertheless, SM used if suggested by access condition of the next operation.
-                # '1' -- secure messaging intialized when connecting card and applied to the card response
-                #        of the all commands.
-                #        Nevertheless, SM is also applied to the APDU command if suggested by access condition
-                #        of the next operation.
-                # '3' -- secure messaging initialized when connecting card and applied to the APDU command
-                #        of all commands.
+		# '0' -- secure messaging not initialized and not applied.
+		#        Nevertheless, SM will be used if suggested by access condition (ACL) of the next operation.
+		# '1' -- secure messaging initialized when connecting card and applied to the card response
+		#        of the all transmitted APDUs.
+		#        Nevertheless, SM is also applied to the APDU command when suggested by ACL of the next operation.
+		# '3' -- secure messaging initialized when connecting card and applied to the APDU command
+		#        and card response of the all transmitted APDUs.
+		# SM do not applied for some APDU commands, like 'GET RESPONSE', 'CLEAR SECURITY STATUS', (probably some else -- VT).
 		sm_min_level = 0;
         }
 
