@@ -40,6 +40,7 @@ int
 sc_sm_parse_answer(struct sc_card *card, unsigned char *resp_data, size_t resp_len,
 		struct sm_card_response *out)
 {
+	struct sc_context *ctx = card->ctx;
 	struct sc_asn1_entry asn1_sm_response[4];
 	unsigned char data[SC_MAX_APDU_BUFFER_SIZE];
 	size_t data_len = sizeof(data);
@@ -49,11 +50,11 @@ sc_sm_parse_answer(struct sc_card *card, unsigned char *resp_data, size_t resp_l
 	size_t mac_len = sizeof(mac);
 	int rv;
 
-	sc_log(card->ctx, "sc_sm_parse_answer %p %i %p", resp_data, resp_len, out);
+	LOG_FUNC_CALLED(ctx);
 	if (!resp_data || !resp_len || !out)
-		return SC_ERROR_INVALID_ARGUMENTS;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
-	sc_log(card->ctx, "sc_sm_parse_answer %s", sc_dump_hex(resp_data, resp_len));
+	sc_log(ctx, "sc_sm_parse_answer %s", sc_dump_hex(resp_data, resp_len));
 	sc_copy_asn1_entry(c_asn1_sm_response, asn1_sm_response);
 
 	sc_format_asn1_entry(asn1_sm_response + 0, data, &data_len, 0);
@@ -61,18 +62,17 @@ sc_sm_parse_answer(struct sc_card *card, unsigned char *resp_data, size_t resp_l
 	sc_format_asn1_entry(asn1_sm_response + 2, mac, &mac_len, 0);
 
 	rv = sc_asn1_decode(card->ctx, asn1_sm_response, resp_data, resp_len, NULL, NULL);
-	if (rv)
-		return rv;
+	LOG_TEST_RET(ctx, rv, "ASN1 decoding error of SM response");
 
 	if (asn1_sm_response[0].flags & SC_ASN1_PRESENT)   {
 		if (data_len > sizeof(out->data))
-			return SC_ERROR_BUFFER_TOO_SMALL;
+			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
 		memcpy(out->data, data, data_len);
 		out->data_len = data_len;
 	}
 	if (asn1_sm_response[1].flags & SC_ASN1_PRESENT)   {
 		if (!status[0])
-			return SC_ERROR_INVALID_DATA;
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 		out->sw1 = status[0];
 		out->sw2 = status[1];
 	}
@@ -81,7 +81,7 @@ sc_sm_parse_answer(struct sc_card *card, unsigned char *resp_data, size_t resp_l
 		out->mac_len = mac_len;
 	}
 
-	return SC_SUCCESS;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 /**  parse answer of SM protected APDU returned by APDU or by 'GET RESPONSE'

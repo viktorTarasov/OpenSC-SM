@@ -324,6 +324,16 @@ app default {
                 type = 27001;
                 driver = "laser";
                 name = "Athena Laser";
+		# Minimal SM level:
+		# '0' -- secure messaging not initialized and not used for the current operations.
+                #        Nevertheless, SM used if suggested by access condition of the next operation.
+                # '1' -- secure messaging intialized when connecting card and applied to the card response
+                #        of the all commands.
+                #        Nevertheless, SM is also applied to the APDU command if suggested by access condition
+                #        of the next operation.
+                # '3' -- secure messaging initialized when connecting card and applied to the APDU command
+                #        of all commands.
+		sm_min_level = 0;
         }
 
 	secure_messaging local_authentic  {
