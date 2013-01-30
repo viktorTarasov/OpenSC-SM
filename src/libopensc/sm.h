@@ -219,8 +219,6 @@ struct sm_dh_session {
 	unsigned char card_challenge[32];
 
 	unsigned char ssc[8];
-
-	unsigned min_level;
 };
 
 /*

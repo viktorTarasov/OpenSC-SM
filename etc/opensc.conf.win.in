@@ -333,6 +333,10 @@ app default {
 		#        and card response of the all transmitted APDUs.
 		# SM do not applied for some APDU commands, like 'GET RESPONSE', 'CLEAR SECURITY STATUS', (probably some else -- VT).
 		sm_min_level = 0;
+                # Secure PIN verify:
+                # Verify (User) PIN using the chanllege-response procedure.
+                # Default: false
+                # secure_verify = true;
         }
 
 	secure_messaging local_authentic  {

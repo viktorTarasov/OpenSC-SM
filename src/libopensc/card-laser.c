@@ -47,6 +47,14 @@
 
 #include <libsm/sm-common.h>
 
+#ifndef _WIN32
+#include <sys/types.h>
+#include <unistd.h>
+#else
+#include <process.h>
+#define getpid() _getpid()
+#endif
+
 #define LASER_CARD_DEFAULT_FLAGS ( SC_ALGORITHM_ONBOARD_KEY_GEN	\
 		| SC_ALGORITHM_RSA_RAW		\
 		| SC_ALGORITHM_RSA_PAD_ISO9796	\
@@ -119,6 +127,9 @@ struct laser_card_capabilities  {
 struct laser_private_data {
 	struct sc_security_env security_env;
 	struct sc_file *last_ko;
+
+	int secure_verify;
+	int sm_min_level;
 
 	struct laser_card_capabilities caps;
 };
@@ -301,20 +312,29 @@ laser_init(struct sc_card *card)
 	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
 	_sc_card_add_rsa_alg(card, 2048, flags, 0x10001);
 
+	atrblock = _sc_match_atr_block(ctx, card->driver, &card->atr);
+	if (atrblock)   {
+		int min_level = scconf_get_int(atrblock, "sm_min_level", 0);
+
+		if (min_level != 0 && min_level != 1 && min_level != 3)
+		        LOG_TEST_RET(ctx, SC_ERROR_INCONSISTENT_CONFIGURATION, "Invalid SM min level configuration value");
+		private_data->sm_min_level = min_level;
+
+		private_data->secure_verify = scconf_get_bool(atrblock, "secure_verify", 0);
+	}
+	sc_log(ctx, "SM-min-level %i, secure-verify %i", private_data->sm_min_level, private_data->secure_verify);
+
 #ifdef ENABLE_SM
 	card->sm_ctx.ops.open = laser_sm_open;
 	card->sm_ctx.ops.get_sm_apdu = laser_sm_wrap_apdu;
 	card->sm_ctx.ops.free_sm_apdu = laser_sm_free_apdu;
 	card->sm_ctx.ops.close = laser_sm_close;
 
-	atrblock = _sc_match_atr_block(ctx, card->driver, &card->atr);
-	if (atrblock)  {
-		if (scconf_get_int(atrblock, "sm_min_level", 0))   {
-			rv = laser_sm_open(card);
-			LOG_TEST_RET(ctx, rv, "Cannot open SM");
-		}
+	if (private_data->sm_min_level)   {
+		rv = laser_sm_open(card);
+		LOG_TEST_RET(ctx, rv, "Cannot open SM");
 	}
-	sc_log(ctx, "card->sm_ctx.ops.open %p; SM-min-level %i", card->sm_ctx.ops.open, card->sm_ctx.info.session.dh.min_level);
+	sc_log(ctx, "SM ops: open %p, wrap %p, free %p ", card->sm_ctx.ops.open, card->sm_ctx.ops.get_sm_apdu, card->sm_ctx.ops.free_sm_apdu);
 #endif
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -778,6 +798,7 @@ laser_logout(struct sc_card *card)
 	struct sc_context *ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
+	/* TODO: reset secure status of User and SO PINs */
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
@@ -880,10 +901,61 @@ laser_set_security_env(struct sc_card *card,
 
 
 static int
+laser_chv_secure_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd,
+		int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	unsigned char plain_text[16], sha1[SHA_DIGEST_LENGTH];
+	unsigned char *encrypted = NULL;
+	size_t encrypted_len;
+	int rv, ii;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
+
+	if (!pin_cmd->pin1.data || !pin_cmd->pin1.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "null value not allowed for secure PIN verify");
+
+	srand((unsigned)getpid() ^ (unsigned)time(NULL));
+	for (ii=0; ii<8; ii++)
+		plain_text[ii] = (unsigned char )(rand() & 0xFF);
+
+	rv = iso_ops->get_challenge(card, plain_text + 8, 8);
+	LOG_TEST_RET(ctx, rv, "Get card challenge failed");
+
+	SHA1(pin_cmd->pin1.data, pin_cmd->pin1.len, sha1);
+
+	sc_log(ctx, "key '%s'", sc_dump_hex(sha1, 16));
+	sc_log(ctx, "plain text '%s'", sc_dump_hex(plain_text, 16));
+	rv = sm_encrypt_des_cbc3(ctx, sha1, plain_text, 16, &encrypted, &encrypted_len, 1);
+	LOG_TEST_RET(ctx, rv, "_encrypt_des_cbc3() failed");
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0x00, pin_cmd->pin_reference);
+	apdu.cla = 0x80;
+	apdu.data = encrypted;
+	apdu.datalen = encrypted_len;
+	apdu.lc = encrypted_len;
+
+        rv = sc_transmit_apdu(card, &apdu);
+        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+
+        if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
+		*tries_left = apdu.sw2 & 0x0F;
+        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+
+	if (encrypted)
+		free(encrypted);
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_chv_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd,
 		int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *private_data = (struct laser_private_data *) card->drv_data;
 	struct sc_apdu apdu;
 	int rv;
 
@@ -891,13 +963,19 @@ laser_chv_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd,
 	sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
 
 	if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0x00, pin_cmd->pin_reference);
 	}
 	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
-		apdu.data = pin_cmd->pin1.data;
-		apdu.datalen = pin_cmd->pin1.len;
-		apdu.lc = pin_cmd->pin1.len;
+		if (private_data->secure_verify)   {
+			rv = laser_chv_secure_verify(card, pin_cmd, tries_left);
+			LOG_FUNC_RETURN(ctx, rv);
+		}
+		else   {
+			sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
+			apdu.data = pin_cmd->pin1.data;
+			apdu.datalen = pin_cmd->pin1.len;
+			apdu.lc = pin_cmd->pin1.len;
+		}
 	}
 	else   {
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -1011,7 +1089,7 @@ laser_sm_chv_change(struct sc_card *card, struct sc_pin_cmd_data *data, unsigned
 		int *tries_left, unsigned op_acl)
 {
 	struct sc_context *ctx = card->ctx;
-	struct sm_dh_session *dh_session = &card->sm_ctx.info.session.dh;
+	struct laser_private_data *private_data =  (struct laser_private_data *) card->drv_data;
 	struct sc_apdu apdu;
 	struct sc_file *pin_file = NULL;
 	unsigned char pin_data[SC_MAX_APDU_BUFFER_SIZE];
@@ -1028,7 +1106,7 @@ laser_sm_chv_change(struct sc_card *card, struct sc_pin_cmd_data *data, unsigned
 	if ((unsigned)(data->pin2.len) > sizeof(pin_data))
 		LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'SM change CHV' data");
 
-	if (!dh_session->min_level)   {
+	if (!private_data->sm_min_level)   {
 		rv = laser_sm_open(card);
 		LOG_TEST_RET(ctx, rv, "Cannot open SM");
 	}
@@ -1053,7 +1131,7 @@ laser_sm_chv_change(struct sc_card *card, struct sc_pin_cmd_data *data, unsigned
 	if (!rv)
 		rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 
-	if(!dh_session->min_level)
+	if(!private_data->sm_min_level)
 		laser_sm_close(card);
 
 	card->sm_ctx.info.security_condition = 0;
@@ -1303,7 +1381,7 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 	size_t offs;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "in-length:%i,key-size:%i,out-length:%i", in_len, prv->last_ko ? prv->last_ko->size : -1, out_len);
+	sc_log(ctx, "in-length:%i, key-size:%i, out-length:%i", in_len, prv->last_ko ? prv->last_ko->size : -1, out_len);
 	if (env->operation != SC_SEC_OPERATION_DECIPHER)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "has to be SC_SEC_OPERATION_DECIPHER");
 	else if (in_len > (sizeof(sbuf) - 4))
@@ -1460,7 +1538,6 @@ laser_sm_open(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
 	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
-	scconf_block *atrblock = NULL;
 	DH *dh;
 	BIGNUM *bn_ifd_y, *bn_N, *bn_g, *bn_ifd_p, *bn_icc_p;
 	struct sm_dh_session *dh_session = &card->sm_ctx.info.session.dh;
@@ -1559,16 +1636,6 @@ laser_sm_open(struct sc_card *card)
 	memset(dh_session->ssc, 0, sizeof(dh_session->ssc));
 	card->sm_ctx.sm_mode = SM_MODE_TRANSMIT;
 
-	atrblock = _sc_match_atr_block(ctx, card->driver, &card->atr);
-	if (atrblock)  {
-		int min_level = scconf_get_int(atrblock, "sm_min_level", 0);
-
-		if (min_level != 0 && min_level != 1 && min_level != 3)
-		        LOG_TEST_RET(ctx, SC_ERROR_INCONSISTENT_CONFIGURATION, "Invalid SM min level configuration value");
-		sc_log(ctx, "minimal SM level '%i'", min_level);
-		dh_session->min_level = min_level;
-	}
-
 	if (dh)
 		DH_free(dh);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -1593,7 +1660,7 @@ laser_sm_wrap_apdu(struct sc_card *card, struct sc_apdu *in_apdu, struct sc_apdu
 	struct sc_apdu *apdu = NULL;
 	size_t offs;
 	int rv, padded_len, key_len = sizeof(sess->session_enc);
-	int sm_level = sess->min_level;
+	int sm_level = prv->sm_min_level;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!in_apdu || !out_apdu)
@@ -1734,7 +1801,7 @@ laser_cbc_cksum(struct sc_context *ctx, unsigned char *key, size_t key_size,
 	DES_ecb2_encrypt(&last, &out, &ks, &ks2, DES_ENCRYPT);
 	memcpy(icv, &out, sizeof(*icv));
 
-	sc_log(ctx, "cksum %s", sc_dump_hex(icv, 8));
+	sc_log(ctx, "cksum %s", sc_dump_hex((unsigned char *)icv, 8));
 	return SC_SUCCESS;
 }
 
