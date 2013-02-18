@@ -97,8 +97,6 @@ int sc_pkcs15emu_laser_init_ex(struct sc_pkcs15_card *, struct sc_pkcs15emu_opt 
 static int
 _laser_type(int id)
 {
-	int type = 0;
-
 	if ((id & 0xFF00) == 0x0)   {
 		if ((id & LASER_BASEFID_MASK) == 0x0080)
 			return LASER_TYPE_PUBKEY;
@@ -122,6 +120,8 @@ _laser_type(int id)
 
 	return -1;
 }
+
+
 static int
 _alloc_ck_string(unsigned char *data, size_t max_len, char ** out)
 {
@@ -141,6 +141,36 @@ _alloc_ck_string(unsigned char *data, size_t max_len, char ** out)
 	*out = strdup(str);
 
 	return SC_SUCCESS;
+}
+
+
+static int
+_create_application(struct sc_pkcs15_card * p15card,
+		char *label, char *aid_str, char *path_str)
+{
+	struct sc_card *card = p15card->card;
+	struct sc_context *ctx = card->ctx;
+	struct sc_app_info *app = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+
+	app = calloc(1, sizeof(struct sc_app_info));
+	if (!app)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	app->label = strdup(label);
+	if (!app->label)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	sc_format_path(path_str, &app->path);
+
+	app->aid.len = sizeof(app->aid.value);
+	sc_hex_to_bin(aid_str, app->aid.value, &app->aid.len);
+
+	card->app[card->app_count] = app;
+	card->app_count++;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -845,6 +875,9 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 
 	p15card->tokeninfo->version = 0;
 	p15card->tokeninfo->flags = ck_ti->flags;
+
+	rv = _create_application(p15card, "Athena LASER", "A0000001644C415345520001", "3F00");
+	LOG_TEST_RET(ctx, rv, "Cannot create application");
 
 	rv = _create_pin(p15card, "User PIN", PATH_USERPIN, AUTH_ID_PIN, 0);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'User PIN' object");
