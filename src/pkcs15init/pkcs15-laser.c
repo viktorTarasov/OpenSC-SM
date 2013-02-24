@@ -35,6 +35,56 @@
 #include "profile.h"
 #include "pkcs15-init.h"
 
+#define C_ASN1_PUBLIC_KEY_SIZE 2
+static struct sc_asn1_entry c_asn1_create_public_key[C_ASN1_PUBLIC_KEY_SIZE] = {
+	/* tag 0x71 */
+	{ "publicKeyCoefficients", SC_ASN1_STRUCT, SC_ASN1_CONS | SC_ASN1_APP | 0x11, 0, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+#define C_ASN1_RSA_PUB_COEFFICIENTS_SIZE 3
+static struct sc_asn1_entry c_asn1_create_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE] = {
+	/* tag 0x90 */
+	{ "exponent", SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x10, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x91 */
+	{ "modulus",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x11, SC_ASN1_ALLOC, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+
+static int
+laser_encode_pubkey_rsa(struct sc_context *ctx, struct sc_pkcs15_pubkey_rsa *key,
+	unsigned char **buf, size_t *buflen)
+{
+	struct sc_asn1_entry asn1_public_key[C_ASN1_PUBLIC_KEY_SIZE];
+	struct sc_asn1_entry asn1_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE];
+	int r;
+
+	sc_copy_asn1_entry(c_asn1_create_public_key, asn1_public_key);
+	sc_format_asn1_entry(asn1_public_key + 0, asn1_rsa_pub_coefficients, NULL, 1);
+
+	sc_copy_asn1_entry(c_asn1_create_rsa_pub_coefficients, asn1_rsa_pub_coefficients);
+	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 0, key->exponent.data, &key->exponent.len, 1);
+	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 1, key->modulus.data, &key->modulus.len, 1);
+
+	sc_log(ctx, "Encoding modulus '%s'",sc_dump_hex(key->modulus.data, key->modulus.len));
+
+	r = sc_asn1_encode(ctx, asn1_public_key, buf, buflen);
+	LOG_TEST_RET(ctx, r, "ASN.1 encoding failed");
+
+	return 0;
+}
+
+int
+laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
+	       unsigned char **buf, size_t *len)
+{
+	if (key->algorithm == SC_ALGORITHM_RSA)
+		return laser_encode_pubkey_rsa(ctx, &key->u.rsa, buf, len);
+	return SC_ERROR_NOT_SUPPORTED;
+}
+
+
 static int
 laser_write_tokeninfo (struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 		char *label, unsigned flags)
@@ -323,6 +373,20 @@ laser_emu_update_any_df(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
+	switch(op)   {
+	case SC_AC_OP_ERASE:
+		sc_log(ctx, "Update DF; erase object('%s',type:%X)", object->label, object->type);
+		// rv = awp_update_df_delete(p15card, profile, object);
+		printf("TBD: AWP update xDF: delete\n");
+		rv =  SC_SUCCESS;
+		break;
+	case SC_AC_OP_CREATE:
+		sc_log(ctx, "Update DF; create object('%s',type:%X)", object->label, object->type);
+		//rv = awp_update_df_create(p15card, profile, object);
+		printf("TBD: AWP update xDF: create\n");
+		rv =  SC_SUCCESS;
+		break;
+	}
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -355,9 +419,89 @@ laser_emu_store_pubkey(struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_der *data, struct sc_path *path)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)object->data;
+	struct sc_pkcs15_prkey_info *prkey_info = NULL;
+	struct sc_pkcs15_object *prkey_object = NULL;
+	struct sc_pkcs15_pubkey pubkey;
+	struct sc_file *file = NULL;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	sc_log(ctx, "Public Key id '%s'", sc_pkcs15_print_id(&info->id));
+	if (data)
+		sc_log(ctx, "data(%i) %p", data->len, data->value);
+	if (object->content.value)
+		sc_log(ctx, "content(%i) %p", object->content.len, object->content.value);
+
+	pubkey.algorithm = SC_ALGORITHM_RSA;
+	rv = sc_pkcs15_decode_pubkey(ctx, &pubkey, object->content.value, object->content.len);
+	LOG_TEST_RET(ctx, rv, "Decode public key error");
+
+	sc_log(ctx, "Modulus '%s'",sc_dump_hex(pubkey.u.rsa.modulus.data, pubkey.u.rsa.modulus.len));
+	sc_log(ctx, "Exponent '%s'",sc_dump_hex(pubkey.u.rsa.exponent.data, pubkey.u.rsa.exponent.len));
+
+	rv = sc_pkcs15_find_prkey_by_id(p15card, &info->id, &prkey_object);
+	LOG_TEST_RET(ctx, rv, "Find related PrKey error");
+
+	prkey_info = (struct sc_pkcs15_prkey_info *)prkey_object->data;
+
+        info->key_reference = prkey_info->key_reference;
+	info->modulus_length = prkey_info->modulus_length;
+	info->native = prkey_info->native;
+	sc_log(ctx, "Public Key ref %X, length %i", info->key_reference, info->modulus_length);
+
+	rv = laser_new_file(profile, p15card->card, SC_PKCS15_TYPE_PUBKEY_RSA, info->key_reference, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate new laser public-key file");
+
+	file->size = info->modulus_length / 8;
+	if (info->path.len)
+		file->path = info->path;
+
+	file->prop_attr = calloc(1, 5);
+	if (!file->prop_attr)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	file->prop_attr_len = 5;
+
+	*(file->prop_attr + 0) = LASER_KO_CLASS_RSA_CRT;
+
+	if (info->usage & (SC_PKCS15_PRKEY_USAGE_ENCRYPT | SC_PKCS15_PRKEY_USAGE_WRAP))
+		*(file->prop_attr + 1) |= LASER_KO_USAGE_ENCRYPT;
+	if (info->usage & SC_PKCS15_PRKEY_USAGE_VERIFY)
+		*(file->prop_attr + 1) |= LASER_KO_USAGE_VERIFY;
+
+	*(file->prop_attr + 2) = LASER_KO_ALGORITHM_RSA;
+	*(file->prop_attr + 3) = LASER_KO_PADDING_NO;
+	*(file->prop_attr + 4) = 0xA3;	/* Max retry counter 10, 3 tries to unlock. TODO what's this ????? */
+
+	sc_log(ctx, "Create public key file: path %s, propr.info %s",
+			sc_print_path(&file->path), sc_dump_hex(file->prop_attr, file->prop_attr_len));
+
+	rv = sc_select_file(p15card->card, &file->path, NULL);
+	if (rv == 0)   {
+		rv = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_DELETE_SELF);
+		LOG_TEST_RET(ctx, rv, "Cannot authenticate SC_AC_OP_DELETE_SELF");
+
+		rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+		LOG_TEST_RET(ctx, rv, "Failed to delete public key file");
+	}
+	else if (rv != SC_ERROR_FILE_NOT_FOUND)    {
+		LOG_TEST_RET(ctx, rv, "Select public key file error");
+	}
+
+	rv = laser_encode_pubkey_rsa(ctx, &pubkey.u.rsa, &file->encoded_content, &file->encoded_content_len);
+	LOG_TEST_RET(ctx, rv, "public key encoding error");
+
+	sc_log(ctx, "Encoded: '%s'",sc_dump_hex(file->encoded_content, file->encoded_content_len));
+
+	rv = sc_pkcs15init_create_file(profile, p15card, file);
+	LOG_TEST_RET(ctx, rv, "Failed to create public key file");
+
+	info->key_reference = file->path.value[file->path.len - 1] & LASER_FS_REF_MASK;
+	info->path = file->path;
+	sc_log(ctx, "created public key file %s, ref:%X", sc_print_path(&info->path), info->key_reference);
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -368,10 +512,20 @@ laser_emu_store_data(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 
 {
 	struct sc_context *ctx = p15card->card->ctx;
-
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	switch (object->type & SC_PKCS15_TYPE_CLASS_MASK) {
+	case SC_PKCS15_TYPE_PUBKEY:
+		rv = laser_emu_store_pubkey(p15card, profile, object, data, path);
+		break;
+	default:
+		rv = SC_ERROR_NOT_IMPLEMENTED;
+		break;
+	}
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
