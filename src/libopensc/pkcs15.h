@@ -474,6 +474,8 @@ typedef struct sc_pkcs15_skey_info sc_pkcs15_skey_info_t;
 #define SC_PKCS15_TYPE_AUTH_BIO			0x602
 #define SC_PKCS15_TYPE_AUTH_AUTHKEY		0x603
 
+#define SC_PKCS15_TYPE_VENDOR_DEFINED		0x4000
+
 #define SC_PKCS15_TYPE_TO_CLASS(t)		(1 << ((t) >> 8))
 #define SC_PKCS15_SEARCH_CLASS_PRKEY		0x0002U
 #define SC_PKCS15_SEARCH_CLASS_PUBKEY		0x0004U
