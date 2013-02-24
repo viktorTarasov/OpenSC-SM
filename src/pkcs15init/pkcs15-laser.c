@@ -162,9 +162,68 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 		struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_file *file = NULL;
+	unsigned char null_content[2] = {LASER_KO_DATA_TAG_RSA, 0};
+	int rv = 0;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	if (object->type != SC_PKCS15_TYPE_PRKEY_RSA)
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create key failed: RSA only supported");
+
+	sc_log(ctx, "create private key(type:%X) ID:%s", object->type, sc_pkcs15_print_id(&key_info->id));
+	/* Here, the path of private key file should be defined.
+	 * Neverthelles, we need to instanciate private key to get the ACLs. */
+	rv = laser_new_file(profile, p15card->card, object->type, key_info->key_reference, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot create private key: failed to allocate new key object");
+
+	file->size = key_info->modulus_length / 8;
+	memcpy(&file->path, &key_info->path, sizeof(file->path));
+
+	file->prop_attr = calloc(1, 5);
+	if (!file->prop_attr)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	file->prop_attr_len = 5;
+
+	*(file->prop_attr + 0) = LASER_KO_CLASS_RSA_CRT;
+
+	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_DECRYPT | SC_PKCS15_PRKEY_USAGE_UNWRAP))
+		*(file->prop_attr + 1) |= LASER_KO_USAGE_DECRYPT;
+	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_NONREPUDIATION | SC_PKCS15_PRKEY_USAGE_SIGN))
+		*(file->prop_attr + 1) |= LASER_KO_USAGE_SIGN;
+
+	*(file->prop_attr + 2) = LASER_KO_ALGORITHM_RSA;
+	*(file->prop_attr + 3) = LASER_KO_PADDING_NO;
+	*(file->prop_attr + 4) = 0xA3;	/* Max retry counter 10, 3 tries to unlock. TODO what's this ????? */
+
+	sc_log(ctx, "Create private key file: path %s, propr. info %s",
+			sc_print_path(&file->path), sc_dump_hex(file->prop_attr, file->prop_attr_len));
+
+	rv = sc_select_file(p15card->card, &file->path, NULL);
+	if (rv == 0)   {
+		rv = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_DELETE_SELF);
+		LOG_TEST_RET(ctx, rv, "Cannot authenticate SC_AC_OP_DELETE_SELF");
+
+		rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+		LOG_TEST_RET(ctx, rv, "Failed to delete private key file");
+	}
+	else if (rv != SC_ERROR_FILE_NOT_FOUND)    {
+		LOG_TEST_RET(ctx, rv, "Select key file error");
+	}
+
+	file->encoded_content = malloc(2);
+	memcpy(file->encoded_content, null_content, sizeof(null_content));
+	file->encoded_content_len = sizeof(null_content);
+
+	rv = sc_pkcs15init_create_file(profile, p15card, file);
+	LOG_TEST_RET(ctx, rv, "Failed to create private key file");
+
+	key_info->key_reference = file->path.value[file->path.len - 1] & LASER_FS_REF_MASK;
+	key_info->path = file->path;
+	sc_log(ctx, "created private key file %s, ref:%X", sc_print_path(&key_info->path), key_info->key_reference);
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -174,9 +233,59 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_pubkey *pubkey)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_cardctl_laser_genkey args;
+	struct sc_file *key_file = NULL;
+	unsigned char default_exponent[3] = {0x01, 0x00, 0x01};
+	int rv = 0;
+	unsigned char piv_algo = 0;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	if (object->type != SC_PKCS15_TYPE_PRKEY_RSA)
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "For a while only RSA can be generated");
+
+	rv = sc_select_file(card, &key_info->path, &key_file);
+	LOG_TEST_RET(ctx, rv, "Failed to generate key: cannot select private key file");
+
+	rv = sc_pkcs15init_authenticate(profile, p15card, key_file, SC_AC_OP_GENERATE);
+	LOG_TEST_RET(ctx, rv, "Cannot generate key: 'GENERATE' authentication failed");
+
+	if (key_info->modulus_length == 1024)
+		piv_algo = LASER_PIV_ALGO_RSA_1024;
+	else if (key_info->modulus_length == 2048)
+                piv_algo = LASER_PIV_ALGO_RSA_2048;
+
+	memset(&args, 0, sizeof(args));
+
+	args.algorithm = piv_algo;
+
+	args.modulus = malloc(key_info->modulus_length / 8);
+	args.exponent = malloc(sizeof(default_exponent));
+	if (!args.exponent || !args.modulus)
+		LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "laser_generate_key() cannot allocate exponent or/and modulus buffers");
+	args.modulus_len = key_info->modulus_length / 8;
+	args.exponent_len = sizeof(default_exponent);
+	memcpy(args.exponent, default_exponent,  sizeof(default_exponent));
+
+	rv = sc_card_ctl(card, SC_CARDCTL_ATHENA_GENERATE_KEY, &args);
+	LOG_TEST_RET(ctx, rv, "laser_generate_key() SC_CARDCTL_ATHENA_GENERATE_KEY failed");
+
+	sc_log(ctx, "modulus %s", sc_dump_hex(args.modulus, args.modulus_len));
+	sc_log(ctx, "exponent %s", sc_dump_hex(args.exponent, args.exponent_len));
+
+	/* allocated buffers with the public key components do not released
+	 * but re-assigned to the pkcs15-public-key data */
+	pubkey->algorithm = SC_ALGORITHM_RSA;
+	pubkey->u.rsa.modulus.len   = args.modulus_len;
+	pubkey->u.rsa.modulus.data  = args.modulus;
+
+	pubkey->u.rsa.exponent.len  = args.exponent_len;
+	pubkey->u.rsa.exponent.data = args.exponent;
+
+	sc_file_free(key_file);
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
