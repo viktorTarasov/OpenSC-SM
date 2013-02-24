@@ -184,6 +184,9 @@
               <Component Id="openpgp.profile" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\pkcs15init\openpgp.profile"/>
               </Component>
+              <Component Id="laser.profile" Guid="*" Win64="$(var.Win64YesNo)">
+                <File Source="$(var.SOURCE_DIR)\src\pkcs15init\laser.profile"/>
+              </Component>
             </Directory>
           </Directory>
         </Directory>
