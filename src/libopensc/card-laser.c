@@ -44,6 +44,7 @@
 #include "opensc.h"
 #include "iso7816.h"
 #include "pkcs15.h"
+#include "laser.h"
 
 #include <libsm/sm-common.h>
 
@@ -62,13 +63,6 @@
 		| SC_ALGORITHM_RSA_HASH_NONE	\
 		| SC_ALGORITHM_RSA_HASH_SHA1	\
 		| SC_ALGORITHM_RSA_HASH_SHA256)
-
-#define LASER_SM_RSA_TAG_G	0x80
-#define LASER_SM_RSA_TAG_N	0x81
-#define LASER_SM_RSA_TAG_ICC_P	0x82
-
-#define LASER_SM_ACCESS_INPUT	0x4000
-#define LASER_SM_ACCESS_OUTPUT	0x8000
 
 //#define TESTING
 
@@ -97,7 +91,7 @@ static struct sc_aid laser_aid = {
 };
 
 unsigned char laser_ops_df[6] = {
-	SC_AC_OP_CREATE_EF, SC_AC_OP_CREATE_DF, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_ACTIVATE, SC_AC_OP_DEACTIVATE
+	SC_AC_OP_CREATE, SC_AC_OP_CREATE_DF, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_ACTIVATE, SC_AC_OP_DEACTIVATE
 };
 unsigned char laser_ops_ef[4] = {
 	SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF
@@ -106,7 +100,7 @@ unsigned char laser_ops_do[3] = {
 	SC_AC_OP_READ, SC_AC_OP_WRITE, SC_AC_OP_ADMIN
 };
 unsigned char laser_ops_ko[7] = {
-	SC_AC_OP_READ, SC_AC_OP_PIN_CHANGE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_RESET, SC_AC_OP_CRYPTO
+	SC_AC_OP_READ, SC_AC_OP_UPDATE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_RESET, SC_AC_OP_CRYPTO
 };
 
 struct laser_card_capabilities  {
@@ -533,13 +527,13 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 	const unsigned char *tag = NULL, *p = buf;
 
 	LOG_FUNC_CALLED(ctx);
-	tag = sc_asn1_find_tag(ctx, p, len, 0x83, &taglen);
+	tag = sc_asn1_find_tag(ctx, p, len, ISO7816_TAG_FCP_FID, &taglen);
 	if (tag != NULL && taglen == 2) {
 		file->id = (tag[0] << 8) | tag[1];
 		sc_log(ctx, "  file identifier: 0x%02X%02X", tag[0], tag[1]);
 	}
 
-	tag = sc_asn1_find_tag(ctx, p, len, 0x80, &taglen);
+	tag = sc_asn1_find_tag(ctx, p, len, ISO7816_TAG_FCP_SIZE, &taglen);
 	if (tag != NULL && taglen > 0 && taglen < 3) {
 		file->size = tag[0];
 		if (taglen == 2)
@@ -547,7 +541,7 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 		sc_log(ctx, "  bytes in file: %d", file->size);
 	}
 	if (tag == NULL) {
-		tag = sc_asn1_find_tag(ctx, p, len, 0x81, &taglen);
+		tag = sc_asn1_find_tag(ctx, p, len, ISO7816_TAG_FCP_SIZE_FULL, &taglen);
 		if (tag != NULL && taglen >= 2) {
 			int bytes = (tag[0] << 8) + tag[1];
 
@@ -587,7 +581,7 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 		}
 	}
 
-	tag = sc_asn1_find_tag(ctx, p, len, 0x84, &taglen);
+	tag = sc_asn1_find_tag(ctx, p, len, ISO7816_TAG_FCP_DF_NAME, &taglen);
 	if (tag != NULL && taglen > 0 && taglen <= 16) {
 		char tbuf[128];
 
@@ -600,7 +594,7 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 			file->type = SC_FILE_TYPE_DF;
 	}
 
-	tag = sc_asn1_find_tag(ctx, p, len, 0x85, &taglen);
+	tag = sc_asn1_find_tag(ctx, p, len, ISO7816_TAG_FCP_PROP_INFO, &taglen);
 	if (tag != NULL && taglen)
 		sc_file_set_prop_attr(file, tag, taglen);
 	else
@@ -661,7 +655,24 @@ laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
 
 	for (ii=0; ii<ops_len; ii++)   {
 		unsigned val = *(attrs + ii*2) * 0x100 + *(attrs + ii*2 + 1);
-		sc_file_add_acl_entry(file, *(ops + ii), SC_AC_SCB, val);
+
+		if (*(attrs + ii*2))   {
+			sc_log(ctx, "op:%X SC_AC_SCB, val:%X", *(ops + ii), val);
+			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_SCB, val);
+		}
+		else if (*(attrs + ii*2 + 1) == 0xFF)   {
+			sc_log(ctx, "op:%X SC_AC_NEVER, val:%X", *(ops + ii));
+			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_NEVER, SC_AC_KEY_REF_NONE);
+		}
+		else if (*(attrs + ii*2 + 1))   {
+			/* TODO: normally, here we should check the type of referenced KO */
+			sc_log(ctx, "op:%X SC_AC_CHV, val:%X", *(ops + ii), val);
+			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_CHV, *(attrs + ii*2 + 1));
+		}
+		else   {
+			sc_log(ctx, "op:%X SC_AC_NONE, val:%X", *(ops + ii));
+			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_NONE, SC_AC_KEY_REF_NONE);
+		}
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -672,7 +683,7 @@ static int
 laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
-	unsigned char buf[0x80];
+	unsigned char buf[0x400];
 	size_t offs = 0;
 	unsigned char *ops = NULL;
 	size_t ii, ops_len, file_size;
@@ -688,43 +699,56 @@ laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out,
 		ops_len = sizeof(laser_ops_ef);
 		file_size = file->size;
 	}
+	else if (file->type == SC_FILE_TYPE_INTERNAL_EF
+			&& file->ef_structure == LASER_FILE_DESCRIPTOR_KO)   {
+		ops = &laser_ops_ko[0];
+		ops_len = sizeof(laser_ops_ko);
+		file_size = file->size;
+	}
 	else   {
-		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create of the non DF and non EF file types is not supported.");
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported type of the file to be created.");
 	}
 
 	memset(buf, 0, sizeof(buf));
 	offs = 0;
 
-	buf[offs++] = 0x83;
+	buf[offs++] = ISO7816_TAG_FCP_LCS;
+	buf[offs++] = 1;
+	buf[offs++] = 0x04;
+
+	buf[offs++] = ISO7816_TAG_FCP_FID;
 	buf[offs++] = 2;
 	buf[offs++] = (file->id >> 8) & 0xFF;
 	buf[offs++] = file->id & 0xFF;
 
-	buf[offs++] = 0x80;
+	buf[offs++] = ISO7816_TAG_FCP_SIZE;
 	buf[offs++] = 2;
 	buf[offs++] = (file_size >> 8) & 0xFF;
 	buf[offs++] = file_size & 0xFF;
 
 	if (file->type == SC_FILE_TYPE_DF && file->namelen)   {
-		buf[offs++] = 0x84;
+		buf[offs++] = ISO7816_TAG_FCP_DF_NAME;
 		buf[offs++] = file->namelen;
 		memcpy(buf + offs, file->name, file->namelen);
 		offs += file->namelen;
 	}
 
-	buf[offs++] = 0x8A;
-	buf[offs++] = 1;
-	buf[offs++] = 0x04;
+	if (file->prop_attr && file->prop_attr_len)   {
+		buf[offs++] = ISO7816_TAG_FCP_PROP_INFO;
+		buf[offs++] = file->prop_attr_len;
+		memcpy(buf + offs, file->prop_attr, file->prop_attr_len);
+		offs += file->prop_attr_len;
+	}
 
-	buf[offs++] = 0x86;
+	buf[offs++] = ISO7816_TAG_FCP_ACLS;
 	buf[offs++] = ops_len * 2;;
 	for (ii = 0; ii < ops_len; ii++) {
 		const struct sc_acl_entry *entry = sc_file_get_acl_entry(file, ops[ii]);
 
 		if (entry)
-			sc_log(ctx, "ops 0x%X: method %X, reference %X", ops[ii], entry->method, entry->key_ref);
+			sc_log(ctx, "ops %i: method %X, reference %X", ops[ii], entry->method, entry->key_ref);
 		else
-			sc_log(ctx, "ops 0x%X: no ACL entry", ops[ii]);
+			sc_log(ctx, "ops %i: no ACL entry", ops[ii]);
 
 		if (!entry || entry->method == SC_AC_NEVER)   {
 			buf[offs++] = 0x00;
@@ -734,6 +758,10 @@ laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out,
 			buf[offs++] = 0x00;
 			buf[offs++] = 0x00;
 		}
+		else if (entry->method == SC_AC_CHV)   {
+			buf[offs++] = 0x00;
+			buf[offs++] = entry->key_ref & 0xFF;
+		}
 		else if (entry->method == SC_AC_SCB)   {
 			buf[offs++] = (entry->key_ref >> 8) & 0xFF;
 			buf[offs++] = entry->key_ref & 0xFF;
@@ -741,6 +769,11 @@ laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out,
 		else   {
 			LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Non supported AC method");
 		}
+	}
+
+	if (file->encoded_content && file->encoded_content_len)   {
+		memcpy(buf + offs, file->encoded_content, file->encoded_content_len);
+		offs += file->encoded_content_len;
 	}
 
 	if (out)   {
@@ -758,27 +791,42 @@ laser_create_file(struct sc_card *card, struct sc_file *file)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_apdu apdu;
-	unsigned char sbuf[0x100];
-	size_t sbuf_len;
+	unsigned char sbuf[0x400], fcp[0x400], p1;
+	size_t fcp_len, offs;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_print_cache(card);
 
-	if (file->type != SC_FILE_TYPE_WORKING_EF && file->type != SC_FILE_TYPE_DF)
-		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Only DF or EF file can be created");
+	fcp_len = laser_fcp_encode(card, file, fcp, sizeof(fcp));
+	LOG_TEST_RET(ctx, fcp_len, "FCP encode error");
 
-	sbuf_len = laser_fcp_encode(card, file, sbuf + 2, sizeof(sbuf)-2);
-	LOG_TEST_RET(ctx, sbuf_len, "FCP encode error");
+	if (file->type == SC_FILE_TYPE_WORKING_EF)
+		p1 = 0x01;
+	else if (file->type == SC_FILE_TYPE_DF)
+		p1 = 0x38;
+	else if (file->type == SC_FILE_TYPE_INTERNAL_EF)
+		p1 = file->ef_structure;
+	else
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported type of the file to create");
 
-	sbuf[0] = ISO7816_TAG_FCP;
-	sbuf[1] = sbuf_len;
+	offs = 0;
+	sbuf[offs++] = ISO7816_TAG_FCP;
+	sbuf[offs++] = fcp_len > 0xFF ? 0x82 : 0x81;
+	if (fcp_len > 0xFF)
+		sbuf[offs++] = (fcp_len >> 8) & 0xFF;
+	sbuf[offs++] = fcp_len & 0xFF;
+	memcpy(sbuf + offs, fcp,  fcp_len);
+	offs += fcp_len;
+
+	sc_log(ctx, "FCP data '%s'", sc_dump_hex(sbuf, offs));
 
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0xE0, 0, 0);
-	apdu.p1 = file->type == SC_FILE_TYPE_DF ? 0x38 : 0x01;
+	apdu.p1 = p1;
 	apdu.data = sbuf;
-	apdu.datalen = sbuf_len + 2;
-	apdu.lc = sbuf_len + 2;
+	apdu.datalen = offs;
+	apdu.lc = offs;
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
 
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
@@ -817,9 +865,28 @@ static int
 laser_delete_file(struct sc_card *card, const struct sc_path *path)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_file *file = NULL;
+	struct sc_apdu apdu;
+	int rv, p2 = 0;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	rv = laser_select_file(card, path, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot select file to delete");
+
+	if (file->type == SC_FILE_TYPE_DF)
+		p2 = 1;
+	sc_file_free(file);
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0xE4, 0x00, p2);
+
+	sc_log(ctx, "delete %s file '%s'", (p2 ? "DF" : "EF"), sc_print_path(path));
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "Failed to delete file");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1323,16 +1390,73 @@ laser_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+static int
+laser_generate_key(struct sc_card *card, struct sc_cardctl_laser_genkey *args)
+{
+	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
+	struct sc_apdu apdu;
+	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[2*SC_MAX_APDU_BUFFER_SIZE], *ptr = NULL;
+	size_t sbuf_len, offs, taglen;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	offs = 0;
+	sbuf[offs++] = 0xAC;
+	sbuf[offs++] = args->exponent_len + 6;
+	sbuf[offs++] = 0x80;
+	sbuf[offs++] = 0x01;
+	sbuf[offs++] = args->algorithm;
+	sbuf[offs++] = 0x81;
+	sbuf[offs++] = 0x81;
+	sbuf[offs++] = args->exponent_len;
+	memcpy(sbuf + offs, args->exponent, args->exponent_len);
+	offs += args->exponent_len;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x47, 0x00, 0x00);
+	apdu.datalen = offs;
+	apdu.data = sbuf;
+	apdu.lc = offs;
+	apdu.resp = rbuf;
+	apdu.resplen = sizeof(rbuf);
+	apdu.le = 0x100;
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	/* get modulus */
+	ptr = sc_asn1_find_tag(ctx, apdu.resp, apdu.resplen, 0x7F49, &taglen);
+	if (ptr)
+		ptr = sc_asn1_find_tag(ctx, ptr, taglen, 0x81, &taglen);
+	if (!ptr || (taglen != args->modulus_len))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid modulus data length");
+	memcpy(args->modulus, ptr, taglen);
+
+	/* get exponent */
+	ptr = sc_asn1_find_tag(ctx, apdu.resp, apdu.resplen, 0x7F49, &taglen);
+	if (ptr)
+		ptr = sc_asn1_find_tag(ctx, ptr, taglen, 0x82, &taglen);
+	if (!ptr || (taglen != args->exponent_len) || memcmp(ptr, args->exponent, taglen))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid exponent data");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
 
 static int
 laser_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 {
-	/* struct sc_context *ctx = card->ctx; */
-	/* struct laser_sdo *sdo = (struct laser_sdo *) ptr; */
+	struct sc_context *ctx = card->ctx;
 
 	switch (cmd) {
 	case SC_CARDCTL_GET_SERIALNR:
 		return laser_get_serialnr(card, (struct sc_serial_number *)ptr);
+	case SC_CARDCTL_ATHENA_GENERATE_KEY:
+		sc_log(ctx, "CMD SC_CARDCTL_ATHENA_GENERATE_KEY");
+		return laser_generate_key(card, (struct sc_cardctl_laser_genkey *) ptr);
 #if 0
 	case SC_CARDCTL_IASECC_SDO_CREATE:
 		sc_log(ctx, "CMD SC_CARDCTL_IASECC_SDO_CREATE: sdo_class %X", sdo->sdo_class);
@@ -1349,9 +1473,6 @@ laser_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 	case SC_CARDCTL_IASECC_SDO_GET_DATA:
 		sc_log(ctx, "CMD SC_CARDCTL_IASECC_SDO_GET_DATA: sdo_class %X", sdo->sdo_class);
 		return laser_sdo_get_data(card, (struct laser_sdo *) ptr);
-	case SC_CARDCTL_IASECC_SDO_GENERATE:
-		sc_log(ctx, "CMD SC_CARDCTL_IASECC_SDO_GET_DATA: sdo_class %X", sdo->sdo_class);
-		return laser_sdo_generate(card, (struct laser_sdo *) ptr);
 	case SC_CARDCTL_GET_SE_INFO:
 		sc_log(ctx, "CMD SC_CARDCTL_GET_SE_INFO: sdo_class %X", sdo->sdo_class);
 		return laser_se_get_info(card, (struct laser_se_info *) ptr);

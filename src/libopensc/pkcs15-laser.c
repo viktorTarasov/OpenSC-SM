@@ -34,6 +34,7 @@
 #include "cardctl.h"
 #include "pkcs11/pkcs11.h"
 #include "common/compat_strlcpy.h"
+#include "laser.h"
 
 #define PATH_APPLICATION	"3F003000"
 #define PATH_TOKENINFO		"3F003000C000"
@@ -44,11 +45,6 @@
 
 #define AUTH_ID_PIN	0x20
 #define AUTH_ID_SOPIN	0x10
-
-#define LASER_BASEFID_MASK		0xFFC0
-#define LASER_BASEFID_PUBKEY		0x0080
-/* TODO: Private key can have different 'BASEFID's */
-#define LASER_BASEFID_PRVKEY		0x0040
 
 #define LASER_BASEKX_MASK		0x7F00
 #define LASER_TYPE_KX_CERT		0x11
@@ -99,7 +95,7 @@ static int
 _laser_type(int id)
 {
 	if ((id & 0xFF00) == 0x0)   {
-		if ((id & LASER_BASEFID_MASK) == 0x0080)
+		if ((id & LASER_FS_REF_MASK) == LASER_FS_BASEFID_PUBKEY)
 			return LASER_TYPE_PUBKEY;
 		else
 			return LASER_TYPE_PRVKEY;
@@ -455,7 +451,7 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_pubkey_info info;
 	struct sc_pkcs15_pubkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
-	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PUBKEY) + 1;
+	unsigned ko_fid = ((file_id & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PUBKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
 	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
@@ -622,7 +618,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_prkey_info info;
 	struct sc_pkcs15_prkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
-	unsigned ko_fid = ((file_id & ~LASER_BASEFID_MASK) | LASER_BASEFID_PRVKEY) + 1;
+	unsigned ko_fid = ((file_id & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PRVKEY) + 1;
 	struct sc_path path;
 	struct sc_pkcs15_der der;
 	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
@@ -632,6 +628,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 	LOG_FUNC_CALLED(ctx);
 
+	sc_log(ctx, "create PKCS#15 private key object. FID:%X, KID:%X", file_id, ko_fid);
 	memset(&info, 0, sizeof(info));
 	memset(&obj, 0, sizeof(obj));
 	memset(&key_rsa, 0, sizeof(key_rsa));
