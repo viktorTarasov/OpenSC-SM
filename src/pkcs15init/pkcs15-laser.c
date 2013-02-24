@@ -89,11 +89,70 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 		unsigned int type, unsigned int num, struct sc_file **out)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_file	*file;
+	const char *_template = NULL, *desc = NULL;
+	unsigned file_descriptor = 0x01;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-}
+	sc_log(ctx, "laser_new_file() type %X; num %i",type, num);
+	while (1) {
+		switch (type) {
+		case SC_PKCS15_TYPE_PRKEY_RSA:
+			desc = "RSA private key";
+			_template = "template-private-key";
+			file_descriptor = LASER_FILE_DESCRIPTOR_KO;
+			break;
+		case SC_PKCS15_TYPE_PUBKEY_RSA:
+			desc = "RSA public key";
+			_template = "template-public-key";
+			file_descriptor = LASER_FILE_DESCRIPTOR_KO;
+			break;
+		case SC_PKCS15_TYPE_PUBKEY_DSA:
+			desc = "DSA public key";
+			_template = "template-public-key";
+			file_descriptor = LASER_FILE_DESCRIPTOR_KO;
+			break;
+		case SC_PKCS15_TYPE_CERT:
+			desc = "certificate";
+			_template = "template-certificate";
+			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
+			break;
+		case SC_PKCS15_TYPE_DATA_OBJECT:
+			desc = "data object";
+			_template = "template-public-data";
+			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
+			break;
+		}
+		if (_template)
+			break;
+		/* If this is a specific type such as SC_PKCS15_TYPE_CERT_FOOBAR,
+		 * fall back to the generic class (SC_PKCS15_TYPE_CERT)
+		 */
+		if (!(type & ~SC_PKCS15_TYPE_CLASS_MASK)) {
+			sc_log(ctx, "Unsupported file type 0x%X", type);
+			return SC_ERROR_INVALID_ARGUMENTS;
+		}
+		type &= SC_PKCS15_TYPE_CLASS_MASK;
+	}
 
+	sc_log(ctx, "laser_new_file() template %s; num %i",_template, num);
+	if (sc_profile_get_file(profile, _template, &file) < 0) {
+		sc_log(ctx, "Profile doesn't define %s template '%s'", desc, _template);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+	file->id |= (num & 0xFF);
+	file->path.value[file->path.len-1] |= (num & 0xFF);
+
+	if (file->type == SC_FILE_TYPE_INTERNAL_EF)
+		file->ef_structure = file_descriptor;
+
+	sc_log(ctx, "new laser file: size %i; EF-type %i/%i; path %s",
+			file->size, file->type, file->ef_structure, sc_print_path(&file->path));
+	*out = file;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 /*
  * Create private key file
