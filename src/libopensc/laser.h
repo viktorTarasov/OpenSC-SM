@@ -75,6 +75,10 @@
 /* TODO: Private key can have different 'BASEFID's */
 #define LASER_FS_BASEFID_PRVKEY         0x0040
 
+#define LASER_ATTRIBUTE_VALID	0
+#define LASER_ATTRIBUTE_INVALID	1
+
+#define CKA_ATHENA	0x80000010
 
 struct sc_cardctl_laser_genkey {
 	unsigned char algorithm;

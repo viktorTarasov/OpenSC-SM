@@ -54,8 +54,8 @@ filesystem {
 				size		= 40;
 
 				# Private RSA keys
-				EF Athena-private-key-info   {
-					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=CHV32;
+				EF laser-private-key-attributes   {
+					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=CHV32, DELETE-SELF=NONE;
 					file-id	= 0200;
 				}
 				EF template-private-key {

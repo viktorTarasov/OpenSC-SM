@@ -34,6 +34,9 @@
 #include "libopensc/laser.h"
 #include "profile.h"
 #include "pkcs15-init.h"
+#include "pkcs11/pkcs11.h"
+
+#define LASER_ATTRS_PRKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PRKEY_RSA)
 
 #define C_ASN1_PUBLIC_KEY_SIZE 2
 static struct sc_asn1_entry c_asn1_create_public_key[C_ASN1_PUBLIC_KEY_SIZE] = {
@@ -172,6 +175,11 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 			_template = "template-public-data";
 			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
 			break;
+		case LASER_ATTRS_PRKEY_RSA:
+			desc = "private key Laser attributes";
+			_template = "laser-private-key-attributes";
+			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
+			break;
 		}
 		if (_template)
 			break;
@@ -239,7 +247,7 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_DECRYPT | SC_PKCS15_PRKEY_USAGE_UNWRAP))
 		*(file->prop_attr + 1) |= LASER_KO_USAGE_DECRYPT;
-	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_NONREPUDIATION | SC_PKCS15_PRKEY_USAGE_SIGN))
+	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_NONREPUDIATION | SC_PKCS15_PRKEY_USAGE_SIGN | SC_PKCS15_PRKEY_USAGE_SIGNRECOVER))
 		*(file->prop_attr + 1) |= LASER_KO_USAGE_SIGN;
 
 	*(file->prop_attr + 2) = LASER_KO_ALGORITHM_RSA;
@@ -324,6 +332,11 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	sc_log(ctx, "modulus %s", sc_dump_hex(args.modulus, args.modulus_len));
 	sc_log(ctx, "exponent %s", sc_dump_hex(args.exponent, args.exponent_len));
 
+	key_info->access_flags |= SC_PKCS15_PRKEY_ACCESS_SENSITIVE;
+	key_info->access_flags |= SC_PKCS15_PRKEY_ACCESS_ALWAYSSENSITIVE;
+	key_info->access_flags |= SC_PKCS15_PRKEY_ACCESS_NEVEREXTRACTABLE;
+	key_info->access_flags |= SC_PKCS15_PRKEY_ACCESS_LOCAL;
+
 	/* allocated buffers with the public key components do not released
 	 * but re-assigned to the pkcs15-public-key data */
 	pubkey->algorithm = SC_ALGORITHM_RSA;
@@ -366,7 +379,215 @@ laser_emu_update_dir (struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 
 static int
-laser_emu_update_any_df(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+laser_add_attribute(unsigned char **buf, size_t *buf_sz, CK_ULONG cka, size_t cka_len, void *data)
+{
+	unsigned char *ptr = NULL;
+	size_t offs = 0;
+
+	if (!buf || !buf_sz)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	ptr = realloc(*buf, *buf_sz + cka_len + 5);
+	if (!ptr)
+		return SC_ERROR_OUT_OF_MEMORY;
+
+	offs = *buf_sz;
+	*(ptr + offs++) = (cka >> 8) & 0xFF;		/* cka type: 2 LSBs */
+	*(ptr + offs++) = cka & 0xFF;
+	*(ptr + offs++) = 0x00;				/* flags */
+	*(ptr + offs++) = (cka_len >> 8) & 0xFF;	/* cka length: 2 bytes*/
+	*(ptr + offs++) = cka_len & 0xFF;
+
+	memset(ptr +  offs, 0, cka_len);
+	if (data)
+		memcpy(ptr + offs, (unsigned char *)data, cka_len);
+	offs += cka_len;
+
+	*buf = ptr;
+	*buf_sz = offs;
+
+	return SC_SUCCESS;
+}
+
+
+static int
+laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_file *attrs_file = NULL;
+	unsigned char *attrs = NULL, header[7];
+	size_t attrs_len = 0, attrs_num = 0;
+	CK_OBJECT_CLASS clazz = CKO_PRIVATE_KEY;
+	CK_BBOOL _true = TRUE, _false = FALSE, *flag;
+	CK_KEY_TYPE type_rsa = CKK_RSA;
+	CK_ULONG ffff = 0xFFFF;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, info->key_reference, &attrs_file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
+
+	header[0] = LASER_ATTRIBUTE_VALID;
+	header[1] = attrs_file->id & 0xFF;
+	header[2] = (attrs_file->id >> 8) & 0xFF;
+	header[3] = attrs_file->id & 0xFF;
+	header[4] = 0xFF;
+	header[5] = 0xFF;
+	header[6] = 22;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_TOKEN, sizeof(CK_BBOOL), &_true);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TOKEN private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_PRIVATE, sizeof(CK_BBOOL), &_true);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_LABEL, strlen(object->label), object->label);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_KEY_TYPE, sizeof(CK_KEY_TYPE), &type_rsa);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SUBJECT, info->subject.len, info->subject.value);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_ID, info->id.len, info->id.value);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID private key attribute");
+	attrs_num++;
+
+	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_SENSITIVE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SENSITIVE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SENSITIVE private key attribute");
+	attrs_num++;
+
+	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DECRYPT ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_DECRYPT, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DECRYPT private key attribute");
+	attrs_num++;
+
+	flag = info->usage & SC_PKCS15_PRKEY_USAGE_UNWRAP ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_UNWRAP, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_UNWRAP private key attribute");
+	attrs_num++;
+
+	flag = info->usage & SC_PKCS15_PRKEY_USAGE_SIGN ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SIGN, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SIGN private key attribute");
+	attrs_num++;
+
+	flag = info->usage & SC_PKCS15_PRKEY_USAGE_SIGNRECOVER ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SIGN_RECOVER, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SIGN_RECOVER private key attribute");
+	attrs_num++;
+
+	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DERIVE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_DERIVE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DERIVE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_START_DATE, sizeof(CK_DATE), NULL);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_DATE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_END_DATE, sizeof(CK_DATE), NULL);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_END private key attribute");
+	attrs_num++;
+
+	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_EXTRACTABLE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_EXTRACTABLE private key attribute");
+	attrs_num++;
+
+	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_LOCAL ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_LOCAL, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LOCAL private key attribute");
+	attrs_num++;
+
+	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_NEVEREXTRACTABLE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_NEVER_EXTRACTABLE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_NEVER_EXTRACTABLE private key attribute");
+	attrs_num++;
+
+	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_ALWAYSSENSITIVE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_ALWAYS_SENSITIVE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ALWAYS_SENSITIVE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_KEY_GEN_MECHANISM, sizeof(CK_ULONG), &ffff);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_GEN_MECHANISM private key attribute");
+	attrs_num++;
+
+	flag = object->flags & SC_PKCS15_CO_FLAG_MODIFIABLE ? &_true : &_false;
+	rv = laser_add_attribute(&attrs, &attrs_len, CKA_MODIFIABLE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE private key attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&attrs, &attrs_len, 0x8010, sizeof(CK_BBOOL), &_false);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA private key attribute");
+	attrs_num++;
+
+	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
+
+	rv = SC_ERROR_NOT_SUPPORTED;
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_emu_update_df_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+
+	switch (object->type)   {
+	case SC_PKCS15_TYPE_PRKEY_RSA:
+		rv = laser_update_df_create_private_key(profile, p15card, object);
+		break;
+	case SC_PKCS15_TYPE_PUBKEY_RSA:
+		rv = laser_update_df_create_public_key(profile, p15card, object);
+		break;
+	}
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_emu_update_df(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		unsigned op, struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -376,15 +597,11 @@ laser_emu_update_any_df(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	switch(op)   {
 	case SC_AC_OP_ERASE:
 		sc_log(ctx, "Update DF; erase object('%s',type:%X)", object->label, object->type);
-		// rv = awp_update_df_delete(p15card, profile, object);
-		printf("TBD: AWP update xDF: delete\n");
-		rv =  SC_SUCCESS;
+		rv = laser_emu_update_df_delete(profile, p15card, object);
 		break;
 	case SC_AC_OP_CREATE:
 		sc_log(ctx, "Update DF; create object('%s',type:%X)", object->label, object->type);
-		//rv = awp_update_df_create(p15card, profile, object);
-		printf("TBD: AWP update xDF: create\n");
-		rv =  SC_SUCCESS;
+		rv = laser_emu_update_df_create(profile, p15card, object);
 		break;
 	}
 	LOG_FUNC_RETURN(ctx, rv);
@@ -547,7 +764,7 @@ sc_pkcs15init_laser_operations = {
 	NULL,				/* delete_object */
 #ifdef ENABLE_OPENSSL
 	laser_emu_update_dir,
-	laser_emu_update_any_df,
+	laser_emu_update_df,
 	laser_emu_update_tokeninfo,
 	laser_emu_write_info,
 	laser_emu_store_data,

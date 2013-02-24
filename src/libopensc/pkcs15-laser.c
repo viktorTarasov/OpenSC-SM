@@ -761,6 +761,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 			break;
 		case CKA_MODIFIABLE:
 			obj.flags |= (*attr.val) ? SC_PKCS15_CO_FLAG_MODIFIABLE : 0;
+			sc_log(ctx, "CKA_MODIFIABLE: %X", *attr.val);
 			break;
 		default:
 			sc_log(ctx, "Unknown CKA attribute: %X", attr.cka);
