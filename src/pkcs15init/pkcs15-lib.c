@@ -159,6 +159,7 @@ static struct profile_operations {
 #ifdef ENABLE_OPENSSL
 	{ "authentic", (void *) sc_pkcs15init_get_authentic_ops },
 	{ "iasecc", (void *) sc_pkcs15init_get_iasecc_ops },
+	{ "laser", (void *) sc_pkcs15init_get_laser_ops },
 #endif
 	{ NULL, NULL },
 };
@@ -1463,7 +1464,7 @@ sc_pkcs15init_store_public_key(struct sc_pkcs15_card *p15card,
 	struct sc_pkcs15_pubkey_info *key_info;
 	struct sc_pkcs15_keyinfo_gostparams *keyinfo_gostparams;
 	struct sc_pkcs15_pubkey key;
-	struct sc_path 	*path;
+	struct sc_path	*path;
 	const char	*label;
 	unsigned int	keybits, type, usage;
 	int		r;
@@ -2742,7 +2743,7 @@ sc_pkcs15init_add_object(struct sc_pkcs15_card *p15card, struct sc_profile *prof
 		sc_log(ctx, "Add nothing; just instantiate this directory file");
 	}
 	else if (object->df == NULL) {
-		sc_log(ctx, "Append object");
+		sc_log(ctx, "Append object '%s'", object->label);
 		object->df = df;
 		r = sc_pkcs15_add_object(p15card, object);
 		LOG_TEST_RET(ctx, r, "Failed to add pkcs15 object");
@@ -3440,32 +3441,41 @@ sc_pkcs15init_create_file(struct sc_profile *profile, struct sc_pkcs15_card *p15
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_file	*parent = NULL;
-	int		r;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "create file '%s'", sc_print_path(&file->path));
 	/* Select parent DF and verify PINs/key as necessary */
-	r = do_select_parent(profile, p15card, file, &parent);
-	LOG_TEST_RET(ctx, r, "Cannot create file: select parent error");
+	rv = do_select_parent(profile, p15card, file, &parent);
+	LOG_TEST_RET(ctx, rv, "Cannot create file: select parent error");
 
-	r = sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_CREATE);
-	LOG_TEST_RET(ctx, r, "Cannot create file: 'CREATE' authentication failed");
+	rv = sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_CREATE);
+	if (rv)    {
+		if (file->type == SC_FILE_TYPE_DF)
+			if (!sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_CREATE_DF))
+				rv = SC_SUCCESS;
+
+		if (file->type == SC_FILE_TYPE_WORKING_EF || file->type == SC_FILE_TYPE_INTERNAL_EF)
+			if (!sc_pkcs15init_authenticate(profile, p15card, parent, SC_AC_OP_CREATE_EF))
+				rv = SC_SUCCESS;
+	}
+	LOG_TEST_RET(ctx, rv, "Cannot create file: 'CREATE' authentication failed");
 
 	/* Fix up the file's ACLs */
-	r = sc_pkcs15init_fixup_file(profile, p15card, file);
-	LOG_TEST_RET(ctx, r, "Cannot create file: file fixup failed");
+	rv = sc_pkcs15init_fixup_file(profile, p15card, file);
+	LOG_TEST_RET(ctx, rv, "Cannot create file: file fixup failed");
 
 	/* ensure we are in the correct lifecycle */
-	r = sc_pkcs15init_set_lifecycle(p15card->card, SC_CARDCTRL_LIFECYCLE_ADMIN);
-	if (r != SC_ERROR_NOT_SUPPORTED)
-		LOG_TEST_RET(ctx, r, "Cannot create file: failed to set lifecycle 'ADMIN'");
+	rv = sc_pkcs15init_set_lifecycle(p15card->card, SC_CARDCTRL_LIFECYCLE_ADMIN);
+	if (rv != SC_ERROR_NOT_SUPPORTED)
+		LOG_TEST_RET(ctx, rv, "Cannot create file: failed to set lifecycle 'ADMIN'");
 
-	r = sc_create_file(p15card->card, file);
-	LOG_TEST_RET(ctx, r, "Create file failed");
+	rv = sc_create_file(p15card->card, file);
+	LOG_TEST_RET(ctx, rv, "Create file failed");
 
 	if (parent)
 		sc_file_free(parent);
-	LOG_FUNC_RETURN(ctx, r);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 

@@ -253,7 +253,8 @@ enum {
 	/*
 	 * Athena
 	 */
-	SC_CARDCTL_ATHENA_BASE = _CTL_PREFIX('A', 'T', 'H')
+	SC_CARDCTL_ATHENA_BASE = _CTL_PREFIX('A', 'T', 'H'),
+	SC_CARDCTL_ATHENA_GENERATE_KEY
 };
 
 enum {

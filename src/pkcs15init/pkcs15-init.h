@@ -416,6 +416,7 @@ extern struct sc_pkcs15init_operations *sc_pkcs15init_get_iasecc_ops(void);
 extern struct sc_pkcs15init_operations *sc_pkcs15init_get_piv_ops(void);
 extern struct sc_pkcs15init_operations *sc_pkcs15init_get_openpgp_ops(void);
 extern struct sc_pkcs15init_operations *sc_pkcs15init_get_sc_hsm_ops(void);
+extern struct sc_pkcs15init_operations *sc_pkcs15init_get_laser_ops(void);
 
 #ifdef __cplusplus
 }
