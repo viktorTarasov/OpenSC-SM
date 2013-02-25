@@ -90,4 +90,10 @@ struct sc_cardctl_laser_genkey {
 	size_t modulus_len;
 };
 
+int laser_attrs_cert_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
+		struct sc_pkcs15_cert_info *info, unsigned char *data, size_t data_len);
+int laser_attrs_prvkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
+		struct sc_pkcs15_prkey_info *info, unsigned char *data, size_t data_len);
+int laser_attrs_pubkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
+		struct sc_pkcs15_pubkey_info *info, unsigned char *data, size_t data_len);
 #endif
