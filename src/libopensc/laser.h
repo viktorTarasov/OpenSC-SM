@@ -78,6 +78,12 @@
 #define LASER_ATTRIBUTE_VALID	0
 #define LASER_ATTRIBUTE_INVALID	1
 
+#define LASER_FS_KEY_REF_MIN	0x01
+#define LASER_FS_KEY_REF_MAX	0x1E
+
+#define LASER_FS_ATTR_REF_MIN	0x00
+#define LASER_FS_ATTR_REF_MAX	0x1D
+
 #define CKA_ATHENA	0x80000010
 
 struct sc_cardctl_laser_genkey {
@@ -96,4 +102,6 @@ int laser_attrs_prvkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *o
 		struct sc_pkcs15_prkey_info *info, unsigned char *data, size_t data_len);
 int laser_attrs_pubkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
 		struct sc_pkcs15_pubkey_info *info, unsigned char *data, size_t data_len);
+int laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+		unsigned file_id, unsigned char **out, size_t *out_len);
 #endif

@@ -56,6 +56,32 @@ static struct sc_asn1_entry c_asn1_create_rsa_pub_coefficients[C_ASN1_RSA_PUB_CO
 
 
 static int
+laser_validate_key_reference(int key_reference)
+{
+	if (key_reference < LASER_FS_KEY_REF_MIN)
+		return SC_ERROR_INVALID_DATA;
+
+	if (key_reference > LASER_FS_KEY_REF_MAX)
+		return SC_ERROR_INVALID_DATA;
+
+	return SC_SUCCESS;
+}
+
+
+static int
+laser_validate_attr_reference(int key_reference)
+{
+	if (key_reference < LASER_FS_ATTR_REF_MIN)
+		return SC_ERROR_INVALID_DATA;
+
+	if (key_reference > LASER_FS_ATTR_REF_MAX)
+		return SC_ERROR_INVALID_DATA;
+
+	return SC_SUCCESS;
+}
+
+
+static int
 laser_encode_pubkey_rsa(struct sc_context *ctx, struct sc_pkcs15_pubkey_rsa *key,
 	unsigned char **buf, size_t *buflen)
 {
@@ -276,7 +302,7 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 	rv = sc_pkcs15init_create_file(profile, p15card, file);
 	LOG_TEST_RET(ctx, rv, "Failed to create private key file");
 
-	key_info->key_reference = file->path.value[file->path.len - 1] & LASER_FS_REF_MASK;
+	key_info->key_reference = file->path.value[file->path.len - 1];
 	key_info->path = file->path;
 	sc_log(ctx, "created private key file %s, ref:%X", sc_print_path(&key_info->path), key_info->key_reference);
 
@@ -379,167 +405,34 @@ laser_emu_update_dir (struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 
 static int
-laser_add_attribute(unsigned char **buf, size_t *buf_sz, CK_ULONG cka, size_t cka_len, void *data)
-{
-	unsigned char *ptr = NULL;
-	size_t offs = 0;
-
-	if (!buf || !buf_sz)
-		return SC_ERROR_INVALID_ARGUMENTS;
-
-	ptr = realloc(*buf, *buf_sz + cka_len + 5);
-	if (!ptr)
-		return SC_ERROR_OUT_OF_MEMORY;
-
-	offs = *buf_sz;
-	*(ptr + offs++) = (cka >> 8) & 0xFF;		/* cka type: 2 LSBs */
-	*(ptr + offs++) = cka & 0xFF;
-	*(ptr + offs++) = 0x00;				/* flags */
-	*(ptr + offs++) = (cka_len >> 8) & 0xFF;	/* cka length: 2 bytes*/
-	*(ptr + offs++) = cka_len & 0xFF;
-
-	memset(ptr +  offs, 0, cka_len);
-	if (data)
-		memcpy(ptr + offs, (unsigned char *)data, cka_len);
-	offs += cka_len;
-
-	*buf = ptr;
-	*buf_sz = offs;
-
-	return SC_SUCCESS;
-}
-
-
-static int
 laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
 	struct sc_file *attrs_file = NULL;
-	unsigned char *attrs = NULL, header[7];
-	size_t attrs_len = 0, attrs_num = 0;
-	CK_OBJECT_CLASS clazz = CKO_PRIVATE_KEY;
-	CK_BBOOL _true = TRUE, _false = FALSE, *flag;
-	CK_KEY_TYPE type_rsa = CKK_RSA;
-	CK_ULONG ffff = 0xFFFF;
-	int rv = SC_ERROR_NOT_SUPPORTED;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0, attrs_num = 0, attrs_ref;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, info->key_reference, &attrs_file);
+	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
+	rv = laser_validate_attr_reference(attrs_ref);
+	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &attrs_file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
 
-	header[0] = LASER_ATTRIBUTE_VALID;
-	header[1] = attrs_file->id & 0xFF;
-	header[2] = (attrs_file->id >> 8) & 0xFF;
-	header[3] = attrs_file->id & 0xFF;
-	header[4] = 0xFF;
-	header[5] = 0xFF;
-	header[6] = 22;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_TOKEN, sizeof(CK_BBOOL), &_true);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TOKEN private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_PRIVATE, sizeof(CK_BBOOL), &_true);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_LABEL, strlen(object->label), object->label);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_KEY_TYPE, sizeof(CK_KEY_TYPE), &type_rsa);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SUBJECT, info->subject.len, info->subject.value);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_ID, info->id.len, info->id.value);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID private key attribute");
-	attrs_num++;
-
-	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_SENSITIVE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SENSITIVE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SENSITIVE private key attribute");
-	attrs_num++;
-
-	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DECRYPT ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_DECRYPT, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DECRYPT private key attribute");
-	attrs_num++;
-
-	flag = info->usage & SC_PKCS15_PRKEY_USAGE_UNWRAP ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_UNWRAP, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_UNWRAP private key attribute");
-	attrs_num++;
-
-	flag = info->usage & SC_PKCS15_PRKEY_USAGE_SIGN ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SIGN, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SIGN private key attribute");
-	attrs_num++;
-
-	flag = info->usage & SC_PKCS15_PRKEY_USAGE_SIGNRECOVER ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_SIGN_RECOVER, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SIGN_RECOVER private key attribute");
-	attrs_num++;
-
-	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DERIVE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_DERIVE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DERIVE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_START_DATE, sizeof(CK_DATE), NULL);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_DATE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_END_DATE, sizeof(CK_DATE), NULL);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_END private key attribute");
-	attrs_num++;
-
-	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_EXTRACTABLE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_EXTRACTABLE private key attribute");
-	attrs_num++;
-
-	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_LOCAL ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_LOCAL, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LOCAL private key attribute");
-	attrs_num++;
-
-	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_NEVEREXTRACTABLE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_NEVER_EXTRACTABLE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_NEVER_EXTRACTABLE private key attribute");
-	attrs_num++;
-
-	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_ALWAYSSENSITIVE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_ALWAYS_SENSITIVE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ALWAYS_SENSITIVE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_KEY_GEN_MECHANISM, sizeof(CK_ULONG), &ffff);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_GEN_MECHANISM private key attribute");
-	attrs_num++;
-
-	flag = object->flags & SC_PKCS15_CO_FLAG_MODIFIABLE ? &_true : &_false;
-	rv = laser_add_attribute(&attrs, &attrs_len, CKA_MODIFIABLE, sizeof(CK_BBOOL), flag);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE private key attribute");
-	attrs_num++;
-
-	rv = laser_add_attribute(&attrs, &attrs_len, 0x8010, sizeof(CK_BBOOL), &_false);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA private key attribute");
-	attrs_num++;
-
+	rv =  laser_data_prvkey_encode(p15card, object, attrs_file->id, &attrs, &attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode private key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
-	rv = SC_ERROR_NOT_SUPPORTED;
+	attrs_file->size = attrs_len;
+
+	rv = sc_pkcs15init_update_file(profile, p15card, attrs_file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to create/update private key attributes file");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 

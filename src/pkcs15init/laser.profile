@@ -55,7 +55,7 @@ filesystem {
 
 				# Private RSA keys
 				EF laser-private-key-attributes   {
-					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=CHV32, DELETE-SELF=NONE;
+					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
 					file-id	= 0200;
 				}
 				EF template-private-key {

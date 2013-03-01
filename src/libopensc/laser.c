@@ -173,30 +173,6 @@ laser_add_attribute(unsigned char **buf, size_t *buf_sz, CK_ULONG cka, size_t ck
 	return SC_SUCCESS;
 }
 
-static int
-laser_attach_cache_counter(unsigned char **buf, size_t *buf_sz)
-{
-	unsigned char *ptr = NULL;
-	unsigned rand_val;
-
-	if (!buf || !buf_sz)
-		return SC_ERROR_INVALID_ARGUMENTS;
-
-	ptr = realloc(*buf, *buf_sz + 4);
-	if (!ptr)
-		return SC_ERROR_OUT_OF_MEMORY;
-
-        srand((unsigned)time(NULL));
-	rand_val = rand();
-	*(ptr + 0) = *(ptr + 2) = rand_val & 0xFF;
-	*(ptr + 1) = *(ptr + 3) = (rand_val >> 8) & 0xFF;
-
-	*buf = ptr;
-	*buf_sz += 4;
-
-	return SC_SUCCESS;
-}
-
 
 int
 laser_attrs_cert_decode(struct sc_context *ctx,
@@ -551,6 +527,31 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 }
 
 
+static int
+laser_attach_cache_counter(unsigned char **buf, size_t *buf_sz)
+{
+	unsigned char *ptr = NULL;
+	unsigned rand_val;
+
+	if (!buf || !buf_sz)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	ptr = realloc(*buf, *buf_sz + 4);
+	if (!ptr)
+		return SC_ERROR_OUT_OF_MEMORY;
+
+        srand((unsigned)time(NULL));
+	rand_val = rand();
+	*(ptr + *buf_sz + 0) = *(ptr + *buf_sz + 2) = rand_val & 0xFF;
+	*(ptr + *buf_sz + 1) = *(ptr + *buf_sz + 3) = (rand_val >> 8) & 0xFF;
+
+	*buf = ptr;
+	*buf_sz += 4;
+
+	return SC_SUCCESS;
+}
+
+
 int
 laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id,
@@ -689,5 +690,13 @@ laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object
 	attrs_num++;
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
+	if (out && out_len)    {
+		*out = data;
+		*out_len = data_len;
+	}
+	else   {
+		free(data);
+	}
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
