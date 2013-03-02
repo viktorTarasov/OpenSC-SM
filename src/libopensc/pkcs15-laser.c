@@ -120,14 +120,14 @@ _laser_type(int id)
 
 
 static int
-_alloc_ck_string(unsigned char *data, size_t max_len, char ** out)
+_alloc_ck_string(unsigned char *data, size_t max_len, char **out)
 {
 	char *str = calloc(1, max_len + 1);
 
-	if (!str)
-		return SC_ERROR_MEMORY_FAILURE;
 	if (!out)
 		return SC_ERROR_INVALID_ARGUMENTS;
+	if (!str)
+		return SC_ERROR_OUT_OF_MEMORY;
 
 	memcpy(str, data, max_len);
 	while(*(str + strlen(str) - 1) == ' ')

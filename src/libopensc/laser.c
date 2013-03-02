@@ -117,7 +117,7 @@ _cka_get_blob(struct laser_cka *attr, struct sc_pkcs15_der *out)
 
 	der.value = malloc(attr->len);
 	if (!der.value)
-		return SC_ERROR_MEMORY_FAILURE;
+		return SC_ERROR_OUT_OF_MEMORY;
 	memcpy(der.value, attr->val, attr->len);
 	der.len = attr->len;
 
@@ -571,7 +571,7 @@ laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object
 
 	data = malloc(7);
 	if (!data)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_MEMORY_FAILURE);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
 	data_len = 0;
 	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
