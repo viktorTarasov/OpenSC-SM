@@ -83,8 +83,9 @@ filesystem {
 				}
 
 				#Public Key
-				EF Athena-public-key-info {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, ERASE=NONE;
+				EF laser-public-key-attributes {
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					file-id	= 0140;
 				}
 				EF template-public-key {
 					file-id	= 0081;

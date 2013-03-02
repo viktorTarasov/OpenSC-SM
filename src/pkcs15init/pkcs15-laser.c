@@ -37,6 +37,7 @@
 #include "pkcs11/pkcs11.h"
 
 #define LASER_ATTRS_PRKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PRKEY_RSA)
+#define LASER_ATTRS_PUBKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PUBKEY_RSA)
 
 #define C_ASN1_PUBLIC_KEY_SIZE 2
 static struct sc_asn1_entry c_asn1_create_public_key[C_ASN1_PUBLIC_KEY_SIZE] = {
@@ -204,6 +205,11 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 		case LASER_ATTRS_PRKEY_RSA:
 			desc = "private key Laser attributes";
 			_template = "laser-private-key-attributes";
+			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
+			break;
+		case LASER_ATTRS_PUBKEY_RSA:
+			desc = "public key Laser attributes";
+			_template = "laser-public-key-attributes";
 			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
 			break;
 		}
@@ -436,14 +442,35 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
-
 static int
-laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
+laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	int rv = SC_ERROR_NOT_SUPPORTED;
+	struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)object->data;
+	struct sc_file *attrs_file = NULL;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0, attrs_num = 0, attrs_ref;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
+
+	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
+	rv = laser_validate_attr_reference(attrs_ref);
+	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &attrs_file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
+
+	rv =  laser_data_pubkey_encode(p15card, object, attrs_file->id, &attrs, &attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode public key attributes");
+	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
+
+	attrs_file->size = attrs_len;
+
+	rv = sc_pkcs15init_update_file(profile, p15card, attrs_file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to create/update public key attributes file");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -555,7 +582,7 @@ laser_emu_store_pubkey(struct sc_pkcs15_card *p15card,
 
 	prkey_info = (struct sc_pkcs15_prkey_info *)prkey_object->data;
 
-        info->key_reference = prkey_info->key_reference;
+        info->key_reference = (prkey_info->key_reference & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PUBKEY;
 	info->modulus_length = prkey_info->modulus_length;
 	info->native = prkey_info->native;
 	sc_log(ctx, "Public Key ref %X, length %i", info->key_reference, info->modulus_length);
@@ -606,7 +633,7 @@ laser_emu_store_pubkey(struct sc_pkcs15_card *p15card,
 	rv = sc_pkcs15init_create_file(profile, p15card, file);
 	LOG_TEST_RET(ctx, rv, "Failed to create public key file");
 
-	info->key_reference = file->path.value[file->path.len - 1] & LASER_FS_REF_MASK;
+	info->key_reference = file->path.value[file->path.len - 1];
 	info->path = file->path;
 	sc_log(ctx, "created public key file %s, ref:%X", sc_print_path(&info->path), info->key_reference);
 

@@ -309,6 +309,7 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	path.value[path.len - 2] = (ko_fid >> 8) & 0xFF;
 	path.value[path.len - 1] = ko_fid & 0xFF;
 	info.path = path;
+	info.key_reference = ko_fid & 0xFF;
 
 	rv = sc_select_file(p15card->card, &info.path, &key_file);
 	LOG_TEST_RET(ctx, rv, "Cannot select key file");
