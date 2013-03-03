@@ -496,12 +496,73 @@ laser_emu_update_df_create(struct sc_profile *profile, struct sc_pkcs15_card *p1
 
 
 static int
+laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_file *file = NULL;
+	size_t attrs_ref;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
+	rv = laser_validate_attr_reference(attrs_ref);
+	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
+
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+static int
+laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)object->data;
+	struct sc_file *file = NULL;
+	size_t attrs_ref;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
+	rv = laser_validate_attr_reference(attrs_ref);
+	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
+
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
+	switch (object->type)   {
+	case SC_PKCS15_TYPE_PRKEY_RSA:
+		rv = laser_update_df_delete_private_key(profile, p15card, object);
+		break;
+	case SC_PKCS15_TYPE_PUBKEY_RSA:
+		rv = laser_update_df_delete_public_key(profile, p15card, object);
+		break;
+	}
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
