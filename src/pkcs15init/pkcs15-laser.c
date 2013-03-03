@@ -39,23 +39,6 @@
 #define LASER_ATTRS_PRKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PRKEY_RSA)
 #define LASER_ATTRS_PUBKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PUBKEY_RSA)
 
-#define C_ASN1_PUBLIC_KEY_SIZE 2
-static struct sc_asn1_entry c_asn1_create_public_key[C_ASN1_PUBLIC_KEY_SIZE] = {
-	/* tag 0x71 */
-	{ "publicKeyCoefficients", SC_ASN1_STRUCT, SC_ASN1_CONS | SC_ASN1_APP | 0x11, 0, NULL, NULL },
-	{ NULL, 0, 0, 0, NULL, NULL }
-};
-
-#define C_ASN1_RSA_PUB_COEFFICIENTS_SIZE 3
-static struct sc_asn1_entry c_asn1_create_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE] = {
-	/* tag 0x90 */
-	{ "exponent", SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x10, SC_ASN1_ALLOC, NULL, NULL },
-	/* tag 0x91 */
-	{ "modulus",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x11, SC_ASN1_ALLOC, NULL, NULL },
-	{ NULL, 0, 0, 0, NULL, NULL }
-};
-
-
 static int
 laser_validate_key_reference(int key_reference)
 {
@@ -79,39 +62,6 @@ laser_validate_attr_reference(int key_reference)
 		return SC_ERROR_INVALID_DATA;
 
 	return SC_SUCCESS;
-}
-
-
-static int
-laser_encode_pubkey_rsa(struct sc_context *ctx, struct sc_pkcs15_pubkey_rsa *key,
-	unsigned char **buf, size_t *buflen)
-{
-	struct sc_asn1_entry asn1_public_key[C_ASN1_PUBLIC_KEY_SIZE];
-	struct sc_asn1_entry asn1_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE];
-	int r;
-
-	sc_copy_asn1_entry(c_asn1_create_public_key, asn1_public_key);
-	sc_format_asn1_entry(asn1_public_key + 0, asn1_rsa_pub_coefficients, NULL, 1);
-
-	sc_copy_asn1_entry(c_asn1_create_rsa_pub_coefficients, asn1_rsa_pub_coefficients);
-	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 0, key->exponent.data, &key->exponent.len, 1);
-	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 1, key->modulus.data, &key->modulus.len, 1);
-
-	sc_log(ctx, "Encoding modulus '%s'",sc_dump_hex(key->modulus.data, key->modulus.len));
-
-	r = sc_asn1_encode(ctx, asn1_public_key, buf, buflen);
-	LOG_TEST_RET(ctx, r, "ASN.1 encoding failed");
-
-	return 0;
-}
-
-int
-laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
-	       unsigned char **buf, size_t *len)
-{
-	if (key->algorithm == SC_ALGORITHM_RSA)
-		return laser_encode_pubkey_rsa(ctx, &key->u.rsa, buf, len);
-	return SC_ERROR_NOT_SUPPORTED;
 }
 
 
@@ -416,7 +366,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
-	struct sc_file *attrs_file = NULL;
+	struct sc_file *file = NULL;
 	unsigned char *attrs = NULL;
 	size_t attrs_len = 0, attrs_num = 0, attrs_ref;
 	int rv;
@@ -427,18 +377,19 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &attrs_file);
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
 
-	rv =  laser_data_prvkey_encode(p15card, object, attrs_file->id, &attrs, &attrs_len);
+	rv =  laser_data_prvkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode private key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
-	attrs_file->size = attrs_len;
+	file->size = attrs_len;
 
-	rv = sc_pkcs15init_update_file(profile, p15card, attrs_file, attrs, attrs_len);
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update private key attributes file");
 
+	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -448,7 +399,7 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)object->data;
-	struct sc_file *attrs_file = NULL;
+	struct sc_file *file = NULL;
 	unsigned char *attrs = NULL;
 	size_t attrs_len = 0, attrs_num = 0, attrs_ref;
 	int rv;
@@ -459,18 +410,19 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &attrs_file);
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
 
-	rv =  laser_data_pubkey_encode(p15card, object, attrs_file->id, &attrs, &attrs_len);
+	rv =  laser_data_pubkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode public key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
-	attrs_file->size = attrs_len;
+	file->size = attrs_len;
 
-	rv = sc_pkcs15init_update_file(profile, p15card, attrs_file, attrs, attrs_len);
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update public key attributes file");
 
+	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -520,6 +472,7 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
+
 
 static int
 laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
@@ -686,7 +639,7 @@ laser_emu_store_pubkey(struct sc_pkcs15_card *p15card,
 		LOG_TEST_RET(ctx, rv, "Select public key file error");
 	}
 
-	rv = laser_encode_pubkey_rsa(ctx, &pubkey.u.rsa, &file->encoded_content, &file->encoded_content_len);
+	rv = laser_encode_pubkey(ctx, &pubkey, &file->encoded_content, &file->encoded_content_len);
 	LOG_TEST_RET(ctx, rv, "public key encoding error");
 
 	sc_log(ctx, "Encoded: '%s'",sc_dump_hex(file->encoded_content, file->encoded_content_len));

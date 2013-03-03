@@ -30,11 +30,29 @@
 #endif
 
 #include "internal.h"
+#include "asn1.h"
 #include "pkcs15.h"
 #include "cardctl.h"
 #include "pkcs11/pkcs11.h"
 #include "common/compat_strlcpy.h"
 #include "laser.h"
+
+
+#define C_ASN1_CREATE_RSA_KEY_SIZE 2
+static struct sc_asn1_entry c_asn1_create_rsa_key[C_ASN1_CREATE_RSA_KEY_SIZE] = {
+	/* tag 0x71 */
+	{ "createRsaKeyCoefficients", SC_ASN1_STRUCT, SC_ASN1_CONS | SC_ASN1_APP | 0x11, 0, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+#define C_ASN1_RSA_PUB_COEFFICIENTS_SIZE 3
+static struct sc_asn1_entry c_asn1_create_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE] = {
+	/* tag 0x90 */
+	{ "exponent", SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x10, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x91 */
+	{ "modulus",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x11, SC_ASN1_ALLOC, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
 
 
 struct laser_cka {
@@ -44,6 +62,37 @@ struct laser_cka {
 	unsigned char *val;
 	size_t len;
 };
+
+
+static int
+laser_encode_pubkey_rsa(struct sc_context *ctx, struct sc_pkcs15_pubkey_rsa *key,
+	unsigned char **buf, size_t *buflen)
+{
+	struct sc_asn1_entry asn1_rsa_key[C_ASN1_CREATE_RSA_KEY_SIZE];
+	struct sc_asn1_entry asn1_rsa_pub_coefficients[C_ASN1_RSA_PUB_COEFFICIENTS_SIZE];
+	int r;
+
+	sc_copy_asn1_entry(c_asn1_create_rsa_key, asn1_rsa_key);
+	sc_format_asn1_entry(asn1_rsa_key + 0, asn1_rsa_pub_coefficients, NULL, 1);
+
+	sc_copy_asn1_entry(c_asn1_create_rsa_pub_coefficients, asn1_rsa_pub_coefficients);
+	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 0, key->exponent.data, &key->exponent.len, 1);
+	sc_format_asn1_entry(asn1_rsa_pub_coefficients + 1, key->modulus.data, &key->modulus.len, 1);
+
+	r = sc_asn1_encode(ctx, asn1_rsa_key, buf, buflen);
+	LOG_TEST_RET(ctx, r, "ASN.1 encoding of RSA public key failed");
+
+	return 0;
+}
+
+int
+laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
+	       unsigned char **buf, size_t *len)
+{
+	if (key->algorithm == SC_ALGORITHM_RSA)
+		return laser_encode_pubkey_rsa(ctx, &key->u.rsa, buf, len);
+	return SC_ERROR_NOT_SUPPORTED;
+}
 
 
 static size_t
