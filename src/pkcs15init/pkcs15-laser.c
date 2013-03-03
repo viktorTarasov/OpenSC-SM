@@ -343,9 +343,34 @@ laser_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_prkey *prkey)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_file *file = NULL;
+	struct sc_cardctl_laser_updatekey args;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+        sc_log(ctx, "store key ID %s, path %s", sc_pkcs15_print_id(&key_info->id), sc_print_path(&key_info->path));
+        sc_log(ctx, "store key %i %i %i %i %i %i", prkey->u.rsa.d.len, prkey->u.rsa.p.len,
+			prkey->u.rsa.q.len, prkey->u.rsa.iqmp.len,
+			prkey->u.rsa.dmp1.len, prkey->u.rsa.dmq1.len);
+
+	rv = sc_select_file(p15card->card, &key_info->path, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot store key: select key file failed");
+
+	rv = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_UPDATE);
+	LOG_TEST_RET(ctx, rv, "No authorisation to store private key");
+
+	rv = laser_encode_update_key(ctx, prkey, &args);
+	LOG_TEST_RET(ctx, rv, "Cannot encode key update data");
+
+	sc_log(ctx, "Update data %s", sc_dump_hex(args.data, args.len));
+
+	rv = sc_card_ctl(p15card->card, SC_CARDCTL_ATHENA_UPDATE_KEY, &args);
+	LOG_TEST_RET(ctx, rv, "laser_generate_key() SC_CARDCTL_ATHENA_GENERATE_KEY failed");
+
+	free(args.data);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -392,6 +417,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
+
 
 static int
 laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
@@ -472,7 +498,6 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
-
 
 static int
 laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,

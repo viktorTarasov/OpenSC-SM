@@ -96,6 +96,11 @@ struct sc_cardctl_laser_genkey {
 	size_t modulus_len;
 };
 
+struct sc_cardctl_laser_updatekey {
+	unsigned char *data;
+	size_t len;
+};
+
 int laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
 		unsigned char **buf, size_t *len);
 
@@ -110,4 +115,8 @@ int laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_ob
 		unsigned file_id, unsigned char **out, size_t *out_len);
 int laser_data_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
+
+int laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,
+		struct sc_cardctl_laser_updatekey *update_data);
+
 #endif

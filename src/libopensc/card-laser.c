@@ -855,9 +855,18 @@ static int
 laser_finish(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	if (prv)   {
+		if (prv->last_ko)
+			sc_file_free(prv->last_ko);
+		free(prv);
+	}
+	card->drv_data = NULL;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1390,6 +1399,7 @@ laser_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+
 static int
 laser_generate_key(struct sc_card *card, struct sc_cardctl_laser_genkey *args)
 {
@@ -1447,6 +1457,35 @@ laser_generate_key(struct sc_card *card, struct sc_cardctl_laser_genkey *args)
 
 
 static int
+laser_update_key(struct sc_card *card, struct sc_cardctl_laser_updatekey *args)
+{
+	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
+	struct sc_apdu apdu;
+	unsigned char rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0x00, 0x00);
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.cla = 0x80;
+	apdu.datalen = args->len;
+	apdu.data = args->data;
+	apdu.lc = args->len;
+	apdu.resp = rbuf;
+	apdu.resplen = sizeof(rbuf);
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 {
 	struct sc_context *ctx = card->ctx;
@@ -1457,6 +1496,9 @@ laser_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 	case SC_CARDCTL_ATHENA_GENERATE_KEY:
 		sc_log(ctx, "CMD SC_CARDCTL_ATHENA_GENERATE_KEY");
 		return laser_generate_key(card, (struct sc_cardctl_laser_genkey *) ptr);
+	case SC_CARDCTL_ATHENA_UPDATE_KEY:
+		sc_log(ctx, "SC_CARDCTL_ATHENA_UPDATE_KEY");
+		return laser_update_key(card, (struct sc_cardctl_laser_updatekey *) ptr);
 #if 0
 	case SC_CARDCTL_IASECC_SDO_CREATE:
 		sc_log(ctx, "CMD SC_CARDCTL_IASECC_SDO_CREATE: sdo_class %X", sdo->sdo_class);

@@ -55,6 +55,29 @@ static struct sc_asn1_entry c_asn1_create_rsa_pub_coefficients[C_ASN1_RSA_PUB_CO
 };
 
 
+#define C_ASN1_UPDATE_RSA_KEY_SIZE 2
+static struct sc_asn1_entry c_asn1_update_rsa_key[C_ASN1_UPDATE_RSA_KEY_SIZE] = {
+	/* tag 0x62 */
+	{ "updateRsaKeyCoefficients", SC_ASN1_STRUCT, SC_ASN1_CONS | SC_ASN1_APP | 0x02, 0, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+#define C_ASN1_RSA_PRV_COEFFICIENTS_SIZE 6
+static struct sc_asn1_entry c_asn1_create_rsa_prv_coefficients[C_ASN1_RSA_PRV_COEFFICIENTS_SIZE] = {
+	/* tag 0x90 */
+	{ "exponent", SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x10, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x91 */
+	{ "modulus",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x11, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x92 */
+	{ "privateExponent",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x12, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x93 */
+	{ "privatePrimes",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x13, SC_ASN1_ALLOC, NULL, NULL },
+	/* tag 0x94 */
+	{ "privatePartialPrimes",  SC_ASN1_OCTET_STRING, SC_ASN1_CTX | 0x14, SC_ASN1_ALLOC, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+
 struct laser_cka {
 	unsigned cka;
 	unsigned char internal_cka;
@@ -91,6 +114,62 @@ laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
 {
 	if (key->algorithm == SC_ALGORITHM_RSA)
 		return laser_encode_pubkey_rsa(ctx, &key->u.rsa, buf, len);
+	return SC_ERROR_NOT_SUPPORTED;
+}
+
+
+static int
+laser_encode_prvkey_rsa(struct sc_context *ctx, struct sc_pkcs15_prkey_rsa *key,
+	unsigned char **buf, size_t *buflen)
+{
+	struct sc_asn1_entry asn1_rsa_key[C_ASN1_UPDATE_RSA_KEY_SIZE];
+	struct sc_asn1_entry asn1_rsa_coefficients[C_ASN1_RSA_PRV_COEFFICIENTS_SIZE];
+	unsigned char *primes = NULL, *partial_primes = NULL;
+	size_t primes_len = 0, partial_primes_len = 0;
+	int r;
+
+	primes = malloc(key->p.len + key->q.len);
+	if (!primes)
+		return SC_ERROR_OUT_OF_MEMORY;
+	memcpy(primes, key->p.data, key->p.len);
+	memcpy(primes + key->p.len, key->q.data, key->q.len);
+	primes_len =  key->p.len + key->q.len;
+
+	partial_primes = malloc(key->dmp1.len + key->dmq1.len + key->iqmp.len);
+	if (!partial_primes)
+		return SC_ERROR_OUT_OF_MEMORY;
+	memcpy(partial_primes, key->dmp1.data, key->dmp1.len);
+	memcpy(partial_primes + key->dmp1.len, key->dmq1.data, key->dmq1.len);
+	memcpy(partial_primes + key->dmp1.len + key->dmq1.len, key->iqmp.data, key->iqmp.len);
+	partial_primes_len = key->dmp1.len + key->dmq1.len + key->iqmp.len;
+
+	sc_copy_asn1_entry(c_asn1_update_rsa_key, asn1_rsa_key);
+	sc_format_asn1_entry(asn1_rsa_key + 0, asn1_rsa_coefficients, NULL, 1);
+
+	sc_copy_asn1_entry(c_asn1_create_rsa_prv_coefficients, asn1_rsa_coefficients);
+	sc_format_asn1_entry(asn1_rsa_coefficients + 0, key->exponent.data, &key->exponent.len, 1);
+	sc_format_asn1_entry(asn1_rsa_coefficients + 1, key->modulus.data, &key->modulus.len, 1);
+	sc_format_asn1_entry(asn1_rsa_coefficients + 2, key->d.data, &key->d.len, 1);
+	sc_format_asn1_entry(asn1_rsa_coefficients + 3, primes, &primes_len, 1);
+	sc_format_asn1_entry(asn1_rsa_coefficients + 4, partial_primes, &partial_primes_len, 1);
+
+	//sc_log(ctx, "Encoding modulus '%s'",sc_dump_hex(key->modulus.data, key->modulus.len));
+
+	r = sc_asn1_encode(ctx, asn1_rsa_key, buf, buflen);
+	LOG_TEST_RET(ctx, r, "ASN.1 encoding of RSA private key failed");
+
+	free(primes);
+	free(partial_primes);
+	return SC_SUCCESS;
+}
+
+
+int
+laser_encode_prvkey(struct sc_context *ctx, struct sc_pkcs15_prkey *key,
+	       unsigned char **buf, size_t *len)
+{
+	if (key->algorithm == SC_ALGORITHM_RSA)
+		return laser_encode_prvkey_rsa(ctx, &key->u.rsa, buf, len);
 	return SC_ERROR_NOT_SUPPORTED;
 }
 
@@ -317,14 +396,16 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 		struct sc_pkcs15_object *object, struct sc_pkcs15_pubkey_info *info,
 		unsigned char *data, size_t data_len)
 {
-	struct sc_pkcs15_pubkey_rsa key_rsa;
+	//struct sc_pkcs15_pubkey_rsa key_rsa;
+	struct sc_pkcs15_pubkey pub_key;
 	struct sc_pkcs15_der der;
 	size_t offs, next;
-	int rv = SC_ERROR_INVALID_DATA;
+	int rv = SC_ERROR_INVALID_DATA, have_public_key = 0;
 
 	LOG_FUNC_CALLED(ctx);
 
-	memset(&key_rsa, 0, sizeof(key_rsa));
+	//memset(&key_rsa, 0, sizeof(key_rsa));
+	memset(&pub_key, 0, sizeof(pub_key));
 
 	for (next = offs = 0; offs < data_len; offs = next)   {
 		struct laser_cka attr;
@@ -405,22 +486,24 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 		case CKA_END_DATE:
 			break;
 		case CKA_MODULUS:
+		case CKA_PUBLIC_EXPONENT:
 			rv = _cka_get_blob(&attr, &der);
 			LOG_TEST_RET(ctx, rv, "Cannot get public key modulus");
 
-			key_rsa.modulus.data = der.value;
-			key_rsa.modulus.len = der.len;
+			pub_key.algorithm = SC_ALGORITHM_RSA;
+			if (attr.cka == CKA_MODULUS)  {
+				pub_key.u.rsa.modulus.data = der.value;
+				pub_key.u.rsa.modulus.len = der.len;
+			}
+			else   {
+				pub_key.u.rsa.exponent.data = der.value;
+				pub_key.u.rsa.exponent.len = der.len;
+			}
+			have_public_key = 1;
 			break;
 		case CKA_MODULUS_BITS:
 			rv = _cka_get_unsigned(&attr, &info->modulus_length);
 			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_MODULUS_BITS");
-			break;
-		case CKA_PUBLIC_EXPONENT:
-			rv = _cka_get_blob(&attr, &der);
-			LOG_TEST_RET(ctx, rv, "Cannot get public exponent");
-
-			key_rsa.exponent.data = der.value;
-			key_rsa.exponent.len = der.len;
 			break;
 		case CKA_LOCAL:
 			break;
@@ -435,9 +518,11 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 		}
 	}
 
-	if (key_rsa.exponent.len && key_rsa.modulus.len)   {
-		rv = sc_pkcs15_encode_pubkey_rsa(ctx, &key_rsa, &object->content.value, &object->content.len);
-		LOG_TEST_RET(ctx, rv, "Encode RSA public key content error");
+	if (have_public_key)   {
+		//rv = sc_pkcs15_encode_pubkey_rsa(ctx, &key_rsa, &object->content.value, &object->content.len);
+		rv = sc_pkcs15_encode_pubkey(ctx, &pub_key, &object->content.value, &object->content.len);
+		LOG_TEST_RET(ctx, rv, "Cannot encode public key");
+		sc_pkcs15_erase_pubkey(&pub_key);
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);
@@ -893,6 +978,23 @@ laser_data_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object
 	else   {
 		free(data);
 	}
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
+laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,
+		struct sc_cardctl_laser_updatekey *update)
+{
+	int rv;
+
+	if (!ctx || !prkey || !update)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = laser_encode_prvkey(ctx, prkey, &update->data, &update->len);
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
