@@ -135,8 +135,10 @@ _alloc_ck_string(unsigned char *data, size_t max_len, char **out)
 
 	if (*out != NULL)
 		free(*out);
+
 	*out = strdup(str);
 
+	free(str);
 	return SC_SUCCESS;
 }
 
@@ -510,6 +512,7 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	rv = _parse_fs_data(p15card);
 	LOG_TEST_RET(ctx, rv, "Error while creating 'certificate' objects");
 
+	free(buf);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
