@@ -101,6 +101,8 @@ struct sc_cardctl_laser_updatekey {
 	size_t len;
 };
 
+int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type);
+
 int laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
 		unsigned char **buf, size_t *len);
 
@@ -111,9 +113,11 @@ int laser_attrs_prvkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *o
 int laser_attrs_pubkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
 		struct sc_pkcs15_pubkey_info *info, unsigned char *data, size_t data_len);
 
-int laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+int laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
-int laser_data_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+int laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+		unsigned file_id, unsigned char **out, size_t *out_len);
+int laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
 
 int laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,

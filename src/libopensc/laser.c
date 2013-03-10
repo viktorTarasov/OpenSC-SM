@@ -79,7 +79,7 @@ static struct sc_asn1_entry c_asn1_create_rsa_prv_coefficients[C_ASN1_RSA_PRV_CO
 
 
 struct laser_cka {
-	unsigned cka;
+	unsigned long cka;
 	unsigned char internal_cka;
 
 	unsigned char *val;
@@ -191,7 +191,10 @@ _get_attr(unsigned char *data, size_t length, size_t *in_offs, struct laser_cka 
 	if (offs >= length - 4)
 		return 0;
 
-	attr->cka = *(data + offs + 0) * 0x100 + *(data + offs + 1);
+	if (*(data + offs + 0) == 0x80)
+		attr->cka = CKA_VENDOR_DEFINED + *(data + offs + 1);
+	else
+		attr->cka = *(data + offs + 0) * 0x100 + *(data + offs + 1);
 	attr->internal_cka = *(data + offs + 2);
 	attr->len = *(data + offs + 3) * 0x100 + *(data + offs + 4);
 	attr->val = data + offs + 5;
@@ -519,7 +522,6 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 	}
 
 	if (have_public_key)   {
-		//rv = sc_pkcs15_encode_pubkey_rsa(ctx, &key_rsa, &object->content.value, &object->content.len);
 		rv = sc_pkcs15_encode_pubkey(ctx, &pub_key, &object->content.value, &object->content.len);
 		LOG_TEST_RET(ctx, rv, "Cannot encode public key");
 		sc_pkcs15_erase_pubkey(&pub_key);
@@ -688,7 +690,7 @@ laser_attach_cache_counter(unsigned char **buf, size_t *buf_sz)
 
 
 int
-laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id,
 		unsigned char **out, size_t *out_len)
 {
@@ -838,7 +840,7 @@ laser_data_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object
 
 
 int
-laser_data_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id,
 		unsigned char **out, size_t *out_len)
 {
@@ -958,7 +960,7 @@ laser_data_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_false);
+	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_true);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA public key attribute");
 	attrs_num++;
 
@@ -998,3 +1000,170 @@ laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
+
+
+int
+laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+		unsigned file_id,
+		unsigned char **out, size_t *out_len)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)object->data;
+	unsigned char *data = NULL;
+	size_t data_len = 0, attrs_num = 0;
+	CK_OBJECT_CLASS clazz = CKO_CERTIFICATE;
+	CK_CERTIFICATE_TYPE cert_type = CKC_X_509;
+	CK_BBOOL _true = TRUE, _false = FALSE, *flag;
+	struct sc_pkcs15_cert *cert = NULL;
+	unsigned char sha1[SHA_DIGEST_LENGTH];
+	size_t sha1_offs;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+
+        cert = malloc(sizeof(struct sc_pkcs15_cert));
+	if (!cert)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memset(cert, 0, sizeof(struct sc_pkcs15_cert));
+
+	rv = sc_pkcs15_read_certificate(p15card, info, &cert);
+	LOG_TEST_RET(ctx, rv, "Cannot read/parse X509 certificate");
+
+	data = malloc(7);
+	if (!data)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	data_len = 0;
+	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
+	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
+	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = 0xFF;
+	*(data + data_len++) = 0xFF;
+	*(data + data_len++) = 0xFF;
+
+	memset(sha1, 0, sizeof(sha1));
+	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8013l, SHA_DIGEST_LENGTH, sha1);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
+	attrs_num++;
+	sha1_offs = data_len - SHA_DIGEST_LENGTH;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_TOKEN, sizeof(CK_BBOOL), &_true);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TOKEN certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_PRIVATE, sizeof(CK_BBOOL), &_false);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_VALUE, object->content.len, object->content.value);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_VALUE certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CERTIFICATE_TYPE, sizeof(CK_CERTIFICATE_TYPE), &cert_type);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CERTIFICATE_TYPE certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ISSUER, cert->issuer_len, cert->issuer);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ISSUER certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SERIAL_NUMBER, cert->serial_len, cert->serial);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SERIAL_NUMBER certificate attribute");
+	attrs_num++;
+
+	flag = info->authority ? &_true : &_false;
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_TRUSTED, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TRUSTED certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SUBJECT, cert->subject_len, cert->subject);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ID, info->id.len, info->id.value);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID certificate attribute");
+	attrs_num++;
+
+	flag = object->flags & SC_PKCS15_CO_FLAG_MODIFIABLE ? &_true : &_false;
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_MODIFIABLE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE certificate attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_true);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
+	attrs_num++;
+
+	*(data + 4) = (data_len >> 8) & 0xFF;
+	*(data + 5) = data_len & 0xFF;
+	*(data + 6) = attrs_num;
+
+	SHA1(data, data_len, sha1);
+	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
+
+	rv = laser_attach_cache_counter(&data, &data_len);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
+	attrs_num++;
+
+	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
+	if (out && out_len)    {
+		*out = data;
+		*out_len = data_len;
+	}
+	else   {
+		free(data);
+	}
+
+	if (cert)
+		sc_pkcs15_free_certificate(cert);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
+laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	int idx, ii, jj;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (type == SC_PKCS15_TYPE_CERT_X509)   {
+		struct sc_pkcs15_object *cert_objs[32];
+		int cert_num;
+
+		cert_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_CERT_X509, cert_objs, 32);
+		LOG_TEST_RET(ctx, cert_num, "Failed to get certificate objects");
+
+		for (ii=0; ii<0x100; ii++)   {
+			for (jj=0; jj<cert_num; jj++)   {
+				struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)cert_objs[jj]->data;
+
+				sc_log(ctx, "found certificate %s", sc_print_path(&info->path));
+				if (ii == info->path.value[info->path.len - 1])
+					break;
+			}
+			if (jj == cert_num)
+				break;
+		}
+		idx = ii;
+	}
+	else   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+	LOG_FUNC_RETURN(ctx, idx);
+}
+

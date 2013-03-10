@@ -10,6 +10,8 @@ cardinfo {
 }
 
 pkcs15 {
+    # Put certificates into the CDF itself?
+    direct-certificates = yes;
     # Have a lastUpdate field in the EF(TokenInfo)?
     do-last-update      = no;
 }
@@ -75,10 +77,11 @@ filesystem {
 
 				# Certificate
 				EF Athena-certificate-info  {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, ERASE=NONE;
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					file-id	= 8400;
 				}
 				EF template-certificate {
-					file-id		= 2000;
+					file-id		= 0400;
 					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, ERASE=NONE;
 				}
 

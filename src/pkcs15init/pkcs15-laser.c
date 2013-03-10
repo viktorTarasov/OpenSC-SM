@@ -38,6 +38,7 @@
 
 #define LASER_ATTRS_PRKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PRKEY_RSA)
 #define LASER_ATTRS_PUBKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PUBKEY_RSA)
+#define LASER_ATTRS_CERT_X509 (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_CERT_X509)
 
 static int
 laser_validate_key_reference(int key_reference)
@@ -405,7 +406,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
 
-	rv =  laser_data_prvkey_encode(p15card, object, file->id, &attrs, &attrs_len);
+	rv =  laser_attrs_prvkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode private key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
@@ -439,7 +440,7 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
 
-	rv =  laser_data_pubkey_encode(p15card, object, file->id, &attrs, &attrs_len);
+	rv = laser_attrs_pubkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode public key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
@@ -447,6 +448,43 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update public key attributes file");
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_update_df_create_certificate(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)object->data;
+	struct sc_file *file = NULL;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0;
+	int rv, idx;
+
+	LOG_FUNC_CALLED(ctx);
+
+	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
+	LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+
+	sc_log(ctx, "created certificate attribute file %s", sc_print_path(&file->path));
+
+	rv = laser_attrs_cert_encode(p15card, object, file->id, &attrs, &attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode laser certificate attributes");
+	sc_log(ctx, "laser certificate attributes '%s'", sc_dump_hex(attrs, attrs_len));
+
+	file->size = attrs_len;
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to create/update laser certificate attributes file");
+
+	info->path = file->path;
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -468,7 +506,13 @@ laser_emu_update_df_create(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	case SC_PKCS15_TYPE_PUBKEY_RSA:
 		rv = laser_update_df_create_public_key(profile, p15card, object);
 		break;
+	case SC_PKCS15_TYPE_CERT_X509:
+		rv = laser_update_df_create_certificate(profile, p15card, object);
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -499,6 +543,7 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+
 static int
 laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
@@ -527,6 +572,23 @@ laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 
 
 static int
+laser_update_df_delete_certificate(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)object->data;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &info->path);
+	LOG_TEST_RET(ctx, rv, "Failed to delete certificate attributes file");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -540,6 +602,11 @@ laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	case SC_PKCS15_TYPE_PUBKEY_RSA:
 		rv = laser_update_df_delete_public_key(profile, p15card, object);
 		break;
+	case SC_PKCS15_TYPE_CERT_X509:
+		rv = laser_update_df_delete_certificate(profile, p15card, object);
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
 	LOG_FUNC_RETURN(ctx, rv);
 }
