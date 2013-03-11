@@ -239,6 +239,39 @@ _cka_set_label(struct laser_cka *attr, struct sc_pkcs15_object *obj)
 
 
 static int
+_cka_set_application(struct laser_cka *attr, struct sc_pkcs15_data_info *info)
+{
+	size_t len;
+
+	if (!attr || !info)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	memset(info->app_label, 0, sizeof(info->app_label));
+	len = (attr->len < sizeof(info->app_label) - 1) ? attr->len : sizeof(info->app_label) - 1;
+	if (len)
+		memcpy(info->app_label, attr->val, len);
+
+	return SC_SUCCESS;
+}
+
+
+static int
+_cka_get_object_id(struct laser_cka *attr, struct sc_pkcs15_data_info *info)
+{
+	int ii;
+
+	for (ii = 0; ii < SC_MAX_OBJECT_ID_OCTETS; ii++)   {
+		if (ii*sizeof(int) < attr->len)
+			info->app_oid.value[ii] = *((int *)(attr->val + ii*sizeof(int)));
+		else
+			info->app_oid.value[ii] = -1;
+	}
+
+	return SC_SUCCESS;
+}
+
+
+static int
 _cka_get_blob(struct laser_cka *attr, struct sc_pkcs15_der *out)
 {
 	struct sc_pkcs15_der der;
@@ -664,6 +697,81 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
+laser_attrs_data_object_decode(struct sc_context *ctx,
+		struct sc_pkcs15_object *object, struct sc_pkcs15_data_info *info,
+		unsigned char *data, size_t data_len)
+{
+	size_t offs, next;
+	int rv = SC_ERROR_INVALID_DATA;
+
+	LOG_FUNC_CALLED(ctx);
+
+	sc_log(ctx, "DATA object path %s", sc_print_path(&info->path));
+	for (next = offs = 0; offs < data_len; offs = next)   {
+		struct laser_cka attr;
+		unsigned uval;
+
+		rv = _get_attr(data, data_len, &next, &attr);
+		LOG_TEST_RET(ctx, rv, "parsing error of laser object's attribute");
+		if (next == offs)
+			break;
+		sc_log(ctx, "Attribute(%X) to parse '%s'", attr.cka, sc_dump_hex(attr.val, attr.len));
+
+		switch (attr.cka)   {
+		case CKA_CLASS:
+			rv = _cka_get_unsigned(&attr, &uval);
+			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_CLASS");
+			if (uval != CKO_DATA)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid CKA_CLASS");
+			break;
+		case CKA_TOKEN:
+			if (*attr.val == 0)
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Has to be token object");
+			break;
+		case CKA_PRIVATE:
+			if (*attr.val)
+				object->flags |= SC_PKCS15_CO_FLAG_PRIVATE;
+			break;
+		case CKA_LABEL:
+			rv = _cka_set_label(&attr, object);
+			LOG_TEST_RET(ctx, rv, "Cannot set data object label");
+			break;
+		case CKA_APPLICATION:
+			rv = _cka_set_application(&attr, info);
+			LOG_TEST_RET(ctx, rv, "Cannot set data object application label");
+			break;
+		case CKA_VALUE:
+			rv = _cka_get_blob(&attr, &info->data);
+			LOG_TEST_RET(ctx, rv, "Cannot set data object object value");
+			break;
+		case CKA_OBJECT_ID:
+			rv = _cka_get_object_id(&attr, info);
+			LOG_TEST_RET(ctx, rv, "Cannot set data object ID");
+			break;
+		case CKA_MODIFIABLE:
+			if (*attr.val)
+				object->flags |= SC_PKCS15_CO_FLAG_MODIFIABLE;
+			break;
+		}
+	}
+
+	sc_log(ctx, "DATA object path %s", sc_print_path(&info->path));
+	if (info->path.len)   {
+		unsigned file_id = info->path.value[info->path.len - 2] * 0x100 + info->path.value[info->path.len - 1];
+
+		if (file_id == LASER_FID_CMAPFILE)   {
+			if (!strlen(info->app_label))
+				strncpy(info->app_label, "CSP",sizeof(info->app_label) - 1);
+			if (!strlen(object->label))
+				strncpy(object->label, "cmapfile", sizeof(object->label) - 1);
+		}
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

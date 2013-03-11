@@ -396,6 +396,42 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 
 static int
+_create_data_object(struct sc_pkcs15_card * p15card, unsigned file_id)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object obj;
+	struct sc_pkcs15_data_info info;
+	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
+	unsigned char *data = NULL;
+	size_t len;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&info, 0, sizeof(info));
+	memset(&obj, 0, sizeof(obj));
+
+	sc_format_path(PATH_PUBLICDIR, &info.path);
+	sc_append_path_id(&info.path, fid, sizeof(fid));
+
+	rv = sc_pkcs15_read_file(p15card, &info.path, &data, &len);
+	LOG_TEST_RET(ctx, rv, "Error while getting file content.");
+
+	if (len < 11)	/* header 7 bytes, tail 4 bytes */
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "data object file is too short");
+
+	rv = laser_attrs_data_object_decode(ctx, &obj, &info, data + 7, len - 11);
+	LOG_TEST_RET(ctx, rv, "Decode data object error.");
+
+	rv = sc_pkcs15emu_add_data_object(p15card, &obj, &info);
+	LOG_TEST_RET(ctx, rv, "Failed to emu-add data object");
+
+	free(data);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 _parse_fs_data(struct sc_pkcs15_card * p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -431,6 +467,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 
 			fid = *(buf + ii*2) * 0x100 + *(buf + ii*2 + 1);
 			type = _laser_type(fid);
+			sc_log(ctx, "parse FID:%04X, type:0x%04X", fid, type);
 			switch (type)   {
 			case LASER_TYPE_KX_PRVKEY:
 				sc_log(ctx, "parse private key attributes FID:%04X", fid);
@@ -446,6 +483,11 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 				sc_log(ctx, "parse public key attributes FID:%04X", fid);
 				rv = _create_pubkey(p15card, fid);
 				LOG_TEST_RET(ctx, rv, "Cannot create public key PKCS#15 object");
+				break;
+			case LASER_TYPE_KX_DATA:
+				sc_log(ctx, "parse data object attributes FID:%04X", fid);
+				rv = _create_data_object(p15card, fid);
+				LOG_TEST_RET(ctx, rv, "Cannot create data PKCS#15 object");
 				break;
 			default:
 				break;

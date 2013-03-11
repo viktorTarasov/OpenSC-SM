@@ -56,6 +56,8 @@
 #define LASER_FILE_DESCRIPTOR_DO	0x39
 #define LASER_FILE_DESCRIPTOR_KO	0x08
 
+#define LASER_FID_CMAPFILE	0x867F
+
 #define LASER_KO_DATA_TAG_RSA	0x71
 
 #define LASER_PIV_ALGO_RSA_1024		0x06
@@ -120,12 +122,16 @@ int laser_attrs_prvkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *o
 		struct sc_pkcs15_prkey_info *info, unsigned char *data, size_t data_len);
 int laser_attrs_pubkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
 		struct sc_pkcs15_pubkey_info *info, unsigned char *data, size_t data_len);
+int laser_attrs_data_object_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
+		struct sc_pkcs15_data_info *info, unsigned char *data, size_t data_len);
 
 int laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
 int laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
 int laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+		unsigned file_id, unsigned char **out, size_t *out_len);
+int laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
 
 int laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,

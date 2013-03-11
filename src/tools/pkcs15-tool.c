@@ -319,7 +319,7 @@ list_data_object(const char *kind, const unsigned char *data, size_t data_len)
 	printf("%s", title);
 	memset(title, ' ', strlen(title));
 	for (i = 0; i < data_len; i++)   {
-		if (i && !(i%48))
+		if ((i!=0 || data_len > 48) && !(i%48))
 			printf("\n%s", title);
 		printf("%02X", data[i]);
 	}
