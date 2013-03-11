@@ -288,7 +288,10 @@ laser_add_attribute(unsigned char **buf, size_t *buf_sz, unsigned char flags,
 		return SC_ERROR_OUT_OF_MEMORY;
 
 	offs = *buf_sz;
-	*(ptr + offs++) = (cka >> 8) & 0xFF;		/* cka type: 2 LSBs */
+	if (cka & CKA_VENDOR_DEFINED)
+		*(ptr + offs++) = (cka >> 24) & 0xFF;		/* cka type: MSB | LSB */
+	else
+		*(ptr + offs++) = (cka >> 8) & 0xFF;		/* cka type: 2 LSBs */
 	*(ptr + offs++) = cka & 0xFF;
 	*(ptr + offs++) = flags;
 	*(ptr + offs++) = (cka_len >> 8) & 0xFF;	/* cka length: 2 bytes*/
@@ -665,7 +668,7 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 
 
 static int
-laser_attach_cache_counter(unsigned char **buf, size_t *buf_sz)
+laser_attach_cache_stamp(unsigned char **buf, size_t *buf_sz)
 {
 	unsigned char *ptr = NULL;
 	unsigned rand_val;
@@ -731,7 +734,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_LABEL, strlen(object->label), object->label);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL private key attribute");
 	attrs_num++;
 
@@ -739,16 +742,16 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SUBJECT, info->subject.len, info->subject.value);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_SUBJECT, info->subject.len, info->subject.value);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ID, info->id.len, info->id.value);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_ID, info->id.len, info->id.value);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID private key attribute");
 	attrs_num++;
 
 	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_SENSITIVE ? &_true : &_false;
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SENSITIVE, sizeof(CK_BBOOL), flag);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE_TO_TRUE, CKA_SENSITIVE, sizeof(CK_BBOOL), flag);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SENSITIVE private key attribute");
 	attrs_num++;
 
@@ -773,20 +776,20 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	attrs_num++;
 
 	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DERIVE ? &_true : &_false;
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_DERIVE, sizeof(CK_BBOOL), flag);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_DERIVE, sizeof(CK_BBOOL), flag);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DERIVE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_START_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_START_DATE, sizeof(CK_DATE), NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_DATE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_END_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_END_DATE, sizeof(CK_DATE), NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_END private key attribute");
 	attrs_num++;
 
 	flag = info->access_flags & SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE ? &_true : &_false;
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_EXTRACTABLE, sizeof(CK_BBOOL), flag);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE_TO_FALSE, CKA_EXTRACTABLE, sizeof(CK_BBOOL), flag);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_EXTRACTABLE private key attribute");
 	attrs_num++;
 
@@ -814,7 +817,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_false);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ATHENA, sizeof(CK_BBOOL), &_false);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA private key attribute");
 	attrs_num++;
 
@@ -822,8 +825,8 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_counter(&data, &data_len);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA private key attribute");
+	rv = laser_attach_cache_stamp(&data, &data_len);
+	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
@@ -885,11 +888,11 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_LABEL, strlen(object->label), object->label);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_TRUSTED, sizeof(CK_BBOOL), &_false);
+	rv = laser_add_attribute(&data, &data_len, CKFP_ONLY_SO_CAN_SET | CKFP_MODIFIABLE_TO_TRUE, CKA_TRUSTED, sizeof(CK_BBOOL), &_false);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TRUSTED public key attribute");
 	attrs_num++;
 
@@ -897,11 +900,11 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SUBJECT, info->subject.len, info->subject.value);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_SUBJECT, info->subject.len, info->subject.value);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ID, info->id.len, info->id.value);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_ID, info->id.len, info->id.value);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID public key attribute");
 	attrs_num++;
 
@@ -926,15 +929,15 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	attrs_num++;
 
 	flag = info->usage & SC_PKCS15_PRKEY_USAGE_DERIVE ? &_true : &_false;
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_DERIVE, sizeof(CK_BBOOL), flag);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_DERIVE, sizeof(CK_BBOOL), flag);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DERIVE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_START_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_START_DATE, sizeof(CK_DATE), NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_DATE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_END_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_END_DATE, sizeof(CK_DATE), NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_END public key attribute");
 	attrs_num++;
 
@@ -960,7 +963,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_true);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ATHENA, sizeof(CK_BBOOL), &_true);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA public key attribute");
 	attrs_num++;
 
@@ -968,8 +971,8 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_counter(&data, &data_len);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA public key attribute");
+	rv = laser_attach_cache_stamp(&data, &data_len);
+	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
@@ -1043,14 +1046,10 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	*(data + data_len++) = 0xFF;
 
 	memset(sha1, 0, sizeof(sha1));
-	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8013l, SHA_DIGEST_LENGTH, sha1);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_CERT_HASH, SHA_DIGEST_LENGTH, sha1);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
 	attrs_num++;
 	sha1_offs = data_len - SHA_DIGEST_LENGTH;
-
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL certificate attribute");
-	attrs_num++;
 
 	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS certificate attribute");
@@ -1064,7 +1063,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_LABEL, strlen(object->label), object->label);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_LABEL, strlen(object->label), object->label);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL certificate attribute");
 	attrs_num++;
 
@@ -1076,16 +1075,16 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CERTIFICATE_TYPE certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ISSUER, cert->issuer_len, cert->issuer);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_ISSUER, cert->issuer_len, cert->issuer);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ISSUER certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_SERIAL_NUMBER, cert->serial_len, cert->serial);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_SERIAL_NUMBER, cert->serial_len, cert->serial);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SERIAL_NUMBER certificate attribute");
 	attrs_num++;
 
 	flag = info->authority ? &_true : &_false;
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_TRUSTED, sizeof(CK_BBOOL), flag);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE_TO_FALSE, CKA_TRUSTED, sizeof(CK_BBOOL), flag);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TRUSTED certificate attribute");
 	attrs_num++;
 
@@ -1093,7 +1092,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_SUBJECT certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ID, info->id.len, info->id.value);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_ID, info->id.len, info->id.value);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ID certificate attribute");
 	attrs_num++;
 
@@ -1102,7 +1101,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, 0x8010l, sizeof(CK_BBOOL), &_true);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ATHENA, sizeof(CK_BBOOL), &_true);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
 	attrs_num++;
 
@@ -1113,8 +1112,8 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	SHA1(data, data_len, sha1);
 	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
 
-	rv = laser_attach_cache_counter(&data, &data_len);
-	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA certificate attribute");
+	rv = laser_attach_cache_stamp(&data, &data_len);
+	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));

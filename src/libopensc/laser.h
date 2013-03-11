@@ -84,7 +84,15 @@
 #define LASER_FS_ATTR_REF_MIN	0x00
 #define LASER_FS_ATTR_REF_MAX	0x1D
 
-#define CKA_ATHENA	0x80000010
+#define CKA_ATHENA	0x80000010l
+#define CKA_CERT_HASH	0x80000013l
+
+#define CKFP_CANNOT_REVEAL		0x01l
+#define CKFP_ONLY_SO_CAN_SET		0x02l
+#define CKFP_READ_ONLY			0x04l
+#define CKFP_MODIFIABLE			0x10l
+#define CKFP_MODIFIABLE_TO_TRUE		0x30l
+#define CKFP_MODIFIABLE_TO_FALSE	0x50l
 
 struct sc_cardctl_laser_genkey {
 	unsigned char algorithm;
