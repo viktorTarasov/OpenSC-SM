@@ -76,13 +76,9 @@ filesystem {
 				size		= 80;
 
 				# Certificate
-				EF Athena-certificate-info  {
+				EF laser-certificate-attributes  {
 					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
-					file-id	= 8400;
-				}
-				EF template-certificate {
-					file-id		= 0400;
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, ERASE=NONE;
+					file-id	= 0400;
 				}
 
 				#Public Key
@@ -95,6 +91,12 @@ filesystem {
 					type	= internal-ef;
 					ACL	= *=NONE;
 					ACL	= UPDATE=NEVER, ADMIN=NEVER;
+				}
+
+				#Public DATA object
+				EF laser-public-data-attributes {
+					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
+					file-id	= 0640;
 				}
 			}
 

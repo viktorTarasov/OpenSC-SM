@@ -1240,37 +1240,136 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 
 
 int
-laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
+laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
+		unsigned file_id,
+		unsigned char **out, size_t *out_len)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	int idx, ii, jj;
+	struct sc_pkcs15_data_info *info = (struct sc_pkcs15_data_info *)object->data;
+	unsigned char *data = NULL;
+	size_t data_len = 0, attrs_num = 0;
+	CK_OBJECT_CLASS clazz = CKO_DATA;
+	CK_BBOOL _true = TRUE, _false = FALSE, *flag;
+	unsigned char sha1[SHA_DIGEST_LENGTH];
+	size_t sha1_offs;
+	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
 
-	if (type == SC_PKCS15_TYPE_CERT_X509)   {
-		struct sc_pkcs15_object *cert_objs[32];
-		int cert_num;
+	data = malloc(7);
+	if (!data)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-		cert_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_CERT_X509, cert_objs, 32);
-		LOG_TEST_RET(ctx, cert_num, "Failed to get certificate objects");
+	data_len = 0;
+	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
+	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
+	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = 0xFF;
+	*(data + data_len++) = 0xFF;
+	*(data + data_len++) = 0xFF;
 
-		for (ii=0; ii<0x100; ii++)   {
-			for (jj=0; jj<cert_num; jj++)   {
-				struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)cert_objs[jj]->data;
+	memset(sha1, 0, sizeof(sha1));
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_CERT_HASH, SHA_DIGEST_LENGTH, sha1);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA DATA object attribute");
+	attrs_num++;
+	sha1_offs = data_len - SHA_DIGEST_LENGTH;
 
-				sc_log(ctx, "found certificate %s", sc_print_path(&info->path));
-				if (ii == info->path.value[info->path.len - 1])
-					break;
-			}
-			if (jj == cert_num)
-				break;
-		}
-		idx = ii;
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_TOKEN, sizeof(CK_BBOOL), &_true);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TOKEN DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_PRIVATE, sizeof(CK_BBOOL), &_false);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_PRIVATE DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_LABEL, strlen(object->label), object->label);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_APPLICATION, strlen(info->app_label), info->app_label);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_VALUE, info->data.len, info->data.value);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_VALUE DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_OBJECT_ID,
+			sizeof(info->app_oid), (unsigned char *)(&info->app_oid.value[0]));
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_OBJECT_ID DATA object attribute");
+	attrs_num++;
+
+	flag = object->flags & SC_PKCS15_CO_FLAG_MODIFIABLE ? &_true : &_false;
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_MODIFIABLE, sizeof(CK_BBOOL), flag);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODIFIABLE DATA object attribute");
+	attrs_num++;
+
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_ATHENA, sizeof(CK_BBOOL), &_false);
+	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ATHENA DATA object attribute");
+	attrs_num++;
+
+	*(data + 4) = (data_len >> 8) & 0xFF;
+	*(data + 5) = data_len & 0xFF;
+	*(data + 6) = attrs_num;
+
+	SHA1(data, data_len, sha1);
+	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
+
+	rv = laser_attach_cache_stamp(&data, &data_len);
+	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
+	attrs_num++;
+
+	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
+	if (out && out_len)    {
+		*out = data;
+		*out_len = data_len;
 	}
 	else   {
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+		free(data);
 	}
 
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
+laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object *objs[32];
+	struct sc_path path;
+	int objs_num, idx, ii, jj;
+
+	LOG_FUNC_CALLED(ctx);
+
+	objs_num = sc_pkcs15_get_objects(p15card, type, objs, 32);
+	LOG_TEST_RET(ctx, objs_num, "Failed to get objects");
+
+	sc_log(ctx, "found %i objects of type %X", objs_num, type);
+	for (ii=0; ii<0x100; ii++)   {
+		for (jj=0; jj<objs_num; jj++)   {
+			if (type == SC_PKCS15_TYPE_CERT_X509)
+				path = ((struct sc_pkcs15_cert_info *)objs[jj]->data)->path;
+			else if (type == SC_PKCS15_TYPE_DATA_OBJECT)
+				path = ((struct sc_pkcs15_data_info *)objs[jj]->data)->path;
+			else
+				LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+			sc_log(ctx, "object(type:%X) path %s", type, sc_print_path(&path));
+			if (ii == (path.value[path.len - 1] & LASER_FS_REF_MASK))
+				break;
+		}
+		if (jj == objs_num)
+			break;
+	}
+	idx = ii;
+
+	sc_log(ctx, "return free index %i", idx);
 	LOG_FUNC_RETURN(ctx, idx);
 }
 
