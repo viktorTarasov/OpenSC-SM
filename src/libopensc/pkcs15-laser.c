@@ -35,11 +35,12 @@
 #include "pkcs11/pkcs11.h"
 #include "common/compat_strlcpy.h"
 
-#define PATH_TOKENINFO	"3F003000C000"
-#define PATH_PUBLICDIR	"3F0030003001"
-#define PATH_PRIVATEDIR	"3F0030003002"
-#define PATH_USERPIN	"3F000020"
-#define PATH_SOPIN	"3F000010"
+#define PATH_APPLICATION	"3F003000"
+#define PATH_TOKENINFO		"3F003000C000"
+#define PATH_PUBLICDIR		"3F0030003001"
+#define PATH_PRIVATEDIR		"3F0030003002"
+#define PATH_USERPIN		"3F000020"
+#define PATH_SOPIN		"3F000010"
 
 #define AUTH_ID_PIN	0x20
 #define AUTH_ID_SOPIN	0x10
@@ -148,9 +149,12 @@ static int
 _create_application(struct sc_pkcs15_card * p15card,
 		char *label, char *aid_str, char *path_str)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
-	struct sc_context *ctx = card->ctx;
 	struct sc_app_info *app = NULL;
+	struct sc_file *app_file = NULL;
+	struct sc_path app_path;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -169,6 +173,14 @@ _create_application(struct sc_pkcs15_card * p15card,
 
 	card->app[card->app_count] = app;
 	card->app_count++;
+
+	if (p15card->file_app)
+		free(p15card->file_app);
+	sc_format_path(PATH_APPLICATION, &app_path);
+	rv = sc_select_file(card, &app_path, &app_file);
+	LOG_TEST_RET(ctx, rv, "Cannot application path");
+
+	p15card->file_app = app_file;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
