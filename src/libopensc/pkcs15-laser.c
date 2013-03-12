@@ -542,8 +542,10 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	p15card->tokeninfo->version = 0;
 	p15card->tokeninfo->flags = ck_ti->flags;
 
+#if 0
 	rv = _create_application(p15card, "Athena LASER", "A0000001644C415345520001", "3F00");
 	LOG_TEST_RET(ctx, rv, "Cannot create application");
+#endif
 
 	rv = _create_pin(p15card, "User PIN", PATH_USERPIN, AUTH_ID_PIN, 0);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'User PIN' object");
