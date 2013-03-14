@@ -126,7 +126,7 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 	unsigned file_descriptor = 0x01;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "laser_new_file() type %X; num %i",type, num);
+	sc_log(ctx, "laser_new_file() type 0x%X; num %i",type, num);
 	while (1) {
 		switch (type) {
 		case SC_PKCS15_TYPE_PRKEY_RSA:
@@ -439,6 +439,11 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 
 	file->size = attrs_len;
 
+	/* TODO: implement Laser's 'resize' file */
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	if (rv != SC_ERROR_FILE_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot delete private key attributes");
+
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update private key attributes file");
 
@@ -473,6 +478,11 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
 	file->size = attrs_len;
+
+	/* TODO: implement Laser's 'resize' file */
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	if (rv != SC_ERROR_FILE_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot delete public key attributes");
 
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update public key attributes file");
