@@ -1343,22 +1343,43 @@ laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *objs[32];
 	struct sc_path path;
-	int objs_num, idx, ii, jj;
+	int objs_num, idx, ii, jj, min, max;
 
 	LOG_FUNC_CALLED(ctx);
 
 	objs_num = sc_pkcs15_get_objects(p15card, type, objs, 32);
 	LOG_TEST_RET(ctx, objs_num, "Failed to get objects");
 
+	switch (type & SC_PKCS15_TYPE_CLASS_MASK)   {
+	case SC_PKCS15_TYPE_PRKEY:
+		min = LASER_FS_KEY_REF_MIN, max = LASER_FS_KEY_REF_MAX;
+		break;
+	case SC_PKCS15_TYPE_CERT:
+		min = 0, max = 0xFF;
+		break;
+	case SC_PKCS15_TYPE_DATA_OBJECT:
+		min = 0, max = 0xFF;
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
 	sc_log(ctx, "found %i objects of type %X", objs_num, type);
-	for (ii=0; ii<0x100; ii++)   {
+	for (ii = min; ii <= max; ii++)   {
 		for (jj=0; jj<objs_num; jj++)   {
-			if (type == SC_PKCS15_TYPE_CERT_X509)
+			switch (type & SC_PKCS15_TYPE_CLASS_MASK)   {
+			case SC_PKCS15_TYPE_CERT:
 				path = ((struct sc_pkcs15_cert_info *)objs[jj]->data)->path;
-			else if (type == SC_PKCS15_TYPE_DATA_OBJECT)
+				break;
+			case SC_PKCS15_TYPE_PRKEY:
+				path = ((struct sc_pkcs15_prkey_info *)objs[jj]->data)->path;
+				break;
+			case SC_PKCS15_TYPE_DATA_OBJECT:
 				path = ((struct sc_pkcs15_data_info *)objs[jj]->data)->path;
-			else
+				break;
+			default:
 				LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+			}
 
 			sc_log(ctx, "object(type:%X) path %s", type, sc_print_path(&path));
 			if (ii == (path.value[path.len - 1] & LASER_FS_REF_MASK))
@@ -1367,8 +1388,10 @@ laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
 		if (jj == objs_num)
 			break;
 	}
-	idx = ii;
+	if (ii > max)
+		LOG_TEST_RET(ctx, SC_ERROR_TOO_MANY_OBJECTS, "No more free object index");
 
+	idx = ii;
 	sc_log(ctx, "return free index %i", idx);
 	LOG_FUNC_RETURN(ctx, idx);
 }

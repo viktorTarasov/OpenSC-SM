@@ -797,6 +797,7 @@ laser_create_file(struct sc_card *card, struct sc_file *file)
 
 	LOG_FUNC_CALLED(ctx);
 	sc_print_cache(card);
+	sc_log(ctx, "create file (type:%i, ID:0x%X, path:%s)", file->type, file->id, sc_print_path(&file->path));
 
 	fcp_len = laser_fcp_encode(card, file, fcp, sizeof(fcp));
 	LOG_TEST_RET(ctx, fcp_len, "FCP encode error");
