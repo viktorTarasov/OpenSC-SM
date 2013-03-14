@@ -670,8 +670,6 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 
 	LOG_FUNC_CALLED(ctx);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
@@ -680,10 +678,11 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
 
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
-	LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
+	if (rv != SC_ERROR_FILE_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
 
 	sc_file_free(file);
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -699,8 +698,6 @@ laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 
 	LOG_FUNC_CALLED(ctx);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
@@ -709,10 +706,11 @@ laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
 
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
-	LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
+	if (rv != SC_ERROR_FILE_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to delete public key attributes file");
 
 	sc_file_free(file);
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
