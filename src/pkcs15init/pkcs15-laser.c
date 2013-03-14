@@ -201,6 +201,27 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+/*
+ * Select private key reference
+ */
+static int
+laser_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_prkey_info *key_info)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	int rv;
+
+	rv = laser_get_free_index(p15card, SC_PKCS15_TYPE_PRKEY);
+	LOG_TEST_RET(ctx, rv, "Cannot get free key reference number");
+
+	key_info->key_reference = rv | LASER_FS_BASEFID_PRVKEY;
+
+	sc_log(ctx, "return selected key reference 0x%X", key_info->key_reference);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 /*
  * Create private key file
  */
@@ -218,14 +239,13 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 	if (object->type != SC_PKCS15_TYPE_PRKEY_RSA)
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create key failed: RSA only supported");
 
-	sc_log(ctx, "create private key(type:%X) ID:%s", object->type, sc_pkcs15_print_id(&key_info->id));
+	sc_log(ctx, "create private key(type:%X) ID:%s key-ref:0x%X", object->type, sc_pkcs15_print_id(&key_info->id), key_info->key_reference);
 	/* Here, the path of private key file should be defined.
 	 * Neverthelles, we need to instanciate private key to get the ACLs. */
 	rv = laser_new_file(profile, p15card->card, object->type, key_info->key_reference, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot create private key: failed to allocate new key object");
 
 	file->size = key_info->modulus_length / 8;
-	memcpy(&file->path, &key_info->path, sizeof(file->path));
 
 	file->prop_attr = calloc(1, 5);
 	if (!file->prop_attr)
@@ -409,6 +429,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
 
+	sc_log(ctx, "Private key attributes file reference 0x%X", attrs_ref);
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
 
@@ -443,6 +464,7 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
 
+	sc_log(ctx, "Public key attributes file reference 0x%X", attrs_ref);
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PUBKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate public key attributes file");
 
@@ -461,6 +483,66 @@ laser_update_df_create_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 
 
 static int
+laser_need_update(struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object, int *need_update)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *file = NULL;
+	struct sc_path *path = NULL;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0;
+	int rv;
+	unsigned char sha1[SHA_DIGEST_LENGTH];
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!need_update)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	*need_update = 1;
+
+	switch (object->type & SC_PKCS15_TYPE_CLASS_MASK)   {
+	case SC_PKCS15_TYPE_CERT:
+		path = &((struct sc_pkcs15_cert_info *)object->data)->path;
+		break;
+	case SC_PKCS15_TYPE_DATA_OBJECT:
+		path = &((struct sc_pkcs15_data_info *)object->data)->path;
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+	sc_log(ctx, "check laser attribute file's 'update' status; path %s", sc_print_path(path));
+
+	rv = sc_select_file(p15card->card, path, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot select laser attributes file");
+
+	rv = sc_read_binary(p15card->card, 0x0C, sha1, SHA_DIGEST_LENGTH, 0);
+	LOG_TEST_RET(ctx, rv, "Cannot read current checksum");
+	if (rv != SHA_DIGEST_LENGTH)
+		LOG_TEST_RET(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED, "Invalid size of current checksum");
+
+	switch (object->type & SC_PKCS15_TYPE_CLASS_MASK)   {
+	case SC_PKCS15_TYPE_CERT:
+		rv = laser_attrs_cert_encode(p15card, object, file->id, &attrs, &attrs_len);
+		LOG_TEST_RET(ctx, rv, "Failed to encode laser certificate attributes");
+		break;
+	case SC_PKCS15_TYPE_DATA_OBJECT:
+		rv = laser_attrs_data_object_encode(p15card, object, file->id, &attrs, &attrs_len);
+		LOG_TEST_RET(ctx, rv, "Failed to encode laser DATA attributes");
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+	*need_update = memcmp(sha1, attrs + 0x0C, SHA_DIGEST_LENGTH) ? 1 : 0;
+
+	if (file)
+		sc_file_free(file);
+	sc_log(ctx, "returns 'need-update' status %s", *need_update ? "yes" : "no");
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_update_df_create_certificate(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
 {
@@ -469,28 +551,35 @@ laser_update_df_create_certificate(struct sc_profile *profile, struct sc_pkcs15_
 	struct sc_file *file = NULL;
 	unsigned char *attrs = NULL;
 	size_t attrs_len = 0;
-	int rv, idx;
+	int rv, need_update;
 
 	LOG_FUNC_CALLED(ctx);
 
-	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
-	LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
+	sc_log(ctx, "create certificate attribute file %s", sc_print_path(&info->path));
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
-	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+	rv = laser_need_update(p15card, object, &need_update);
+	LOG_TEST_RET(ctx, rv, "Failed to get 'need-update' status of certificate data");
 
-	sc_log(ctx, "create certificate attribute file %s", sc_print_path(&file->path));
+	if (!need_update)   {
+		sc_log(ctx, "No need to update Laser CDF");
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+	rv = sc_select_file(p15card->card, &info->path, &file);
+	LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot select laser certificate file");
 
 	rv = laser_attrs_cert_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode laser certificate attributes");
-	sc_log(ctx, "laser certificate attributes '%s'", sc_dump_hex(attrs, attrs_len));
+	sc_log(ctx, "update laser certificate attributes '%s'", sc_dump_hex(attrs, attrs_len));
 
 	file->size = attrs_len;
 
-	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
-	LOG_TEST_RET(ctx, rv, "Failed to create/update laser certificate attributes file");
+	/* TODO: implement Laser's 'resize' file */
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot delete laser certificate");
 
-	info->path = file->path;
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to update laser certificate attributes file");
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -506,28 +595,34 @@ laser_update_df_create_data_object(struct sc_profile *profile, struct sc_pkcs15_
 	struct sc_file *file = NULL;
 	unsigned char *attrs = NULL;
 	size_t attrs_len = 0;
-	int rv, idx;
+	int rv, need_update;
 
 	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "create update DF for DATA file %s", sc_print_path(&info->path));
 
-	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_DATA_OBJECT);
-	LOG_TEST_RET(ctx, idx, "Cannot get free DATA object index");
+	rv = laser_need_update(p15card, object, &need_update);
+	LOG_TEST_RET(ctx, rv, "Failed to get 'need-update' status of DATA object");
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_DATA_OBJECT, idx, &file);
-	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser DATA object attributes file");
+	if (!need_update)   {
+		sc_log(ctx, "No need to update Laser DataDF");
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
 
-	sc_log(ctx, "create DATA object attribute file %s", sc_print_path(&file->path));
+	rv = sc_select_file(p15card->card, &info->path, &file);
+	LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot select laser DATA file");
 
 	rv = laser_attrs_data_object_encode(p15card, object, file->id, &attrs, &attrs_len);
-	LOG_TEST_RET(ctx, rv, "Failed to encode laser DATA object attributes");
-	sc_log(ctx, "laser DATA object attributes '%s'", sc_dump_hex(attrs, attrs_len));
+	LOG_TEST_RET(ctx, rv, "Failed to encode laser DATA attributes");
+	sc_log(ctx, "update laser DATA attributes '%s'", sc_dump_hex(attrs, attrs_len));
 
 	file->size = attrs_len;
 
-	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
-	LOG_TEST_RET(ctx, rv, "Failed to create/update laser DATA object attributes file");
+	/* TODO: implement Laser's 'resize' file */
+	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
+	LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot delete laser DATA");
 
-	info->path = file->path;
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to update laser DATA attributes file");
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -575,6 +670,8 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 
 	LOG_FUNC_CALLED(ctx);
 
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
@@ -602,6 +699,8 @@ laser_update_df_delete_public_key(struct sc_profile *profile, struct sc_pkcs15_c
 
 	LOG_FUNC_CALLED(ctx);
 
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
@@ -628,9 +727,10 @@ laser_update_df_delete_certificate(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_FUNC_CALLED(ctx);
 
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &info->path);
-	LOG_TEST_RET(ctx, rv, "Failed to delete certificate attributes file");
+	if (rv != SC_ERROR_FILE_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to delete certificate attributes file");
 
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -816,17 +916,78 @@ laser_emu_store_pubkey(struct sc_pkcs15_card *p15card,
 
 
 static int
+laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
+		struct sc_profile *profile, struct sc_pkcs15_object *object,
+		struct sc_pkcs15_der *data, struct sc_path *path)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)object->data;
+	struct sc_file *file = NULL;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0;
+	int rv, idx;
+
+	LOG_FUNC_CALLED(ctx);
+
+	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
+	LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+
+	sc_log(ctx, "create certificate attribute file %s", sc_print_path(&file->path));
+
+	rv = laser_attrs_cert_encode(p15card, object, file->id, &attrs, &attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode laser certificate attributes");
+	sc_log(ctx, "laser certificate attributes '%s'", sc_dump_hex(attrs, attrs_len));
+
+	file->size = attrs_len;
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to create/update laser certificate attributes file");
+
+	info->path = file->path;
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_emu_store_data_object(struct sc_pkcs15_card *p15card,
 		struct sc_profile *profile, struct sc_pkcs15_object *object,
 		struct sc_pkcs15_der *data, struct sc_path *path)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_data_info *info = (struct sc_pkcs15_data_info *)object->data;
+	struct sc_file *file = NULL;
+	unsigned char *attrs = NULL;
+	size_t attrs_len = 0;
+	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "emu store data object in %s -- ignored", sc_print_path(&info->path));
 
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_DATA_OBJECT);
+	LOG_TEST_RET(ctx, idx, "Cannot get free DATA object index");
+
+	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_DATA_OBJECT, idx, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser DATA object attributes file");
+
+	sc_log(ctx, "create DATA object attribute file %s", sc_print_path(&file->path));
+
+	rv = laser_attrs_data_object_encode(p15card, object, file->id, &attrs, &attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode laser DATA object attributes");
+	sc_log(ctx, "laser DATA object attributes '%s'", sc_dump_hex(attrs, attrs_len));
+
+	file->size = attrs_len;
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
+	LOG_TEST_RET(ctx, rv, "Failed to create/update laser DATA object attributes file");
+
+	info->path = file->path;
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -842,14 +1003,20 @@ laser_emu_store_data(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	LOG_FUNC_CALLED(ctx);
 
 	switch (object->type & SC_PKCS15_TYPE_CLASS_MASK) {
+	case SC_PKCS15_TYPE_PRKEY:
+		rv = SC_ERROR_NOT_IMPLEMENTED;
+		break;
 	case SC_PKCS15_TYPE_PUBKEY:
 		rv = laser_emu_store_pubkey(p15card, profile, object, data, path);
+		break;
+	case SC_PKCS15_TYPE_CERT:
+		rv = laser_emu_store_certificate(p15card, profile, object, data, path);
 		break;
 	case SC_PKCS15_TYPE_DATA_OBJECT:
 		rv = laser_emu_store_data_object(p15card, profile, object, data, path);
 		break;
 	default:
-		rv = SC_ERROR_NOT_IMPLEMENTED;
+		rv = SC_ERROR_NOT_SUPPORTED;
 		break;
 	}
 
@@ -865,7 +1032,7 @@ sc_pkcs15init_laser_operations = {
 	NULL,				/* create_domain */
 	NULL,				/* select_pin_reference */
 	NULL,				/* create_pin*/
-	NULL,				/* select_key_reference */
+	laser_select_key_reference,	/* select_key_reference */
 	laser_create_key_file,		/* create_key */
 	laser_store_key,		/* store_key */
 	laser_generate_key,		/* generate_key */
