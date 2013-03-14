@@ -11,7 +11,7 @@ cardinfo {
 
 pkcs15 {
     # Put certificates into the CDF itself?
-    direct-certificates = yes;
+    # direct-certificates = yes;
     # Have a lastUpdate field in the EF(TokenInfo)?
     do-last-update      = no;
 }
@@ -61,7 +61,7 @@ filesystem {
 					file-id	= 0200;
 				}
 				EF template-private-key {
-					file-id	= 0041;
+					file-id	= 0040;
 					type	= internal-ef;
 					ACL	= *=NEVER;
 					ACL	= DELETE-SELF=NONE;
@@ -87,7 +87,7 @@ filesystem {
 					file-id	= 0140;
 				}
 				EF template-public-key {
-					file-id	= 0081;
+					file-id	= 0080;
 					type	= internal-ef;
 					ACL	= *=NONE;
 					ACL	= UPDATE=NEVER, ADMIN=NEVER;
