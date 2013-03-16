@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -451,6 +452,36 @@ C_GetTokenInfo(CK_SLOT_ID slotID,
 	return retne(rv);
 }
 
+
+void
+ignore_EC_mechanisms(CK_MECHANISM_TYPE_PTR pMechanismList, CK_ULONG_PTR pulCount)
+{
+	CK_ULONG ul;
+	CK_MECHANISM_TYPE mechs_to_ignore[] = {
+		CKM_EC_KEY_PAIR_GEN,
+		CKM_ECDSA,
+		CKM_ECDH1_DERIVE
+	};
+
+	if (!pMechanismList || !pulCount || (*pulCount == 0))
+		return;
+
+	for (ul=0; ul < *pulCount; ul++)   {
+		int ignore = 0, jj;
+
+		for (jj=0; jj < sizeof(mechs_to_ignore)/sizeof(CK_MECHANISM_TYPE); jj++)
+			if (*(pMechanismList + ul) == mechs_to_ignore[jj])
+				ignore = 1;
+
+		if (ignore)   {
+			memcpy(pMechanismList + ul, pMechanismList + ul + 1, sizeof(CK_MECHANISM_TYPE) * (*pulCount - ul - 1));
+			*pulCount -=  1;
+			ul--;
+		}
+	}
+}
+
+
 CK_RV
 C_GetMechanismList(CK_SLOT_ID  slotID, CK_MECHANISM_TYPE_PTR pMechanismList,
 		CK_ULONG_PTR  pulCount)
@@ -462,6 +493,10 @@ C_GetMechanismList(CK_SLOT_ID  slotID, CK_MECHANISM_TYPE_PTR pMechanismList,
 	rv = po->C_GetMechanismList(slotID, pMechanismList, pulCount);
 	if(rv == CKR_OK) {
 		spy_dump_array_out("pMechanismList", *pulCount);
+		print_mech_list(spy_output, pMechanismList, *pulCount);
+
+		ignore_EC_mechanisms(pMechanismList, pulCount);
+		spy_dump_array_out("Updated pMechanismList", *pulCount);
 		print_mech_list(spy_output, pMechanismList, *pulCount);
 	}
 	return retne(rv);
