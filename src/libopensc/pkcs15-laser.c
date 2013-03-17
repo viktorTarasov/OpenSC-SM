@@ -250,6 +250,7 @@ _create_certificate(struct sc_pkcs15_card * p15card, unsigned file_id)
 	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
 	unsigned char *data = NULL;
 	size_t len;
+	unsigned char sha1[SHA_DIGEST_LENGTH], sha1_attr[SHA_DIGEST_LENGTH];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -271,6 +272,13 @@ _create_certificate(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 	rv = sc_pkcs15emu_add_x509_cert(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add certificate object");
+
+	memcpy(sha1_attr, data+12, SHA_DIGEST_LENGTH);
+	memset(data + 12,0,SHA_DIGEST_LENGTH);
+	SHA1(data, len, sha1);
+
+	if (memcmp(sha1, sha1_attr, SHA_DIGEST_LENGTH))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "invalid checksum of certificate attributes");
 
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -404,6 +412,7 @@ _create_data_object(struct sc_pkcs15_card * p15card, unsigned file_id)
 	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
 	unsigned char *data = NULL;
 	size_t len;
+	unsigned char sha1[SHA_DIGEST_LENGTH], sha1_attr[SHA_DIGEST_LENGTH];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -425,6 +434,13 @@ _create_data_object(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 	rv = sc_pkcs15emu_add_data_object(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add data object");
+
+	memcpy(sha1_attr, data+12, SHA_DIGEST_LENGTH);
+	memset(data + 12,0,SHA_DIGEST_LENGTH);
+	SHA1(data, len, sha1);
+
+	if (memcmp(sha1, sha1_attr, SHA_DIGEST_LENGTH))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "invalid checksum of DATA attributes");
 
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);

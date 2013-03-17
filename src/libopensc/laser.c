@@ -812,7 +812,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	CK_OBJECT_CLASS clazz = CKO_PRIVATE_KEY;
 	CK_BBOOL _true = TRUE, _false = FALSE, *flag;
 	CK_KEY_TYPE type_rsa = CKK_RSA;
-	CK_ULONG ffff = 0xFFFF;
+	CK_ULONG ffff = 0xFFFFFFFFl;
 	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1217,12 +1217,12 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	SHA1(data, data_len, sha1);
-	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
-
 	rv = laser_attach_cache_stamp(&data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
+
+	SHA1(data, data_len, sha1);
+	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
 	if (out && out_len)    {
@@ -1317,12 +1317,12 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	SHA1(data, data_len, sha1);
-	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
-
 	rv = laser_attach_cache_stamp(&data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
+
+	SHA1(data, data_len, sha1);
+	memcpy(data + sha1_offs, sha1, SHA_DIGEST_LENGTH);
 
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(data, data_len));
 	if (out && out_len)    {
