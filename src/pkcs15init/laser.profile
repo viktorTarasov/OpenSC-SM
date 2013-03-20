@@ -98,6 +98,12 @@ filesystem {
 					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
 					file-id	= 0640;
 				}
+
+				#CMAP ile
+				EF laser-cmap-attributes {
+					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
+					file-id	= 867F;
+				}
 			}
 
 			EF Athena-token-info {

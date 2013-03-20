@@ -763,7 +763,7 @@ laser_attrs_data_object_decode(struct sc_context *ctx,
 	if (info->path.len)   {
 		unsigned file_id = info->path.value[info->path.len - 2] * 0x100 + info->path.value[info->path.len - 1];
 
-		if (file_id == LASER_FID_CMAPFILE)   {
+		if (file_id == CMAP_FID)   {
 			if (!strlen(info->app_label))
 				strncpy(info->app_label, "CSP",sizeof(info->app_label) - 1);
 			if (!strlen(object->label))

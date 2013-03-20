@@ -333,6 +333,11 @@ _create_pubkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	rv = laser_attrs_pubkey_decode(ctx, &obj, &info, data + 7, len - 11);
 	LOG_TEST_RET(ctx, rv, "Decode public key attributes error.");
 
+	if (!info.id.len)   {
+		free(data);
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_IMPLEMENTED, "Missing public key ID");
+	}
+
 	rv = sc_pkcs15emu_add_rsa_pubkey(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add public key object");
 
@@ -390,6 +395,11 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	 /* ignore header 7 bytes and tail 4 bytes */
 	rv = laser_attrs_prvkey_decode(ctx, &obj, &info, data + 7, len - 11);
 	LOG_TEST_RET(ctx, rv, "Decode private key attributes error.");
+
+	if (!info.id.len)   {
+		free(data);
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_IMPLEMENTED, "Missing private key ID");
+	}
 
 	obj.auth_id.len = 1;
 	obj.auth_id.value[0] = AUTH_ID_PIN;
@@ -488,7 +498,8 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 			case LASER_TYPE_KX_PRVKEY:
 				sc_log(ctx, "parse private key attributes FID:%04X", fid);
 				rv = _create_prvkey(p15card, fid);
-				LOG_TEST_RET(ctx, rv, "Cannot create private key PKCS#15 object");
+				if (rv != SC_ERROR_NOT_IMPLEMENTED)	/* ignore keys without ID */
+					LOG_TEST_RET(ctx, rv, "Cannot create private key PKCS#15 object");
 				break;
 			case LASER_TYPE_KX_CERT:
 				sc_log(ctx, "parse certificate attributes FID:%04X", fid);
@@ -498,7 +509,8 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 			case LASER_TYPE_KX_PUBKEY:
 				sc_log(ctx, "parse public key attributes FID:%04X", fid);
 				rv = _create_pubkey(p15card, fid);
-				LOG_TEST_RET(ctx, rv, "Cannot create public key PKCS#15 object");
+				if (rv != SC_ERROR_NOT_IMPLEMENTED)	/* ignore keys without ID */
+					LOG_TEST_RET(ctx, rv, "Cannot create public key PKCS#15 object");
 				break;
 			case LASER_TYPE_KX_DATA:
 				sc_log(ctx, "parse data object attributes FID:%04X", fid);

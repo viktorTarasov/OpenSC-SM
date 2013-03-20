@@ -56,8 +56,6 @@
 #define LASER_FILE_DESCRIPTOR_DO	0x39
 #define LASER_FILE_DESCRIPTOR_KO	0x08
 
-#define LASER_FID_CMAPFILE	0x867F
-
 #define LASER_KO_DATA_TAG_RSA	0x71
 
 #define LASER_PIV_ALGO_RSA_1024		0x06
@@ -95,6 +93,43 @@
 #define CKFP_MODIFIABLE			0x10l
 #define CKFP_MODIFIABLE_TO_TRUE		0x30l
 #define CKFP_MODIFIABLE_TO_FALSE	0x50l
+
+/* From Windows Smart Card Minidriver Specification
+ * Version 7.06
+ *
+ * #define MAX_CONTAINER_NAME_LEN	39
+ * #define CONTAINER_MAP_VALID_CONTAINER	1
+ * #define CONTAINER_MAP_DEFAULT_CONTAINER	2
+ * typedef struct _CONTAINER_MAP_RECORD
+ * {
+ *	WCHAR wszGuid [MAX_CONTAINER_NAME_LEN + 1];
+ *	BYTE bFlags;
+ *	BYTE bReserved;
+ *	WORD wSigKeySizeBits;
+ *	WORD wKeyExchangeKeySizeBits;
+ * } CONTAINER_MAP_RECORD, *PCONTAINER_MAP_RECORD;
+ */
+#define CMAP_FID	0x867F
+#define CMAP_GUID_INFO_SIZE	80
+#define CMAP_FLAG_CONTAINER_VALID	0x01
+#define CMAP_FLAG_CONTAINER_DEFAULT	0x02
+
+struct laser_cmap_record {
+	/* original MD fields */
+	unsigned char guid[CMAP_GUID_INFO_SIZE]; /* 40 x sizeof unicode chars */
+	unsigned char flags;
+	unsigned char reserved;
+	unsigned short key_size_sign;
+	unsigned short key_size_keyexchange;
+
+	/* PKCS#11 helper fields */
+	/* actual ASCII CKA_ID length (in unicode chars) */
+	unsigned short guid_len;
+
+	/* DF - DS/PKI + MSB in lower byte == 1 (0x80) if we use our
+	 * Conversion to Unicode with MSB on in any byte */
+	unsigned short rfu;
+};
 
 struct sc_cardctl_laser_genkey {
 	unsigned char algorithm;
