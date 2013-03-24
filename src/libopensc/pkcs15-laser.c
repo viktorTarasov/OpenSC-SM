@@ -463,10 +463,11 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
 	unsigned char buf[SC_MAX_APDU_BUFFER_SIZE];
-	size_t ii, count, pubkey_num;
+	size_t ii, count;
 	char *df_paths[3] = {PATH_PUBLICDIR, PATH_PRIVATEDIR, NULL};
 	int rv, df;
-	struct sc_pkcs15_object *pubkeys[12];
+	struct sc_pkcs15_object *pubkeys[12], *dobjs[12];
+	size_t pubkeys_num, dobjs_num;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -523,14 +524,67 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		}
 	}
 
-	pubkey_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PUBKEY, pubkeys, 12);
-	for (ii = 0; ii < pubkey_num; ii++)   {
+	pubkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PUBKEY, pubkeys, 12);
+	for (ii = 0; ii < pubkeys_num; ii++)   {
 		struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)pubkeys[ii]->data;
 		struct sc_pkcs15_object *prkey_obj = NULL;
 
 		if (!sc_pkcs15_find_prkey_by_id(p15card, &info->id, &prkey_obj))
 			if (strlen(prkey_obj->label) && !strlen(pubkeys[ii]->label))
 				memcpy(pubkeys[ii]->label, prkey_obj->label, sizeof(pubkeys[ii]->label));
+	}
+
+	dobjs_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_DATA_OBJECT, dobjs, 12);
+	for (ii = 0; ii < dobjs_num; ii++)   {
+		struct sc_pkcs15_data_info *dinfo = (struct sc_pkcs15_data_info *)dobjs[ii]->data;
+		struct sc_pkcs15_data *data = NULL;
+		struct laser_cmap_record *rec = NULL;
+		struct sc_pkcs15_object *prkeys[12];
+		size_t prkeys_num;
+		size_t offs = 0;
+
+		if (strcmp(dobjs[ii]->label, "cmapfile") || strcmp(dinfo->app_label, "CSP"))
+			continue;
+
+		prkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, prkeys, 12);
+		LOG_TEST_RET(ctx, prkeys_num, "Failed to get private key objects");
+		if (prkeys_num ==  0)
+			break;
+
+		rv = sc_pkcs15_read_data_object(p15card, dinfo, &data);
+		LOG_TEST_RET(ctx, rv, "Cannot create data PKCS#15 object");
+
+		sc_log(ctx, "CMAP data '%s'", sc_dump_hex(data->data, data->data_len));
+		for (offs = 0; offs < data->data_len;)   {
+			char *guid_str = NULL;
+
+			sc_log(ctx, "Offs: %i", offs);
+			rv = laser_md_cmap_record_decode(ctx, data, &offs, &rec);
+			LOG_TEST_RET(ctx, rv, "Failed to decode CMAP entry");
+			if (!rec)
+				break;
+			if (rec->key_size_sign == 0 && rec->key_size_keyexchange == 0)
+				continue;
+			sc_log(ctx, "rec flags %X; %i %i %i", rec->flags, rec->key_size_sign, rec->key_size_keyexchange, rec->guid_len);
+
+			rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
+			LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
+
+			sc_log(ctx, "GUID(%i), %s", strlen(guid_str), guid_str);
+
+			for (ii=0; ii<prkeys_num; ii++)   {
+				if (strcmp(prkeys[ii]->md_guid, guid_str))
+					continue;
+
+				sc_log(ctx, "Private key GUID(%i), %s", strlen(guid_str), guid_str);
+				prkeys[ii]->md_flags = rec->flags;
+			}
+
+			free(guid_str);
+			free(rec);
+		}
+
+		break;
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

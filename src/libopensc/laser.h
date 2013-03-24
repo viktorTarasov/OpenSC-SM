@@ -160,6 +160,10 @@ int laser_attrs_pubkey_decode(struct sc_context *ctx, struct sc_pkcs15_object *o
 int laser_attrs_data_object_decode(struct sc_context *ctx, struct sc_pkcs15_object *object,
 		struct sc_pkcs15_data_info *info, unsigned char *data, size_t data_len);
 
+int laser_md_cmap_record_decode(struct sc_context *ctx, struct sc_pkcs15_data *data, size_t *offs,
+		struct laser_cmap_record **out);
+int laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec, char **out);
+
 int laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
 		unsigned file_id, unsigned char **out, size_t *out_len);
 int laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,

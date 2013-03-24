@@ -696,16 +696,16 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 		}
 	}
 
-	/* If Athena style ID, use it as object's GUID */
+	/* If ID is in Athena style, use it as object's GUID */
 	if (info->id.len > SHA_DIGEST_LENGTH)   {
 		char *id = (char *)(&(info->id.value[0]));
 
 		/* "c55e834a-ecc8-46b8-a726-ddae4b2c4811" */
 		if (*(id+8) == '-' && *(id+13) == '-' && *(id+18) == '-' && *(id+23) == '-')   {
-			object->guid = (char *)calloc(sizeof(char), info->id.len + 1);
-			if (!object->guid)
+			object->md_guid = (char *)calloc(sizeof(char), info->id.len + 1);
+			if (!object->md_guid)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-			memcpy(object->guid, info->id.value, info->id.len);
+			memcpy(object->md_guid, info->id.value, info->id.len);
 		}
 
 	}
@@ -784,6 +784,49 @@ laser_attrs_data_object_decode(struct sc_context *ctx,
 				strncpy(object->label, "cmapfile", sizeof(object->label) - 1);
 		}
 	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+laser_md_cmap_record_decode(struct sc_context *ctx, struct sc_pkcs15_data *data, size_t *offs,
+		struct laser_cmap_record **out)
+{
+	LOG_FUNC_CALLED(ctx);
+
+	if (!data || !offs || !out)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	*out = NULL;
+	if (data->data_len - *offs < sizeof(struct laser_cmap_record))
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	*out = calloc (1, sizeof(struct laser_cmap_record));
+	if (*out == NULL)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memcpy(*out, data->data + *offs, sizeof(struct laser_cmap_record));
+
+	*offs += sizeof(struct laser_cmap_record);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec, char **out)
+{
+	int ii;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!rec || !out)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	*out = calloc(1, rec->guid_len + 1);
+	if (*out == NULL)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	for (ii=0; ii<rec->guid_len; ii++)
+		*(*out + ii) = rec->guid[2*ii];
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

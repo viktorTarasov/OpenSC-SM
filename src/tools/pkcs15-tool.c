@@ -411,7 +411,7 @@ static int read_data_object(void)
 
 	for (i = 0; i < count; i++) {
 		struct sc_pkcs15_data_info *cinfo = (struct sc_pkcs15_data_info *) objs[i]->data;
-		struct sc_pkcs15_data *data_object;
+		struct sc_pkcs15_data *data_object = NULL;
 
 		if (!sc_format_oid(&oid, opt_data))   {
 			if (!sc_compare_oid(&oid, &cinfo->app_oid))
@@ -538,9 +538,10 @@ static void print_prkey_info(const struct sc_pkcs15_object *obj)
 		printf("\tAuth ID        : %s\n", sc_pkcs15_print_id(&obj->auth_id));
 	printf("\tID             : %s\n", sc_pkcs15_print_id(&prkey->id));
 
-	if (!sc_pkcs15_get_guid(p15card, obj, 0, guid, sizeof(guid)))
+	if (!sc_pkcs15_get_guid(p15card, obj, 0, guid, sizeof(guid)))   {
 		printf("\tGUID           : %s\n", guid);
-
+		printf("\tMD cmap flags  : 0x%X\n", obj->md_flags);
+	}
 }
 
 
