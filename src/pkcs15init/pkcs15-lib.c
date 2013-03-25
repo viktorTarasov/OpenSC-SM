@@ -1293,10 +1293,11 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
 
 	key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	if (keygen_args->prkey_args.guid)   {
-		object->md_guid = strdup(keygen_args->prkey_args.guid);
-		if (!object->md_guid)
+		key_info->cmap_record.guid = strdup(keygen_args->prkey_args.guid);
+		if (!key_info->cmap_record.guid)
 			LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "Cannot allocate guid");
-		sc_log(ctx, "new key GUID: '%s'", object->md_guid);
+		sc_log(ctx, "new key GUID: '%s'", key_info->cmap_record.guid);
+		key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
 	}
 
 	/* Set up the PuKDF info. The public key will be filled in
@@ -1428,10 +1429,11 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card,
 	LOG_TEST_RET(ctx, r, "Failed to add new private key PKCS#15 object");
 
 	if (keyargs->guid)   {
-		object->md_guid = strdup(keyargs->guid);
-		if (!object->md_guid)
+		key_info->cmap_record.guid = strdup(keyargs->guid);
+		if (!key_info->cmap_record.guid)
 			LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "Cannot allocate guid");
-		sc_log(ctx, "new key GUID: '%s'", object->md_guid);
+		sc_log(ctx, "new key GUID: '%s'", key_info->cmap_record.guid);
+		key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
 	}
 
 	if (!r && profile->ops->emu_store_data)   {

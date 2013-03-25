@@ -207,17 +207,16 @@ static void print_common_flags(const struct sc_pkcs15_object *obj)
 	printf("\tObject Flags   : [0x%X]", obj->flags);
 	for (i = 0; i < NELEMENTS(common_flags); i++) {
 		if (obj->flags & (1 << i)) {
- 			printf(", %s", common_flags[i]);
+			printf(", %s", common_flags[i]);
 		}
- 	}
- 	printf("\n");
+	}
+	printf("\n");
 }
 
 static void print_cert_info(const struct sc_pkcs15_object *obj)
 {
 	struct sc_pkcs15_cert_info *cert_info = (struct sc_pkcs15_cert_info *) obj->data;
 	struct sc_pkcs15_cert *cert_parsed = NULL;
-	char guid[39];
 	int rv;
 
 	printf("X.509 Certificate [%s]\n", obj->label);
@@ -225,10 +224,6 @@ static void print_cert_info(const struct sc_pkcs15_object *obj)
 	printf("\tAuthority      : %s\n", cert_info->authority ? "yes" : "no");
 	printf("\tPath           : %s\n", sc_print_path(&cert_info->path));
 	printf("\tID             : %s\n", sc_pkcs15_print_id(&cert_info->id));
-
-	rv = sc_pkcs15_get_guid(p15card, obj, 0, guid, sizeof(guid));
-	if (!rv)
-		printf("\tGUID           : %s\n", guid);
 
 	print_access_rules(obj->access_rules, SC_PKCS15_MAX_ACCESS_RULES);
 
@@ -540,7 +535,7 @@ static void print_prkey_info(const struct sc_pkcs15_object *obj)
 
 	if (!sc_pkcs15_get_guid(p15card, obj, 0, guid, sizeof(guid)))   {
 		printf("\tGUID           : %s\n", guid);
-		printf("\tMD cmap flags  : 0x%X\n", obj->md_flags);
+		printf("\tMD cmap flags  : 0x%X\n", prkey->cmap_record.flags);
 	}
 }
 
