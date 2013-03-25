@@ -702,10 +702,10 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 
 		/* "c55e834a-ecc8-46b8-a726-ddae4b2c4811" */
 		if (*(id+8) == '-' && *(id+13) == '-' && *(id+18) == '-' && *(id+23) == '-')   {
-			object->md_guid = (char *)calloc(sizeof(char), info->id.len + 1);
-			if (!object->md_guid)
+			info->cmap_record.guid = (char *)calloc(sizeof(char), info->id.len + 1);
+			if (!info->cmap_record.guid)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-			memcpy(object->md_guid, info->id.value, info->id.len);
+			memcpy(info->cmap_record.guid, info->id.value, info->id.len);
 		}
 
 	}
@@ -1391,6 +1391,75 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
+		struct laser_cmap_record *cmap_rec)
+{
+	struct sc_pkcs15_prkey_info *info = NULL;
+	int guid_len, ii;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!key_obj || !cmap_rec)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	info = (struct sc_pkcs15_prkey_info *)key_obj->data;
+	if (!info->cmap_record.guid)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+	guid_len = strlen(info->cmap_record.guid);
+
+	if ((guid_len == 0) || guid_len >= CMAP_GUID_INFO_SIZE/2)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+	sc_log(ctx, "encode CMAP container: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
+
+	memset(cmap_rec, 0, sizeof(struct laser_cmap_record));
+	for (ii=0; ii<guid_len; ii++)
+		cmap_rec->guid[2*ii] = *(info->cmap_record.guid + ii);
+	cmap_rec->guid_len = ii;
+	cmap_rec->flags = info->cmap_record.flags;
+
+	cmap_rec->key_size_keyexchange = info->cmap_record.key_size_keyexchange;
+	cmap_rec->key_size_sign = info->cmap_record.key_size_sign;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+laser_cmap_encode(struct sc_pkcs15_card *p15card, unsigned char **out, size_t *out_len)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object *prkeys[12];
+	int rv, ii, prkeys_num;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!out || !out_len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	*out = NULL;
+	*out_len = 0;
+
+	prkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, prkeys, 12);
+	LOG_TEST_RET(ctx, prkeys_num, "Failed to get private key objects");
+
+	for (ii=0; ii<prkeys_num; ii++)   {
+		struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
+		struct laser_cmap_record cmap_rec;
+
+		rv = laser_cmap_record_init(ctx, prkeys[ii], &cmap_rec);
+		LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");
+
+		*out = realloc(*out, *out_len + sizeof(cmap_rec));
+		if (*out == NULL)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		memcpy(*out + *out_len, (unsigned char *)(&cmap_rec), sizeof(cmap_rec));
+		*out_len += sizeof(cmap_rec);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

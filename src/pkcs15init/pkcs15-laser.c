@@ -413,6 +413,55 @@ laser_emu_update_dir (struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 
 static int
+laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_file *file = NULL, *cmapfile = NULL;
+	char guid[40];
+	unsigned char *cmap = NULL;
+	size_t cmap_len;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!info->cmap_record.guid)   {
+		rv = sc_pkcs15_get_guid(p15card, object, 1, guid, sizeof(guid));
+		LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
+
+		info->cmap_record.guid = strdup(guid);
+		if (!info->cmap_record.guid)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+		/* By default all keys are 'key-exchange' keys */
+		info->cmap_record.key_size_keyexchange = info->modulus_length;
+		info->cmap_record.key_size_sign = 0;
+
+		info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
+		/* First container is 'default' one */
+		if (sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, NULL, 0) == 1)
+			info->cmap_record.flags |= SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
+	}
+
+	rv = laser_cmap_encode(p15card, &cmap, &cmap_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode 'cmap' data");
+	sc_log(ctx, "encoded CMAP(%i) '%s'", cmap_len, sc_dump_hex(cmap, cmap_len));
+
+	rv = sc_profile_get_file(profile, "laser-cmap-attributes", &file);
+	LOG_TEST_RET(ctx, rv, "Cannot instantiate 'cmapfile'");
+
+	rv = sc_select_file(p15card->card, &file->path, &cmapfile);
+	LOG_TEST_RET(ctx, rv, "Cannot select 'cmapfile' file");
+
+	sc_file_free(cmapfile);
+	sc_file_free(file);
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
 {
@@ -446,6 +495,9 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update private key attributes file");
+
+	rv = laser_cmap_update(profile, p15card, object);
+	LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);

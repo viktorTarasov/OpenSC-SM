@@ -554,30 +554,26 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		rv = sc_pkcs15_read_data_object(p15card, dinfo, &data);
 		LOG_TEST_RET(ctx, rv, "Cannot create data PKCS#15 object");
 
-		sc_log(ctx, "CMAP data '%s'", sc_dump_hex(data->data, data->data_len));
 		for (offs = 0; offs < data->data_len;)   {
 			char *guid_str = NULL;
 
-			sc_log(ctx, "Offs: %i", offs);
 			rv = laser_md_cmap_record_decode(ctx, data, &offs, &rec);
 			LOG_TEST_RET(ctx, rv, "Failed to decode CMAP entry");
 			if (!rec)
 				break;
 			if (rec->key_size_sign == 0 && rec->key_size_keyexchange == 0)
 				continue;
-			sc_log(ctx, "rec flags %X; %i %i %i", rec->flags, rec->key_size_sign, rec->key_size_keyexchange, rec->guid_len);
 
 			rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
 			LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
 
-			sc_log(ctx, "GUID(%i), %s", strlen(guid_str), guid_str);
-
 			for (ii=0; ii<prkeys_num; ii++)   {
-				if (strcmp(prkeys[ii]->md_guid, guid_str))
-					continue;
+				struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
 
-				sc_log(ctx, "Private key GUID(%i), %s", strlen(guid_str), guid_str);
-				prkeys[ii]->md_flags = rec->flags;
+				if (strcmp(info->cmap_record.guid, guid_str))
+					continue;
+				info->cmap_record.flags = rec->flags;
+				sc_log(ctx, "MD container data: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
 			}
 
 			free(guid_str);
