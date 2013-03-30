@@ -546,7 +546,7 @@ sc_pkcs15init_erase_card_recursively(struct sc_pkcs15_card *p15card,
 
 
 int
-sc_pkcs15init_delete_by_path(struct sc_profile *profile, struct sc_pkcs15_card *p15card, 
+sc_pkcs15init_delete_by_path(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		const struct sc_path *file_path)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -595,6 +595,10 @@ sc_pkcs15init_delete_by_path(struct sc_profile *profile, struct sc_pkcs15_card *
 	}
 	LOG_TEST_RET(ctx, rv, "'DELETE' authentication failed");
 
+	/* Reselect file to delete: current path could be changed by 'verify PIN' procedure */
+	rv = sc_select_file(p15card->card, &path, &file);
+	LOG_TEST_RET(ctx, rv, "cannot select file to delete");
+
 	memset(&path, 0, sizeof(path));
 	path.type = SC_PATH_TYPE_FILE_ID;
 	path.value[0] = file_path->value[file_path->len - 2];
@@ -602,10 +606,12 @@ sc_pkcs15init_delete_by_path(struct sc_profile *profile, struct sc_pkcs15_card *
 	path.len = 2;
 
 	/* Reselect file to delete if the parent DF was selected and it's not DF. */
+/*
 	if (file_type != SC_FILE_TYPE_DF)   {
 		rv = sc_select_file(p15card->card, &path, &file);
 		LOG_TEST_RET(ctx, rv, "cannot select file to delete");
 	}
+*/
 
 	sc_log(ctx, "Now really delete file");
 	rv = sc_delete_file(p15card->card, &path);
