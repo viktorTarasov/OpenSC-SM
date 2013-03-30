@@ -1105,9 +1105,25 @@ laser_pin_is_verified(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd_data
 
 
 static int
+laser_pin_from_ko_le(struct sc_context *ctx, unsigned reference, unsigned *out)
+{
+	if (!out)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (reference == 0x30)   {
+		*out = 0x20;
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+}
+
+
+static int
 laser_select_global_pin(struct sc_card *card, unsigned reference, struct sc_file **out_file)
 {
 	struct sc_context *ctx = card->ctx;
+	struct sc_file *file = NULL;
 	struct sc_path path;
 	int rv;
 
@@ -1117,7 +1133,26 @@ laser_select_global_pin(struct sc_card *card, unsigned reference, struct sc_file
 	sc_format_path("3F0000FF", &path);
 	path.value[path.len - 1] = reference;
 
-	rv = laser_select_file(card, &path, out_file);
+	rv = laser_select_file(card, &path, &file);
+	LOG_TEST_RET(ctx, rv, "Failed to select PIN file");
+
+	if (file->prop_attr && (file->prop_attr_len >= 3) && (*(file->prop_attr + 2) == LASER_KO_ALGORITHM_LOGIC))   {
+		unsigned ref;
+
+		rv = laser_pin_from_ko_le(ctx, reference, &ref);
+		LOG_TEST_RET(ctx, rv, "Unknown LogicalExpression KO");
+		path.value[path.len - 1] = ref;
+
+		sc_file_free(file);
+		rv = laser_select_file(card, &path, &file);
+		LOG_TEST_RET(ctx, rv, "Failed to select PIN file");
+	}
+
+	if (out_file)
+		*out_file = file;
+	else
+		sc_file_free(file);
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -1179,11 +1214,9 @@ laser_sm_chv_change(struct sc_card *card, struct sc_pin_cmd_data *data, unsigned
 	struct sc_context *ctx = card->ctx;
 	struct laser_private_data *private_data =  (struct laser_private_data *) card->drv_data;
 	struct sc_apdu apdu;
-	struct sc_file *pin_file = NULL;
 	unsigned char pin_data[SC_MAX_APDU_BUFFER_SIZE];
 	size_t offs;
 	int rv;
-	int save_sm_mode = card->sm_ctx.sm_mode;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "SM change CHV(ref %i, length %i, op-acl %X)", chv_ref, data->pin2.len, op_acl);
@@ -1416,10 +1449,9 @@ static int
 laser_generate_key(struct sc_card *card, struct sc_cardctl_laser_genkey *args)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
 	struct sc_apdu apdu;
 	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[2*SC_MAX_APDU_BUFFER_SIZE], *ptr = NULL;
-	size_t sbuf_len, offs, taglen;
+	size_t offs, taglen;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1472,7 +1504,6 @@ static int
 laser_update_key(struct sc_card *card, struct sc_cardctl_laser_updatekey *args)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
 	struct sc_apdu apdu;
 	unsigned char rbuf[SC_MAX_APDU_BUFFER_SIZE];
 	int rv;
@@ -1556,7 +1587,7 @@ laser_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
 	size_t offs;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "in-length:%i, key-size:%i, out-length:%i", in_len, prv->last_ko ? prv->last_ko->size : -1, out_len);
+	sc_log(ctx, "in-length:%i, key-size:%i, out-length:%i", in_len, (prv->last_ko ? prv->last_ko->size : 0), out_len);
 	if (env->operation != SC_SEC_OPERATION_DECIPHER)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "has to be SC_SEC_OPERATION_DECIPHER");
 	else if (in_len > (sizeof(sbuf) - 4))
@@ -1623,7 +1654,7 @@ laser_compute_signature_dst(struct sc_card *card,
 	size_t offs;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "in-length:%i,key-size:%i", in_len, prv->last_ko ? prv->last_ko->size : -1);
+	sc_log(ctx, "in-length:%i, key-size:%i", in_len, (prv->last_ko != NULL ? prv->last_ko->size : 0));
 	if (env->operation != SC_SEC_OPERATION_SIGN)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "It's not SC_SEC_OPERATION_SIGN");
 	else if (env->algorithm_flags & SC_ALGORITHM_RSA_RAW)
@@ -1712,13 +1743,12 @@ static int
 laser_sm_open(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
-	DH *dh;
-	BIGNUM *bn_ifd_y, *bn_N, *bn_g, *bn_ifd_p, *bn_icc_p;
 	struct sm_dh_session *dh_session = &card->sm_ctx.info.session.dh;
 	struct sc_apdu apdu;
-	unsigned char rbuf[SC_MAX_APDU_BUFFER_SIZE * 2];
-	int rv, rd, dh_check, ii;
+	BIGNUM *bn_ifd_y, *bn_N, *bn_g, *bn_icc_p;
+	DH *dh;
+	unsigned char uu, rbuf[SC_MAX_APDU_BUFFER_SIZE * 2];
+	int rv, rd, dh_check;
 
 	LOG_FUNC_CALLED(ctx);
 	memset(&card->sm_ctx.info, 0, sizeof(card->sm_ctx.info));
@@ -1800,9 +1830,9 @@ laser_sm_open(struct sc_card *card)
 
 	memcpy(dh_session->session_enc, dh_session->shared_secret.value, sizeof(dh_session->session_enc));
 	memcpy(dh_session->session_mac, dh_session->shared_secret.value + 24, sizeof(dh_session->session_mac));
-	for (ii = 0; ii < sizeof(dh_session->session_enc); ii++)   {
-		dh_session->session_enc[ii] ^= dh_session->card_challenge[ii];
-		dh_session->session_mac[ii] ^= dh_session->card_challenge[16 + ii];
+	for (uu = 0; uu < sizeof(dh_session->session_enc); uu++)   {
+		dh_session->session_enc[uu] ^= dh_session->card_challenge[uu];
+		dh_session->session_mac[uu] ^= dh_session->card_challenge[16 + uu];
 	}
 
 	sc_log(ctx, "session key enc: %s", sc_dump_hex(dh_session->session_enc, 16));
@@ -1833,8 +1863,7 @@ laser_sm_wrap_apdu(struct sc_card *card, struct sc_apdu *in_apdu, struct sc_apdu
 	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
 	struct sm_dh_session *sess = &card->sm_ctx.info.session.dh;
 	struct sc_apdu *apdu = NULL;
-	size_t offs;
-	int rv, padded_len, key_len = sizeof(sess->session_enc);
+	int rv;
 	int sm_level = prv->sm_min_level;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1857,7 +1886,7 @@ laser_sm_wrap_apdu(struct sc_card *card, struct sc_apdu *in_apdu, struct sc_apdu
 		unsigned char data[SC_MAX_APDU_BUFFER_SIZE * 2], *val = NULL;
 		unsigned char edfb[SC_MAX_APDU_BUFFER_SIZE * 2];
 		unsigned char chsum_data[SC_MAX_APDU_BUFFER_SIZE * 2];
-		size_t offs, val_len, data_len, chsum_data_len;
+		size_t offs, val_len, chsum_data_len;
 		size_t edfb_len = 0;
 		unsigned char icv[8];
 
@@ -1954,7 +1983,7 @@ laser_cbc_cksum(struct sc_context *ctx, unsigned char *key, size_t key_size,
 		unsigned char *in, size_t in_len, DES_cblock *icv)
 {
 	DES_key_schedule ks, ks2;
-	size_t len = in_len, offs;
+	size_t len = in_len;
 	DES_cblock out, last;
 	int ii;
 
@@ -1986,11 +2015,9 @@ laser_sm_check_mac(struct sc_card *card, unsigned char *data, size_t data_len,
 		unsigned char *mac, size_t mac_len)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
 	struct sm_dh_session *sess = &card->sm_ctx.info.session.dh;
 	unsigned char icv[8], *dt =  NULL, *ptr;
 	size_t dt_len;
-	DES_cblock cblock;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -2028,7 +2055,6 @@ static int
 laser_sm_free_apdu(struct sc_card *card, struct sc_apdu *apdu, struct sc_apdu **sm_apdu)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv = (struct laser_private_data *) card->drv_data;
 	struct sm_dh_session *dh_session = &card->sm_ctx.info.session.dh;
 	struct sm_card_response sm_resp;
 	int rv;
