@@ -601,8 +601,14 @@ laser_process_fci(struct sc_card *card, struct sc_file *file, const u8 *buf, siz
 		file->prop_attr_len = 0;
 
 	tag = sc_asn1_find_tag(ctx, p, len, 0xA5, &taglen);
-	if (tag != NULL && taglen)
+	if (tag != NULL && taglen)   {
 		sc_file_set_prop_attr(file, tag, taglen);
+	}
+	else   {
+		tag = sc_asn1_find_tag(ctx, p, len, 0x85, &taglen);
+		if (tag != NULL && taglen)
+			sc_file_set_prop_attr(file, tag, taglen);
+	}
 
 	tag = sc_asn1_find_tag(ctx, p, len, 0x86, &taglen);
 	if (tag != NULL && taglen)
