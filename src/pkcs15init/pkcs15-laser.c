@@ -41,6 +41,9 @@
 #define LASER_ATTRS_CERT_X509 (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_CERT_X509)
 #define LASER_ATTRS_DATA_OBJECT (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_DATA_OBJECT)
 
+static int laser_update_df_create_data_object(struct sc_profile *profile,
+		struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object);
+
 static int
 laser_validate_key_reference(int key_reference)
 {
@@ -418,10 +421,11 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
-	struct sc_file *file = NULL, *cmapfile = NULL;
-	char guid[40];
+	struct sc_pkcs15_object *cmap_dobj = NULL;
+	struct sc_pkcs15_data_info *cmap_dobj_info = NULL;
 	unsigned char *cmap = NULL;
-	size_t cmap_len;
+	size_t cmap_len, data_len;
+	char guid[40];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -448,14 +452,27 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	LOG_TEST_RET(ctx, rv, "Failed to encode 'cmap' data");
 	sc_log(ctx, "encoded CMAP(%i) '%s'", cmap_len, sc_dump_hex(cmap, cmap_len));
 
-	rv = sc_profile_get_file(profile, "laser-cmap-attributes", &file);
-	LOG_TEST_RET(ctx, rv, "Cannot instantiate 'cmapfile'");
+	rv = sc_pkcs15_find_data_object_by_name(p15card, "CSP", "cmapfile", &cmap_dobj);
+	LOG_TEST_RET(ctx, rv, "Failed to get 'cmapfile' DATA object");
 
-	rv = sc_select_file(p15card->card, &file->path, &cmapfile);
-	LOG_TEST_RET(ctx, rv, "Cannot select 'cmapfile' file");
+	cmap_dobj_info = (struct sc_pkcs15_data_info *)cmap_dobj->data;
 
-	sc_file_free(cmapfile);
-	sc_file_free(file);
+	if (cmap_dobj_info->data.value)
+		free(cmap_dobj_info->data.value);
+
+	data_len = cmap_len + sizeof(struct laser_cmap_record);
+	if (data_len < 5*sizeof(struct laser_cmap_record))
+		data_len = 5*sizeof(struct laser_cmap_record);
+
+	cmap_dobj_info->data.value = calloc(1, data_len);
+	if (!cmap_dobj_info->data.value)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	memcpy(cmap_dobj_info->data.value, cmap, cmap_len);
+	cmap_dobj_info->data.len = data_len;
+
+	rv = laser_update_df_create_data_object(profile, p15card, cmap_dobj);
+	LOG_TEST_RET(ctx, rv, "Failed to update DATA-DF ");
 
 	LOG_FUNC_RETURN(ctx, rv);
 }

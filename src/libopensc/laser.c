@@ -696,20 +696,6 @@ laser_attrs_prvkey_decode(struct sc_context *ctx,
 		}
 	}
 
-	/* If ID is in Athena style, use it as object's GUID */
-	if (info->id.len > SHA_DIGEST_LENGTH)   {
-		char *id = (char *)(&(info->id.value[0]));
-
-		/* "c55e834a-ecc8-46b8-a726-ddae4b2c4811" */
-		if (*(id+8) == '-' && *(id+13) == '-' && *(id+18) == '-' && *(id+23) == '-')   {
-			info->cmap_record.guid = (char *)calloc(sizeof(char), info->id.len + 1);
-			if (!info->cmap_record.guid)
-				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-			memcpy(info->cmap_record.guid, info->id.value, info->id.len);
-		}
-
-	}
-
 	LOG_FUNC_RETURN(ctx, rv);
 }
 

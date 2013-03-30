@@ -61,7 +61,7 @@ filesystem {
 					file-id	= 0200;
 				}
 				EF template-private-key {
-					file-id	= 0040;
+					file-id	= 0040;		# Private Exchange key appear in cmapfile
 					type	= internal-ef;
 					ACL	= *=NEVER;
 					ACL	= DELETE-SELF=NONE;
@@ -78,7 +78,7 @@ filesystem {
 				# Certificate
 				EF laser-certificate-attributes  {
 					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
-					file-id	= 0400;
+					file-id	= 8400;		# Certificate object appear in cmapfile
 				}
 
 				#Public Key

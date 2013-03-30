@@ -351,8 +351,8 @@ static int
 _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_pkcs15_object obj;
-	struct sc_pkcs15_prkey_info info;
+	struct sc_pkcs15_object obj, *pobj = NULL;
+	struct sc_pkcs15_prkey_info info, *pinfo = NULL;
 	struct sc_pkcs15_prkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
 	unsigned ko_fid = ((file_id & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PRVKEY) + 1;
@@ -407,7 +407,40 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &obj, &info);
 	LOG_TEST_RET(ctx, rv, "Failed to emu-add private key object");
 
-	sc_log(ctx, "Key path %s", sc_print_path(&info.path));
+	rv = sc_pkcs15_find_prkey_by_id(p15card, &info.id, &pobj);
+	LOG_TEST_RET(ctx, rv, "Cannot get new key object");
+
+	pinfo = (struct sc_pkcs15_prkey_info *)pobj->data;
+
+	/* If ID is in Athena style, use it as object's GUID */
+	if (pinfo->id.len > SHA_DIGEST_LENGTH)   {
+		char *id = (char *)(&(pinfo->id.value[0]));
+
+		if (pinfo->cmap_record.guid)
+			free(pinfo->cmap_record.guid);
+
+		/* "c55e834a-ecc8-46b8-a726-ddae4b2c4811" */
+		if (*(id+8) == '-' && *(id+13) == '-' && *(id+18) == '-' && *(id+23) == '-')   {
+			pinfo->cmap_record.guid = (char *)calloc(sizeof(char), pinfo->id.len + 1);
+			if (!pinfo->cmap_record.guid)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+			memcpy(pinfo->cmap_record.guid, pinfo->id.value, pinfo->id.len);
+		}
+	}
+
+	if (!pinfo->cmap_record.guid)   {
+		char guid[40];
+
+		rv = sc_pkcs15_get_guid(p15card, pobj, 1, guid, sizeof(guid));
+		LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
+
+		pinfo->cmap_record.guid = strdup(guid);
+		if (!pinfo->cmap_record.guid)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	}
+
+	sc_log(ctx, "Key path %s; obj.data %p", sc_print_path(&pinfo->path), obj.data);
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -561,25 +594,25 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 			LOG_TEST_RET(ctx, rv, "Failed to decode CMAP entry");
 			if (!rec)
 				break;
-			if (rec->key_size_sign == 0 && rec->key_size_keyexchange == 0)
-				continue;
+			if (rec->key_size_sign || rec->key_size_keyexchange)   {
+				rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
+				LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
 
-			rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
-			LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
+				for (ii=0; ii<prkeys_num; ii++)   {
+					struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
 
-			for (ii=0; ii<prkeys_num; ii++)   {
-				struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
-
-				if (strcmp(info->cmap_record.guid, guid_str))
-					continue;
-				info->cmap_record.flags = rec->flags;
-				sc_log(ctx, "MD container data: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
+					if (strcmp(info->cmap_record.guid, guid_str))
+						continue;
+					info->cmap_record.flags = rec->flags;
+					sc_log(ctx, "MD container data: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
+				}
 			}
 
 			free(guid_str);
 			free(rec);
 		}
 
+		sc_pkcs15_free_data_object(data);
 		break;
 	}
 
