@@ -840,6 +840,11 @@ laser_create_file(struct sc_card *card, struct sc_file *file)
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "laser_create_file() create file error");
 
+	if (!file->path.len)   {
+		sc_append_file_id(&file->path, file->id);
+		file->path.type = SC_PATH_TYPE_FILE_ID;
+	}
+
 	rv = laser_select_file(card, &file->path, NULL);
 	LOG_TEST_RET(ctx, rv, "Cannot select newly created file");
 
