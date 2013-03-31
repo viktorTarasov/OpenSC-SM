@@ -1299,9 +1299,13 @@ md_set_cmapfile(PCARD_DATA pCardData, struct md_file *file)
 
 		if (prkey_info->cmap_record.guid)   {
 			strncpy(cont->guid, prkey_info->cmap_record.guid, sizeof(cont->guid));
-			cont->flags = prkey_info->cmap_record.flags;
+
 			cont->size_key_exchange = prkey_info->cmap_record.keysize_keyexchange;
 			cont->size_sign = prkey_info->cmap_record.keysize_sign;
+
+			cont->flags = prkey_info->cmap_record.flags;
+			if (cont->flags & CONTAINER_MAP_DEFAULT_CONTAINER)
+				found_default = 1;
 		}
 		else   {
 			rv = sc_pkcs15_get_guid(vs->p15card, key_obj, 0, cont->guid, sizeof(cont->guid));
