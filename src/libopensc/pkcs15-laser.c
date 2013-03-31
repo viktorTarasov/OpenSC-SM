@@ -558,6 +558,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 	}
 
 	pubkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PUBKEY, pubkeys, 12);
+	sc_log(ctx, "Number of public keys %i", pubkeys_num);
 	for (ii = 0; ii < pubkeys_num; ii++)   {
 		struct sc_pkcs15_pubkey_info *info = (struct sc_pkcs15_pubkey_info *)pubkeys[ii]->data;
 		struct sc_pkcs15_object *prkey_obj = NULL;
@@ -587,6 +588,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		rv = sc_pkcs15_read_data_object(p15card, dinfo, &data);
 		LOG_TEST_RET(ctx, rv, "Cannot create data PKCS#15 object");
 
+		sc_log(ctx, "Use '%s' DATA object to update private key MD data", dobjs[ii]->label);
 		for (offs = 0; offs < data->data_len;)   {
 			char *guid_str = NULL;
 
@@ -598,15 +600,20 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 				rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
 				LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
 
+				sc_log(ctx, "CMAP record GUID %s", guid_str);
 				for (ii=0; ii<prkeys_num; ii++)   {
 					struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
 
+					sc_log(ctx, "Key GUID %s", info->cmap_record.guid);
 					if (strcmp(info->cmap_record.guid, guid_str))
 						continue;
+
 					info->cmap_record.flags = rec->flags;
 					info->cmap_record.keysize_sign = rec->keysize_sign;
 					info->cmap_record.keysize_keyexchange = rec->keysize_keyexchange;
-					sc_log(ctx, "MD container data: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
+					sc_log(ctx, "Updated MD container data: flags:0x%X, sign-size %i, keyexchange-size %i",
+							info->cmap_record.flags, info->cmap_record.keysize_sign,
+							info->cmap_record.keysize_keyexchange);
 				}
 			}
 

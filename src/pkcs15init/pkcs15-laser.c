@@ -452,7 +452,7 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	LOG_TEST_RET(ctx, rv, "Failed to encode 'cmap' data");
 	sc_log(ctx, "encoded CMAP(%i) '%s'", cmap_len, sc_dump_hex(cmap, cmap_len));
 
-	rv = sc_pkcs15_find_data_object_by_name(p15card, "CSP", "cmapfile", &cmap_dobj);
+	rv = sc_pkcs15_find_data_object_by_name(p15card, CMAP_DO_APPLICATION_NAME, "cmapfile", &cmap_dobj);
 	LOG_TEST_RET(ctx, rv, "Failed to get 'cmapfile' DATA object");
 
 	cmap_dobj_info = (struct sc_pkcs15_data_info *)cmap_dobj->data;
