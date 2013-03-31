@@ -1415,10 +1415,12 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 
 
 int
-laser_cmap_encode(struct sc_pkcs15_card *p15card, unsigned char **out, size_t *out_len)
+laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object_to_ignore,
+		unsigned char **out, size_t *out_len)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *prkeys[12];
+	struct sc_pkcs15_id *ignore_id = NULL;
 	int rv, ii, prkeys_num;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1428,12 +1430,20 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, unsigned char **out, size_t *o
 	*out = NULL;
 	*out_len = 0;
 
+	if (object_to_ignore)
+		ignore_id = &((struct sc_pkcs15_prkey_info *)(object_to_ignore->data))->id;
+
 	prkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, prkeys, 12);
 	LOG_TEST_RET(ctx, prkeys_num, "Failed to get private key objects");
 
 	for (ii=0; ii<prkeys_num; ii++)   {
 		struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
 		struct laser_cmap_record cmap_rec;
+
+		if (ignore_id && sc_pkcs15_compare_id(ignore_id, &info->id))   {
+			sc_log(ctx, "Ignore (deleted?) key %s", sc_pkcs15_print_id(&info->id));
+			continue;
+		}
 
 		rv = laser_cmap_record_init(ctx, prkeys[ii], &cmap_rec);
 		LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");

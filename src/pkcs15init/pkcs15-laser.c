@@ -417,10 +417,10 @@ laser_emu_update_dir (struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 static int
 laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
-		struct sc_pkcs15_object *object)
+		int remove, struct sc_pkcs15_object *object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)object->data;
+	struct sc_pkcs15_prkey_info *info = NULL;
 	struct sc_pkcs15_object *cmap_dobj = NULL;
 	struct sc_pkcs15_data_info *cmap_dobj_info = NULL;
 	unsigned char *cmap = NULL;
@@ -430,25 +430,28 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 	LOG_FUNC_CALLED(ctx);
 
-	if (!info->cmap_record.guid)   {
-		rv = sc_pkcs15_get_guid(p15card, object, 1, guid, sizeof(guid));
-		LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
+	if (object)   {
+		info = (struct sc_pkcs15_prkey_info *)object->data;
+		if (!info->cmap_record.guid)   {
+			rv = sc_pkcs15_get_guid(p15card, object, 1, guid, sizeof(guid));
+			LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
-		info->cmap_record.guid = strdup(guid);
-		if (!info->cmap_record.guid)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+			info->cmap_record.guid = strdup(guid);
+			if (!info->cmap_record.guid)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-		/* By default all keys are 'key-exchange' keys */
-		info->cmap_record.keysize_keyexchange = info->modulus_length;
-		info->cmap_record.keysize_sign = 0;
+			/* By default all keys are 'key-exchange' keys */
+			info->cmap_record.keysize_keyexchange = info->modulus_length;
+			info->cmap_record.keysize_sign = 0;
 
-		info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
-		/* First container is 'default' one */
-		if (sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, NULL, 0) == 1)
-			info->cmap_record.flags |= SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
+			info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
+			/* First container is 'default' one */
+			if (sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, NULL, 0) == 1)
+				info->cmap_record.flags |= SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
+		}
 	}
 
-	rv = laser_cmap_encode(p15card, &cmap, &cmap_len);
+	rv = laser_cmap_encode(p15card, (remove ? object : NULL), &cmap, &cmap_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode 'cmap' data");
 	sc_log(ctx, "encoded CMAP(%i) '%s'", cmap_len, sc_dump_hex(cmap, cmap_len));
 
@@ -513,7 +516,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create/update private key attributes file");
 
-	rv = laser_cmap_update(profile, p15card, object);
+	rv = laser_cmap_update(profile, p15card, 0, object);
 	LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
 
 	sc_file_free(file);
@@ -759,6 +762,9 @@ laser_update_df_delete_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
 	if (rv != SC_ERROR_FILE_NOT_FOUND)
 		LOG_TEST_RET(ctx, rv, "Failed to delete private key attributes file");
+
+	rv = laser_cmap_update(profile, p15card, 1, object);
+	LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
