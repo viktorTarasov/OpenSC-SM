@@ -439,8 +439,8 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
 		/* By default all keys are 'key-exchange' keys */
-		info->cmap_record.key_size_keyexchange = info->modulus_length;
-		info->cmap_record.key_size_sign = 0;
+		info->cmap_record.keysize_keyexchange = info->modulus_length;
+		info->cmap_record.keysize_sign = 0;
 
 		info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
 		/* First container is 'default' one */

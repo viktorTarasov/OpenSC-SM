@@ -113,14 +113,15 @@
 #define CMAP_GUID_INFO_SIZE	80
 #define CMAP_FLAG_CONTAINER_VALID	0x01
 #define CMAP_FLAG_CONTAINER_DEFAULT	0x02
+#define CMAP_DO_APPLICATION_NAME	"Athena CSP"
 
 struct laser_cmap_record {
 	/* original MD fields */
 	unsigned char guid[CMAP_GUID_INFO_SIZE]; /* 40 x sizeof unicode chars */
 	unsigned char flags;
 	unsigned char reserved;
-	unsigned short key_size_sign;
-	unsigned short key_size_keyexchange;
+	unsigned short keysize_sign;
+	unsigned short keysize_keyexchange;
 
 	/* PKCS#11 helper fields */
 	/* actual ASCII CKA_ID length (in unicode chars) */

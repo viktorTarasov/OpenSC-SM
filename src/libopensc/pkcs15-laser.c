@@ -440,7 +440,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 	}
 
-	sc_log(ctx, "Key path %s; obj.data %p", sc_print_path(&pinfo->path), obj.data);
+	sc_log(ctx, "Key path %s; GUID %s", sc_print_path(&pinfo->path), pinfo->cmap_record.guid);
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -576,7 +576,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		size_t prkeys_num;
 		size_t offs = 0;
 
-		if (strcmp(dobjs[ii]->label, "cmapfile") || strcmp(dinfo->app_label, "CSP"))
+		if (strcmp(dobjs[ii]->label, "cmapfile") || strcmp(dinfo->app_label, CMAP_DO_APPLICATION_NAME))
 			continue;
 
 		prkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, prkeys, 12);
@@ -594,7 +594,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 			LOG_TEST_RET(ctx, rv, "Failed to decode CMAP entry");
 			if (!rec)
 				break;
-			if (rec->key_size_sign || rec->key_size_keyexchange)   {
+			if (rec->keysize_sign || rec->keysize_keyexchange)   {
 				rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
 				LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
 
@@ -604,6 +604,8 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 					if (strcmp(info->cmap_record.guid, guid_str))
 						continue;
 					info->cmap_record.flags = rec->flags;
+					info->cmap_record.keysize_sign = rec->keysize_sign;
+					info->cmap_record.keysize_keyexchange = rec->keysize_keyexchange;
 					sc_log(ctx, "MD container data: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
 				}
 			}

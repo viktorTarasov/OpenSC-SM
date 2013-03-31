@@ -765,7 +765,7 @@ laser_attrs_data_object_decode(struct sc_context *ctx,
 
 		if (file_id == CMAP_FID)   {
 			if (!strlen(info->app_label))
-				strncpy(info->app_label, "CSP",sizeof(info->app_label) - 1);
+				strncpy(info->app_label, CMAP_DO_APPLICATION_NAME,sizeof(info->app_label) - 1);
 			if (!strlen(object->label))
 				strncpy(object->label, "cmapfile", sizeof(object->label) - 1);
 		}
@@ -1407,8 +1407,8 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 	cmap_rec->guid_len = ii;
 	cmap_rec->flags = info->cmap_record.flags;
 
-	cmap_rec->key_size_keyexchange = info->cmap_record.key_size_keyexchange;
-	cmap_rec->key_size_sign = info->cmap_record.key_size_sign;
+	cmap_rec->keysize_keyexchange = info->cmap_record.keysize_keyexchange;
+	cmap_rec->keysize_sign = info->cmap_record.keysize_sign;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
