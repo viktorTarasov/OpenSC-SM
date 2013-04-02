@@ -671,9 +671,15 @@ laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
 			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_NEVER, SC_AC_KEY_REF_NONE);
 		}
 		else if (*(attrs + ii*2 + 1))   {
+			unsigned char ref = *(attrs + ii*2 + 1);
 			/* TODO: normally, here we should check the type of referenced KO */
+
 			sc_log(ctx, "op:%X SC_AC_CHV, val:%X", *(ops + ii), val);
-			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_CHV, *(attrs + ii*2 + 1));
+			if (ref == 0x30)   {
+				sc_log(ctx, "TODO: not supported LOGIC KO; here ref-30 changed for ref-20 : TODO");
+				ref = 0x20;
+			}
+			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_CHV, ref);
 		}
 		else   {
 			sc_log(ctx, "op:%X SC_AC_NONE, val:%X", *(ops + ii));
