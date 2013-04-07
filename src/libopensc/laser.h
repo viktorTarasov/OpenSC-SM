@@ -94,6 +94,8 @@
 #define CKFP_MODIFIABLE_TO_TRUE		0x30l
 #define CKFP_MODIFIABLE_TO_FALSE	0x50l
 
+#define LASER_PKCS15_TYPE_PRESENT_IN_CMAP	0x2000
+
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
  *

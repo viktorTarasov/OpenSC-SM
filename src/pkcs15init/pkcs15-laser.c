@@ -39,6 +39,7 @@
 #define LASER_ATTRS_PRKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PRKEY_RSA)
 #define LASER_ATTRS_PUBKEY_RSA (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_PUBKEY_RSA)
 #define LASER_ATTRS_CERT_X509 (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_CERT_X509)
+#define LASER_ATTRS_CERT_X509_CMAP (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_CERT_X509 | LASER_PKCS15_TYPE_PRESENT_IN_CMAP)
 #define LASER_ATTRS_DATA_OBJECT (SC_PKCS15_TYPE_VENDOR_DEFINED | SC_PKCS15_TYPE_DATA_OBJECT)
 
 static int laser_update_df_create_data_object(struct sc_profile *profile,
@@ -165,6 +166,11 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 		case LASER_ATTRS_CERT_X509:
 			desc = "certificate Laser attributes";
 			_template = "laser-certificate-attributes";
+			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
+			break;
+		case LASER_ATTRS_CERT_X509_CMAP:
+			desc = "certificate Laser attributes";
+			_template = "laser-cmap-certificate-attributes";
 			file_descriptor = LASER_FILE_DESCRIPTOR_EF;
 			break;
 		case LASER_ATTRS_DATA_OBJECT:
@@ -507,6 +513,9 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));
 
 	file->size = attrs_len;
+
+	snprintf((char *)file->name, sizeof(file->name), "kxs%02i", attrs_ref);
+	file->namelen = strlen((char *)file->name);
 
 	/* TODO: implement Laser's 'resize' file */
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
@@ -1005,6 +1014,7 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_cert_info *info = (struct sc_pkcs15_cert_info *)object->data;
+	struct sc_pkcs15_object *key = NULL;
 	struct sc_file *file = NULL;
 	unsigned char *attrs = NULL;
 	size_t attrs_len = 0;
@@ -1012,11 +1022,25 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 
 	LOG_FUNC_CALLED(ctx);
 
-	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
-	LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
+	sc_log(ctx, "store certificate with ID '%s'", sc_pkcs15_print_id(&info->id));
+	rv = sc_pkcs15_find_prkey_by_id(p15card, &info->id, &key);
+	if (!rv)   {
+		struct sc_path key_path = ((struct sc_pkcs15_prkey_info *)key->data)->path;
 
-	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
-	LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+		idx = (key_path.value[key_path.len - 1] & LASER_FS_REF_MASK) - 1;
+		rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509_CMAP, idx, &file);
+		LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+
+		snprintf((char *)file->name, sizeof(file->name), "kxc%02i", idx);
+		file->namelen = strlen((char *)file->name);
+	}
+	else   {
+		idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
+		LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
+
+		rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
+		LOG_TEST_RET(ctx, rv, "Cannot instantiate laser certificate attributes file");
+	}
 
 	sc_log(ctx, "create certificate attribute file %s", sc_print_path(&file->path));
 

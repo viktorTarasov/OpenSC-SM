@@ -738,7 +738,7 @@ laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out,
 	buf[offs++] = (file_size >> 8) & 0xFF;
 	buf[offs++] = file_size & 0xFF;
 
-	if (file->type == SC_FILE_TYPE_DF && file->namelen)   {
+	if (file->namelen)   {
 		buf[offs++] = ISO7816_TAG_FCP_DF_NAME;
 		buf[offs++] = file->namelen;
 		memcpy(buf + offs, file->name, file->namelen);

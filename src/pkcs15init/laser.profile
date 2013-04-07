@@ -78,6 +78,12 @@ filesystem {
 				# Certificate
 				EF laser-certificate-attributes  {
 					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					file-id	= 0400;		# Certificate object
+				}
+
+				# Certificate with private key
+				EF laser-cmap-certificate-attributes  {
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
 					file-id	= 8400;		# Certificate object appear in cmapfile
 				}
 
