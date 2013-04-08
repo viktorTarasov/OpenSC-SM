@@ -819,7 +819,8 @@ laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec,
 
 
 static int
-laser_attach_cache_stamp(struct sc_pkcs15_card *p15card, unsigned char **buf, size_t *buf_sz)
+laser_attach_cache_stamp(struct sc_pkcs15_card *p15card, int zero_stamp,
+		unsigned char **buf, size_t *buf_sz)
 {
 	unsigned char *ptr = NULL;
 	unsigned rand_val;
@@ -831,7 +832,10 @@ laser_attach_cache_stamp(struct sc_pkcs15_card *p15card, unsigned char **buf, si
 	if (!ptr)
 		return SC_ERROR_OUT_OF_MEMORY;
 
-	if (p15card->md_data)   {
+	if (zero_stamp)   {
+		memset(ptr + *buf_sz, 0, 4);
+	}
+	else if (p15card->md_data)   {
 		struct sc_md_cardcf *cardcf = &p15card->md_data->cardcf;
 
 		*(ptr + *buf_sz + 0) = cardcf->cont_freshness & 0xFF;
@@ -876,7 +880,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 
 	data_len = 0;
 	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
-	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = file_id & 0xFF;
 	*(data + data_len++) = 0xFF;
@@ -986,7 +990,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_stamp(p15card, &data, &data_len);
+	rv = laser_attach_cache_stamp(p15card, 0, &data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
@@ -1030,7 +1034,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 
 	data_len = 0;
 	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
-	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = file_id & 0xFF;
 	*(data + data_len++) = 0xFF;
@@ -1132,7 +1136,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_stamp(p15card, &data, &data_len);
+	rv = laser_attach_cache_stamp(p15card, 0, &data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
@@ -1199,7 +1203,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 
 	data_len = 0;
 	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
-	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = file_id & 0xFF;
 	*(data + data_len++) = 0xFF;
@@ -1270,7 +1274,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_stamp(p15card, &data, &data_len);
+	rv = laser_attach_cache_stamp(p15card, 0, &data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
@@ -1294,8 +1298,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 
 int
 laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object,
-		unsigned file_id,
-		unsigned char **out, size_t *out_len)
+		unsigned file_id, unsigned char **out, size_t *out_len)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_data_info *info = (struct sc_pkcs15_data_info *)object->data;
@@ -1315,7 +1318,7 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 
 	data_len = 0;
 	*(data + data_len++) = LASER_ATTRIBUTE_VALID;
-	*(data + data_len++) = file_id & 0xFF;
+	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = (file_id >> 8) & 0xFF;
 	*(data + data_len++) = file_id & 0xFF;
 	*(data + data_len++) = 0xFF;
@@ -1370,7 +1373,7 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 	*(data + 5) = data_len & 0xFF;
 	*(data + 6) = attrs_num;
 
-	rv = laser_attach_cache_stamp(p15card, &data, &data_len);
+	rv = laser_attach_cache_stamp(p15card, (file_id == CMAP_FID), &data, &data_len);
 	LOG_TEST_RET(ctx, rv, "Failed to attach cache stamp");
 	attrs_num++;
 
