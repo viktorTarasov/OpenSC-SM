@@ -176,7 +176,7 @@ _create_application(struct sc_pkcs15_card * p15card,
 		free(p15card->file_app);
 	sc_format_path(PATH_APPLICATION, &app_path);
 	rv = sc_select_file(card, &app_path, &app_file);
-	LOG_TEST_RET(ctx, rv, "Cannot application path");
+	LOG_TEST_RET(ctx, rv, "Cannot select application path");
 
 	p15card->file_app = app_file;
 
@@ -628,6 +628,38 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+static int
+_set_md_data(struct sc_pkcs15_card * p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_path path;
+	unsigned char *buf = NULL;
+	size_t buflen = 0;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	p15card->md_data = calloc(1, sizeof(struct sc_md_data));
+	if (!p15card->md_data)
+		LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "Cannot create 'SO PIN' object");
+
+	sc_format_path(LASER_CARDCF_PATH, &path);
+	rv = sc_pkcs15_read_file(p15card, &path, &buf, &buflen);
+	LOG_TEST_RET(ctx, rv, "Cannot select&read CARDCF file");
+
+	if (buflen < 8 || *(buf + 1) < 6)
+		LOG_TEST_RET(ctx, SC_ERROR_UNKNOWN_DATA_RECEIVED, "Invalid CARDCF data");
+
+	p15card->md_data->cardcf.version = *(buf + 2);
+	p15card->md_data->cardcf.pin_freshness = *(buf + 3);
+	p15card->md_data->cardcf.cont_freshness = *(buf + 4) + *(buf + 5) * 0x100;
+	p15card->md_data->cardcf.files_freshness = *(buf + 6) + *(buf + 7) * 0x100;
+
+	sc_log(ctx, "ver.%i, pin:%02X, cont:%04X, files:%04X",
+			p15card->md_data->cardcf.version, p15card->md_data->cardcf.pin_freshness,
+			p15card->md_data->cardcf.cont_freshness, p15card->md_data->cardcf.files_freshness);
+	free(buf);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 static int
 sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
@@ -675,6 +707,9 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 
 	rv = _parse_fs_data(p15card);
 	LOG_TEST_RET(ctx, rv, "Error while creating 'certificate' objects");
+
+	rv = _set_md_data(p15card);
+	LOG_TEST_RET(ctx, rv, "Cannot set MD data");
 
 	free(buf);
 	LOG_FUNC_RETURN(ctx, rv);

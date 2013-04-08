@@ -488,6 +488,48 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 
 static int
+laser_save_cardcf(struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *file = NULL;
+	struct sc_md_cardcf *cardcf = NULL;
+	struct sc_path path;
+	unsigned char data[8];
+	size_t offs;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!p15card->md_data)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	cardcf = &p15card->md_data->cardcf;
+
+        sc_format_path(LASER_CARDCF_PATH, &path);
+	rv = sc_select_file(p15card->card, &path, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot select CARDCF file");
+
+	if (file->size < 8)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_FILE_TOO_SMALL);
+
+	offs = 0;
+	data[offs++] = 0;
+	data[offs++] = 6;
+	data[offs++] = cardcf->version;
+	data[offs++] = cardcf->pin_freshness;
+	data[offs++] = cardcf->cont_freshness & 0xFF;
+	data[offs++] = (cardcf->cont_freshness >> 8) & 0xFF;
+	data[offs++] = cardcf->files_freshness & 0xFF;
+	data[offs++] = (cardcf->files_freshness >> 8) & 0xFF;
+
+	rv = sc_update_binary(p15card->card, 0, data, offs, 0);
+	LOG_TEST_RET(ctx, rv, "Cannot update CARDCF file");
+
+	sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
 {
@@ -851,6 +893,7 @@ laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
+
 	switch (object->type)   {
 	case SC_PKCS15_TYPE_PRKEY_RSA:
 		rv = laser_update_df_delete_private_key(profile, p15card, object);
@@ -867,6 +910,7 @@ laser_emu_update_df_delete(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -879,16 +923,26 @@ laser_emu_update_df(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	int rv = SC_ERROR_NOT_SUPPORTED;
 
 	LOG_FUNC_CALLED(ctx);
+
+	if (p15card->md_data)   {
+		p15card->md_data->cardcf.cont_freshness++;
+		p15card->md_data->cardcf.files_freshness++;
+	}
+
 	switch(op)   {
-	case SC_AC_OP_ERASE:
-		sc_log(ctx, "Update DF; erase object('%s',type:%X)", object->label, object->type);
-		rv = laser_emu_update_df_delete(profile, p15card, object);
-		break;
 	case SC_AC_OP_CREATE:
 		sc_log(ctx, "Update DF; create object('%s',type:%X)", object->label, object->type);
 		rv = laser_emu_update_df_create(profile, p15card, object);
 		break;
+	case SC_AC_OP_ERASE:
+		sc_log(ctx, "Update DF; erase object('%s',type:%X)", object->label, object->type);
+		rv = laser_emu_update_df_delete(profile, p15card, object);
+		break;
 	}
+
+	rv = laser_save_cardcf(p15card);
+	LOG_TEST_RET(ctx, rv, "Failed to update CARDCF");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 

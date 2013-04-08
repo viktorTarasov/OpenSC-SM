@@ -96,6 +96,8 @@
 
 #define LASER_PKCS15_TYPE_PRESENT_IN_CMAP	0x2000
 
+#define LASER_CARDCF_PATH	"3F00300030034001"
+
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
  *
@@ -148,6 +150,7 @@ struct sc_cardctl_laser_updatekey {
 	unsigned char *data;
 	size_t len;
 };
+
 
 int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type);
 
