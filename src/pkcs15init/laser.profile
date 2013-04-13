@@ -14,6 +14,7 @@ pkcs15 {
     # direct-certificates = yes;
     # Have a lastUpdate field in the EF(TokenInfo)?
     do-last-update      = no;
+    pkcs15-id-style     = mozilla-guid;
 }
 
 # Define reasonable limits for PINs and PUK
@@ -57,7 +58,7 @@ filesystem {
 
 				# Private RSA keys
 				EF laser-private-key-attributes   {
-					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
 					file-id	= 0200;
 				}
 				EF template-private-key {
@@ -65,7 +66,7 @@ filesystem {
 					type	= internal-ef;
 					ACL	= *=NEVER;
 					ACL	= DELETE-SELF=NONE;
-					ACL	= READ=CHV32, UPDATE=CHV32, GENERATE=CHV32, PIN-RESET=CHV32, CRYPTO=CHV32;
+					ACL	= READ=NONE, UPDATE=CHV32, GENERATE=CHV32, PIN-RESET=CHV32, CRYPTO=CHV32;
 				}
 			}
 
@@ -77,19 +78,19 @@ filesystem {
 
 				# Certificate
 				EF laser-certificate-attributes  {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
-					file-id	= 0400;		# Certificate object
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
+					file-id	= 8440;		# Certificate object
 				}
 
 				# Certificate with private key
 				EF laser-cmap-certificate-attributes  {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
 					file-id	= 8400;		# Certificate object appear in cmapfile
 				}
 
 				#Public Key
 				EF laser-public-key-attributes {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=NONE;
+					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
 					file-id	= 0140;
 				}
 				EF template-public-key {
