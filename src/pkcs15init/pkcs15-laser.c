@@ -273,9 +273,12 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 	if (key_info->usage & (SC_PKCS15_PRKEY_USAGE_NONREPUDIATION | SC_PKCS15_PRKEY_USAGE_SIGN | SC_PKCS15_PRKEY_USAGE_SIGNRECOVER))
 		*(file->prop_attr + 1) |= LASER_KO_USAGE_SIGN;
 
+	/* FIXME: all usages are allowed, as native MW do */
+	*(file->prop_attr + 1) |= LASER_KO_USAGE_SIGN | LASER_KO_USAGE_DECRYPT;
+
 	*(file->prop_attr + 2) = LASER_KO_ALGORITHM_RSA;
 	*(file->prop_attr + 3) = LASER_KO_PADDING_NO;
-	*(file->prop_attr + 4) = 0xA3;	/* Max retry counter 10, 3 tries to unlock. TODO what's this ????? */
+	*(file->prop_attr + 4) = 0xA3;	/* Max retry counter 10, 3 tries to unlock. FIXME: what's this ? */
 
 	sc_log(ctx, "Create private key file: path %s, propr. info %s",
 			sc_print_path(&file->path), sc_dump_hex(file->prop_attr, file->prop_attr_len));
@@ -576,6 +579,19 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	sc_log(ctx, "Private key attributes file reference 0x%X", attrs_ref);
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_PRKEY_RSA, attrs_ref, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot instantiate private key attributes file");
+
+	/* FIXME: all usages are allowed, as native MW do */
+	info->usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT;
+	info->usage |= SC_PKCS15_PRKEY_USAGE_UNWRAP;
+	info->usage |= SC_PKCS15_PRKEY_USAGE_SIGN;
+	info->usage |= SC_PKCS15_PRKEY_USAGE_SIGNRECOVER;
+	info->access_flags &= ~SC_PKCS15_PRKEY_ACCESS_ALWAYSSENSITIVE;
+	info->access_flags &= ~SC_PKCS15_PRKEY_ACCESS_NEVEREXTRACTABLE;
+	object->flags &= ~SC_PKCS15_CO_FLAG_MODIFIABLE;
+	if (!info->subject.value)   {
+		info->subject.value = (unsigned char *)strdup("ASECSP");
+		info->subject.len = strlen((char *)info->subject.value);
+	}
 
 	rv =  laser_attrs_prvkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode private key attributes");
