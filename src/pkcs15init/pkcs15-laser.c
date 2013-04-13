@@ -46,19 +46,6 @@ static int laser_update_df_create_data_object(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object);
 
 static int
-laser_validate_key_reference(int key_reference)
-{
-	if (key_reference < LASER_FS_KEY_REF_MIN)
-		return SC_ERROR_INVALID_DATA;
-
-	if (key_reference > LASER_FS_KEY_REF_MAX)
-		return SC_ERROR_INVALID_DATA;
-
-	return SC_SUCCESS;
-}
-
-
-static int
 laser_validate_attr_reference(int key_reference)
 {
 	if (key_reference < LASER_FS_ATTR_REF_MIN)
@@ -68,17 +55,6 @@ laser_validate_attr_reference(int key_reference)
 		return SC_ERROR_INVALID_DATA;
 
 	return SC_SUCCESS;
-}
-
-
-static int
-laser_write_tokeninfo (struct sc_pkcs15_card *p15card, struct sc_profile *profile,
-		char *label, unsigned flags)
-{
-	struct sc_context *ctx = p15card->card->ctx;
-
-	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
 
@@ -250,7 +226,7 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create key failed: RSA only supported");
 
 	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite profile setting in every 'create' pkcs15init handle. */
+	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
 	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
 
 	sc_log(ctx, "create private key(type:%X) ID:%s key-ref:0x%X", object->type, sc_pkcs15_print_id(&key_info->id), key_info->key_reference);
@@ -330,7 +306,7 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "For a while only RSA can be generated");
 
 	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite profile setting in every 'create' pkcs15init handle. */
+	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
 	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
 
 	rv = sc_select_file(card, &key_info->path, &key_file);
@@ -412,7 +388,7 @@ laser_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 			prkey->u.rsa.dmp1.len, prkey->u.rsa.dmq1.len);
 
 	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite profile setting in every 'create' pkcs15init handle. */
+	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
 	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
 
 	rv = sc_select_file(p15card->card, &key_info->path, &file);
@@ -1123,9 +1099,15 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 
 	LOG_FUNC_CALLED(ctx);
 
-	/* FIXME: overwrite here the certificate ID by 'GUID' style intrinsic one
-	 * Currently the key's ID style is enforced in the code,
-	 * but the certificate's ID style comes from profile. */
+	/* Only 'GUID' ID style allowed.
+	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
+	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
+
+	/* Enforce the 'GUID' style for certificate ID */
+	info->id.len = 0;
+	rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_CERT_X509,
+			&info->id, &info->value);
+	LOG_TEST_RET(ctx, rv, "Cannot set certificate 'intrinsic ID'");
 
 	sc_log(ctx, "store certificate with ID '%s'", sc_pkcs15_print_id(&info->id));
 	rv = sc_pkcs15_find_prkey_by_id(p15card, &info->id, &key);
