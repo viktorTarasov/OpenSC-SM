@@ -371,6 +371,8 @@ extern int	sc_pkcs15init_delete_by_path(struct sc_profile *,
 				struct sc_pkcs15_card *, const struct sc_path *);
 extern int	sc_pkcs15init_update_any_df(struct sc_pkcs15_card *, struct sc_profile *,
 			struct sc_pkcs15_df *, int);
+extern int	sc_pkcs15init_select_intrinsic_id(struct sc_pkcs15_card *, struct sc_profile *,
+			int, struct sc_pkcs15_id *, void *);
 
 /* Erasing the card structure via rm -rf */
 extern int	sc_pkcs15init_erase_card_recursively(struct sc_pkcs15_card *,

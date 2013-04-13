@@ -114,15 +114,13 @@ static int	check_key_compatibility(struct sc_pkcs15_card *,
 static int	prkey_fixup(struct sc_pkcs15_card *, struct sc_pkcs15_prkey *);
 static int	prkey_bits(struct sc_pkcs15_card *, struct sc_pkcs15_prkey *);
 static int	prkey_pkcs15_algo(struct sc_pkcs15_card *, struct sc_pkcs15_prkey *);
-static int 	select_intrinsic_id(struct sc_pkcs15_card *, struct sc_profile *,
-			int, struct sc_pkcs15_id *, void *);
 static int	select_id(struct sc_pkcs15_card *, int, struct sc_pkcs15_id *);
 static int	select_object_path(struct sc_pkcs15_card *, struct sc_profile *,
 			struct sc_pkcs15_object *, struct sc_path *);
 static int	sc_pkcs15init_get_pin_path(struct sc_pkcs15_card *,
 			struct sc_pkcs15_id *, struct sc_path *);
 static int	sc_pkcs15init_qualify_pin(struct sc_card *, const char *,
-	       		unsigned int, struct sc_pkcs15_auth_info *);
+			unsigned int, struct sc_pkcs15_auth_info *);
 static struct sc_pkcs15_df * find_df_by_type(struct sc_pkcs15_card *,
 			unsigned int);
 static int	sc_pkcs15init_read_info(struct sc_card *card, struct sc_profile *);
@@ -1330,7 +1328,8 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
 		/* Caller not supplied ID, so,
 		 * if intrinsic ID can be calculated -- overwrite the native one */
 		memset(&iid, 0, sizeof(iid));
-		r = select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY, &iid, &pubkey_args.key);
+		r = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY,
+				&iid, &pubkey_args.key);
 		LOG_TEST_RET(ctx, r, "Select intrinsic ID error");
 
 		if (iid.len)
@@ -1399,7 +1398,8 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card,
 	}
 
 	/* Select a intrinsic Key ID if user didn't specify one */
-	r = select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PRKEY, &keyargs->id, &keyargs->key);
+	r = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PRKEY,
+			&keyargs->id, &keyargs->key);
 	LOG_TEST_RET(ctx, r, "Get intrinsic ID error");
 
 	/* Make sure that private key's ID is the unique inside the PKCS#15 application */
@@ -1541,7 +1541,8 @@ sc_pkcs15init_store_public_key(struct sc_pkcs15_card *p15card,
 		key_info->field_length = keybits;
 
 	/* Select a intrinsic Key ID if the user didn't specify one */
-	r = select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY, &keyargs->id, &key);
+	r = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY,
+			&keyargs->id, &key);
 	LOG_TEST_RET(ctx, r, "Get intrinsic ID error");
 
 	/* Select a Key ID if the user didn't specify one and there is no intrinsic ID,
@@ -1606,7 +1607,8 @@ sc_pkcs15init_store_certificate(struct sc_pkcs15_card *p15card,
 	if (!label)
 		label = "Certificate";
 
-	r = select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_CERT_X509, &args->id, &args->der_encoded);
+	r = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_CERT_X509,
+			&args->id, &args->der_encoded);
 	LOG_TEST_RET(ctx, r, "Get certificate 'intrinsic ID' error");
 
 	/* Select an ID if the user didn't specify one, otherwise
@@ -2121,7 +2123,7 @@ prkey_bits(struct sc_pkcs15_card *p15card, struct sc_pkcs15_prkey *key)
 			sc_log(ctx, "Unsupported key (keybits %u)", sc_pkcs15init_keybits(&key->u.gostr3410.d));
 			return SC_ERROR_OBJECT_NOT_VALID;
 		}
-		return SC_PKCS15_GOSTR3410_KEYSIZE;		
+		return SC_PKCS15_GOSTR3410_KEYSIZE;
 	case SC_ALGORITHM_EC:
 		/* calculation returns one bit too small, add one bu default */
 		sc_log(ctx, "Private EC key length %u", sc_pkcs15init_keybits(&key->u.ec.privateD) + 1);
@@ -2163,9 +2165,9 @@ find_df_by_type(struct sc_pkcs15_card *p15card, unsigned int type)
 }
 
 
-static int
-select_intrinsic_id(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
-			int type, struct sc_pkcs15_id *id_out, void *data)
+int
+sc_pkcs15init_select_intrinsic_id(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
+		int type, struct sc_pkcs15_id *id_out, void *data)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
