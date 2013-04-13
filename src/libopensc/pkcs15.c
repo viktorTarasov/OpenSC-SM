@@ -26,6 +26,7 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <ctype.h>
 
 #include "cardctl.h"
 #include "internal.h"
@@ -2499,7 +2500,7 @@ sc_pkcs15_get_object_id(const struct sc_pkcs15_object *obj, struct sc_pkcs15_id 
  * There is no variant, version number and other special meaning fields
  *  that are described in RFC-4122 .
  */
-static int
+int
 sc_pkcs15_serialize_guid(unsigned char *in, size_t in_size, unsigned flags,
 		char *out, size_t out_size)
 {
@@ -2529,8 +2530,33 @@ sc_pkcs15_serialize_guid(unsigned char *in, size_t in_size, unsigned flags,
 	return SC_SUCCESS;
 }
 
+
+static int
+sc_pkcs15_is_valid_guid (char *data, size_t data_len)
+{
+	unsigned ii;
+
+	if (data_len < 38 || (strlen(data) != 36 && strlen(data) != 38))
+		return SC_ERROR_INVALID_DATA;
+	if (strlen(data) == 38)   {
+		if (*data != '{' || *(data + 38) != '}' )
+			return SC_ERROR_INVALID_DATA;
+		data++;
+		data_len -= 2;
+	}
+
+	if (*(data + 8) != '-' || *(data + 13) != '-' || *(data + 18) != '-' || *(data + 23) != '-')
+		return SC_ERROR_INVALID_DATA;
+
+	for (ii=0; ii<data_len; ii++)
+		if (!isxdigit(*(data + ii) ) && *(data + ii)  != '-')
+			return SC_ERROR_INVALID_DATA;
+	return SC_SUCCESS;
+}
+
+
 int
-sc_pkcs15_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object *obj,
+sc_pkcs15_get_object_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object *obj,
 		                unsigned flags, char *out, size_t out_size)
 {
 	struct sc_serial_number serialnr;
@@ -2541,13 +2567,13 @@ sc_pkcs15_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object
 	if (p15card->ops.get_guid)
 		return p15card->ops.get_guid(p15card, obj, out, out_size);
 
+	memset(out, 0, out_size);
 	if ((obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY)   {
 		struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)obj->data;
 
 		if (info->cmap_record.guid && strlen(info->cmap_record.guid))   {
 			if (out_size < strlen(info->cmap_record.guid) + 1)
 				return SC_ERROR_BUFFER_TOO_SMALL;
-			memset(out, 0, out_size);
 			memcpy(out, info->cmap_record.guid, strlen(info->cmap_record.guid));
 
 			return SC_SUCCESS;
@@ -2557,6 +2583,13 @@ sc_pkcs15_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object
 	rv = sc_pkcs15_get_object_id(obj, &id);
 	if (rv)
 		return rv;
+
+	if (sc_pkcs15_is_valid_guid((char *)(id.value), id.len))   {
+		if (out_size < id.len + 1)
+			return SC_ERROR_BUFFER_TOO_SMALL;
+		memcpy(out, id.value, id.len);
+		return SC_SUCCESS;
+	}
 
 	rv = sc_card_ctl(p15card->card, SC_CARDCTL_GET_SERIALNR, &serialnr);
 	if (rv)
