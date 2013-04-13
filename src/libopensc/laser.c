@@ -1469,7 +1469,7 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *objec
 
 
 int
-laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
+laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned type, unsigned base_id)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *objs[32];
@@ -1498,6 +1498,8 @@ laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
 	sc_log(ctx, "found %i objects of type %X", objs_num, type);
 	for (ii = min; ii <= max; ii++)   {
 		for (jj=0; jj<objs_num; jj++)   {
+			unsigned id;
+
 			switch (type & SC_PKCS15_TYPE_CLASS_MASK)   {
 			case SC_PKCS15_TYPE_CERT:
 				path = ((struct sc_pkcs15_cert_info *)objs[jj]->data)->path;
@@ -1513,7 +1515,8 @@ laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type)
 			}
 
 			sc_log(ctx, "object(type:%X) path %s", type, sc_print_path(&path));
-			if (ii == (path.value[path.len - 1] & LASER_FS_REF_MASK))
+			id = path.value[path.len - 1] + path.value[path.len - 2] * 0x100;
+			if (id == base_id + ii)
 				break;
 		}
 		if (jj == objs_num)

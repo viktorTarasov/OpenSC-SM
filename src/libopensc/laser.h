@@ -71,9 +71,13 @@
 #define LASER_SM_ACCESS_OUTPUT  0x8000
 
 #define LASER_FS_REF_MASK	0x3F
-#define LASER_FS_BASEFID_PUBKEY         0x0080
+#define LASER_FS_BASEFID_PUBKEY			0x0080
 /* TODO: Private key can have different 'BASEFID's */
-#define LASER_FS_BASEFID_PRVKEY         0x0040
+#define LASER_FS_BASEFID_PRVKEY_EXCH		0x0040
+#define LASER_FS_BASEFID_PRVKEY_SIGN		0x0060
+#define LASER_FS_BASEFID_DATA			0x0060
+#define LASER_FS_BASEFID_CERT			0x8440
+#define LASER_FS_BASEFID_CERT_CMAP		0x8400
 
 #define LASER_ATTRIBUTE_VALID	0
 #define LASER_ATTRIBUTE_INVALID	1
@@ -152,7 +156,7 @@ struct sc_cardctl_laser_updatekey {
 };
 
 
-int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned int type);
+int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned type, unsigned base_file_id);
 
 int laser_encode_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key,
 		unsigned char **buf, size_t *len);

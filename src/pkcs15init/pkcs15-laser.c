@@ -191,6 +191,7 @@ laser_new_file(struct sc_profile *profile, struct sc_card *card,
 		type &= SC_PKCS15_TYPE_CLASS_MASK;
 	}
 
+	/* TODO: do not use the file-id from profile, but macro BASEFID */
 	sc_log(ctx, "laser_new_file() template %s; num %i",_template, num);
 	if (sc_profile_get_file(profile, _template, &file) < 0) {
 		sc_log(ctx, "Profile doesn't define %s template '%s'", desc, _template);
@@ -221,10 +222,10 @@ laser_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	struct sc_context *ctx = p15card->card->ctx;
 	int rv;
 
-	rv = laser_get_free_index(p15card, SC_PKCS15_TYPE_PRKEY);
+	rv = laser_get_free_index(p15card, SC_PKCS15_TYPE_PRKEY, LASER_FS_BASEFID_PRVKEY_EXCH);
 	LOG_TEST_RET(ctx, rv, "Cannot get free key reference number");
 
-	key_info->key_reference = rv | LASER_FS_BASEFID_PRVKEY;
+	key_info->key_reference = rv;
 
 	sc_log(ctx, "return selected key reference 0x%X", key_info->key_reference);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -439,14 +440,16 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	if (object)   {
 		info = (struct sc_pkcs15_prkey_info *)object->data;
 		if (!info->cmap_record.guid)   {
-			rv = sc_pkcs15_get_guid(p15card, object, 1, guid, sizeof(guid));
+			rv = sc_pkcs15_get_object_guid(p15card, object, 1, guid, sizeof(guid));
 			LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
 			info->cmap_record.guid = strdup(guid);
 			if (!info->cmap_record.guid)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-			/* By default all keys are 'key-exchange' keys */
+
+			/* All new keys are 'key-exchange' keys.
+			 * FIXME: implement 'sign' key. */
 			info->cmap_record.keysize_keyexchange = info->modulus_length;
 			info->cmap_record.keysize_sign = 0;
 
@@ -1087,9 +1090,12 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 
 		snprintf((char *)file->name, sizeof(file->name), "kxc%02i", idx);
 		file->namelen = strlen((char *)file->name);
+
+		/* The same label have the certificate and it's key friend */
+		snprintf(object->label, sizeof(object->label), "%s", (char *)key->label);
 	}
 	else   {
-		idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509);
+		idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_CERT_X509, LASER_FS_BASEFID_CERT);
 		LOG_TEST_RET(ctx, idx, "Cannot get free certificate index");
 
 		rv = laser_new_file(profile, p15card->card, LASER_ATTRS_CERT_X509, idx, &file);
@@ -1128,7 +1134,7 @@ laser_emu_store_data_object(struct sc_pkcs15_card *p15card,
 
 	LOG_FUNC_CALLED(ctx);
 
-	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_DATA_OBJECT);
+	idx = laser_get_free_index(p15card, SC_PKCS15_TYPE_DATA_OBJECT, LASER_FS_BASEFID_DATA);
 	LOG_TEST_RET(ctx, idx, "Cannot get free DATA object index");
 
 	rv = laser_new_file(profile, p15card->card, LASER_ATTRS_DATA_OBJECT, idx, &file);

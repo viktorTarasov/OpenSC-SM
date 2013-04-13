@@ -355,7 +355,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	struct sc_pkcs15_prkey_info info, *pinfo = NULL;
 	struct sc_pkcs15_prkey_rsa key_rsa;
 	struct sc_file *key_file = NULL;
-	unsigned ko_fid = ((file_id & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PRVKEY) + 1;
+	unsigned ko_fid = ((file_id & LASER_FS_REF_MASK) | LASER_FS_BASEFID_PRVKEY_EXCH) + 1;
 	struct sc_path path;
 	unsigned char fid[2] = {((file_id >> 8) & 0xFF), (file_id & 0xFF)};
 	unsigned char *data = NULL;
@@ -431,7 +431,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 	if (!pinfo->cmap_record.guid)   {
 		char guid[40];
 
-		rv = sc_pkcs15_get_guid(p15card, pobj, 1, guid, sizeof(guid));
+		rv = sc_pkcs15_get_object_guid(p15card, pobj, 1, guid, sizeof(guid));
 		LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
 		pinfo->cmap_record.guid = strdup(guid);
