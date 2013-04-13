@@ -153,8 +153,6 @@ laser_encode_prvkey_rsa(struct sc_context *ctx, struct sc_pkcs15_prkey_rsa *key,
 	sc_format_asn1_entry(asn1_rsa_coefficients + 3, primes, &primes_len, 1);
 	sc_format_asn1_entry(asn1_rsa_coefficients + 4, partial_primes, &partial_primes_len, 1);
 
-	//sc_log(ctx, "Encoding modulus '%s'",sc_dump_hex(key->modulus.data, key->modulus.len));
-
 	r = sc_asn1_encode(ctx, asn1_rsa_key, buf, buflen);
 	LOG_TEST_RET(ctx, r, "ASN.1 encoding of RSA private key failed");
 
@@ -435,7 +433,6 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 		struct sc_pkcs15_object *object, struct sc_pkcs15_pubkey_info *info,
 		unsigned char *data, size_t data_len)
 {
-	//struct sc_pkcs15_pubkey_rsa key_rsa;
 	struct sc_pkcs15_pubkey pub_key;
 	struct sc_pkcs15_der der;
 	size_t offs, next;
@@ -443,7 +440,6 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 
 	LOG_FUNC_CALLED(ctx);
 
-	//memset(&key_rsa, 0, sizeof(key_rsa));
 	memset(&pub_key, 0, sizeof(pub_key));
 
 	for (next = offs = 0; offs < data_len; offs = next)   {
@@ -945,11 +941,11 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_DERIVE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_START_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_START_DATE, 0, NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_DATE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_END_DATE, sizeof(CK_DATE), NULL);
+	rv = laser_add_attribute(&data, &data_len, CKFP_MODIFIABLE, CKA_END_DATE, 0, NULL);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_START_END private key attribute");
 	attrs_num++;
 
