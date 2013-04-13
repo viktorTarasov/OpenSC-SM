@@ -376,11 +376,14 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	pubkey->u.rsa.exponent.len  = args.exponent_len;
 	pubkey->u.rsa.exponent.data = args.exponent;
 
+	key_info->id.len = 0;
 	rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY,
 			&key_info->id, pubkey);
 	LOG_TEST_RET(ctx, rv, "Select intrinsic ID error");
 
+        sc_log(ctx, "generated key ID %s", sc_pkcs15_print_id(&key_info->id));
 	snprintf(object->label, sizeof(object->label), "%s", (char *)key_info->id.value);
+        sc_log(ctx, "generated key label '%s'", object->label);
 
 	sc_file_free(key_file);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -426,7 +429,8 @@ laser_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	rv = sc_card_ctl(p15card->card, SC_CARDCTL_ATHENA_UPDATE_KEY, &args);
 	LOG_TEST_RET(ctx, rv, "laser_generate_key() SC_CARDCTL_ATHENA_GENERATE_KEY failed");
 
-        /* Select a intrinsic Key ID if user didn't specify one */
+        /* Overwrite any supplied ID by GUID style intrinsic ID  */
+	key_info->id.len = 0;
         rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PRKEY,
 			&key_info->id, prkey);
         LOG_TEST_RET(ctx, rv, "Cannot set intrinsic ID");
@@ -1118,6 +1122,10 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
+
+	/* FIXME: overwrite here the certificate ID by 'GUID' style intrinsic one
+	 * Currently the key's ID style is enforced in the code,
+	 * but the certificate's ID style comes from profile. */
 
 	sc_log(ctx, "store certificate with ID '%s'", sc_pkcs15_print_id(&info->id));
 	rv = sc_pkcs15_find_prkey_by_id(p15card, &info->id, &key);
