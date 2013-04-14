@@ -430,6 +430,76 @@ laser_emu_update_dir (struct sc_profile *profile, struct sc_pkcs15_card *p15card
 
 
 static int
+laser_cmap_container_set_default(struct sc_pkcs15_card *p15card,
+		int remove, struct sc_pkcs15_object *object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_prkey_info *key_info = NULL;
+	struct sc_pkcs15_object *key_objs[12];
+	struct sc_pkcs15_id *rm_id = NULL;
+	int rv, keys_num, ii;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, key_objs, 12);
+        LOG_TEST_RET(ctx, rv, "Failed to get private key objects");
+	keys_num = rv;
+
+	if (remove && object)   {
+		if ((object->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY)
+			rm_id = &((struct sc_pkcs15_prkey_info *)object->data)->id;
+		else if ((object->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_CERT)
+			rm_id = &((struct sc_pkcs15_cert_info *)object->data)->id;
+	}
+
+	for (ii=0; ii<keys_num; ii++)   {
+		key_info = (struct sc_pkcs15_prkey_info *)key_objs[ii]->data;
+
+		if ((rm_id && sc_pkcs15_compare_id(&key_info->id, rm_id))
+				|| !(key_info->cmap_record.flags & SC_MD_CONTAINER_MAP_VALID_CONTAINER))   {
+			key_info->cmap_record.flags &= ~SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
+
+			sc_log(ctx, "ignore (deleted?) key ID %s", sc_pkcs15_print_id(&key_info->id));
+			if (ii < keys_num - 1)
+				key_objs[ii] = key_objs[ii + 1];
+			ii--;
+			keys_num--;
+			continue;
+		}
+
+		if (key_info->cmap_record.flags & SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER)   {
+			sc_log(ctx, "Default container exists: %s", sc_pkcs15_print_id(&key_info->id));
+			LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+		}
+
+		rv = sc_pkcs15_find_cert_by_id(p15card, &key_info->id, NULL);
+		if (rv)   {
+			/* remove from list the key object without corresponding certificate */
+			if (ii < keys_num - 1)
+				key_objs[ii] = key_objs[ii + 1];
+			ii--;
+			keys_num--;
+			continue;
+		}
+		sc_log(ctx, "%i/%i", ii, keys_num);
+	}
+
+	if (keys_num)   {
+		key_info = (struct sc_pkcs15_prkey_info *)key_objs[0]->data;
+		key_info->cmap_record.flags |= SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
+
+		sc_log(ctx, "Default container %s", sc_pkcs15_print_id(&key_info->id));
+	}
+	else   {
+		sc_log(ctx, "No more default container");
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+}
+
+
+static int
 laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		int remove, struct sc_pkcs15_object *object)
 {
@@ -443,8 +513,7 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-
-	if (object)   {
+	if (object != NULL && (object->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY)   {
 		info = (struct sc_pkcs15_prkey_info *)object->data;
 		if (!info->cmap_record.guid)   {
 			rv = sc_pkcs15_get_object_guid(p15card, object, 1, guid, sizeof(guid));
@@ -454,18 +523,17 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 			if (!info->cmap_record.guid)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-
 			/* All new keys are 'key-exchange' keys.
 			 * FIXME: implement 'sign' key. */
 			info->cmap_record.keysize_keyexchange = info->modulus_length;
 			info->cmap_record.keysize_sign = 0;
 
 			info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
-			/* First container is 'default' one */
-			if (sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, NULL, 0) == 1)
-				info->cmap_record.flags |= SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER;
 		}
 	}
+
+	rv = laser_cmap_container_set_default(p15card, remove, object);
+	LOG_TEST_RET(ctx, rv, "Failed to set default CMAP container");
 
 	rv = laser_cmap_encode(p15card, (remove ? object : NULL), &cmap, &cmap_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode 'cmap' data");
@@ -729,13 +797,15 @@ laser_update_df_create_certificate(struct sc_profile *profile, struct sc_pkcs15_
 	sc_log(ctx, "update laser certificate attributes '%s'", sc_dump_hex(attrs, attrs_len));
 
 	file->size = attrs_len;
-
 	/* TODO: implement Laser's 'resize' file */
 	rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);
 	LOG_TEST_RET(ctx, rv, "Failed to update DF: cannot delete laser certificate");
 
 	rv = sc_pkcs15init_update_file(profile, p15card, file, attrs, attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to update laser certificate attributes file");
+
+	rv = laser_cmap_update(profile, p15card, 0, NULL);
+	LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
 
 	sc_file_free(file);
 	LOG_FUNC_RETURN(ctx, rv);
