@@ -491,7 +491,7 @@ laser_cmap_container_set_default(struct sc_pkcs15_card *p15card,
 		sc_log(ctx, "Default container %s", sc_pkcs15_print_id(&key_info->id));
 	}
 	else   {
-		sc_log(ctx, "No more default container");
+		sc_log(ctx, "No default container");
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
