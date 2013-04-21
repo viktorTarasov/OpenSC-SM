@@ -620,6 +620,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 
 	LOG_FUNC_CALLED(ctx);
 
+	sc_log(ctx, "Update DF with new key ID:%s", sc_pkcs15_print_id(&info->id));
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");
@@ -641,6 +642,7 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 		info->subject.len = strlen((char *)info->subject.value);
 	}
 
+	sc_log(ctx, "Encode private key attributes; key-id:%s", sc_pkcs15_print_id(&info->id));
 	rv =  laser_attrs_prvkey_encode(p15card, object, file->id, &attrs, &attrs_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode private key attributes");
 	sc_log(ctx, "Attributes(%i) '%s'",attrs_num, sc_dump_hex(attrs, attrs_len));

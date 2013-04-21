@@ -1336,6 +1336,8 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
 			key_info->id = iid;
 	}
 
+	sc_log(ctx, "Key ID: '%s'", sc_pkcs15_print_id(&key_info->id));
+
 	pubkey_args.id = key_info->id;
 	r = sc_pkcs15_encode_pubkey(ctx, &pubkey_args.key, &object->content.value, &object->content.len);
 	LOG_TEST_RET(ctx, r, "Failed to encode public key");
@@ -1350,6 +1352,7 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
 		LOG_TEST_RET(ctx, r, "Card specific 'store data' failed");
 	}
 
+	sc_log(ctx, "Key ID: '%s'", sc_pkcs15_print_id(&key_info->id));
 	r = sc_pkcs15init_store_public_key(p15card, profile, &pubkey_args, NULL);
 	LOG_TEST_RET(ctx, r, "Failed to store public key");
 
@@ -2284,6 +2287,7 @@ done:
 	if (allocated)
 		sc_pkcs15_free_pubkey(pubkey);
 
+	sc_log(ctx, "returns intrinsic ID '%s'", sc_pkcs15_print_id(id_out));
 	LOG_FUNC_RETURN(ctx, id_out->len);
 #endif
 }
