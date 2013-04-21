@@ -1394,7 +1394,8 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 		struct laser_cmap_record *cmap_rec)
 {
 	struct sc_pkcs15_prkey_info *info = NULL;
-	int guid_len, ii;
+	int guid_len;
+	unsigned ii;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!key_obj || !cmap_rec)
@@ -1437,9 +1438,10 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *objec
 		unsigned char **out, size_t *out_len)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_pkcs15_object *prkeys[12];
+	struct sc_pkcs15_object *prkeys[12], *ordered_prkeys[12];
 	struct sc_pkcs15_id *ignore_id = NULL;
 	int rv, ii, prkeys_num;
+	unsigned idx_max, idx;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1451,20 +1453,39 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *objec
 	if (object_to_ignore)
 		ignore_id = &((struct sc_pkcs15_prkey_info *)(object_to_ignore->data))->id;
 
+	memset(ordered_prkeys, 0, sizeof(ordered_prkeys));
+
 	prkeys_num = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, prkeys, 12);
 	LOG_TEST_RET(ctx, prkeys_num, "Failed to get private key objects");
 
-	for (ii=0; ii<prkeys_num; ii++)   {
+	for (ii=0, idx_max = 0; ii < prkeys_num; ii++)   {
 		struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
+
+		idx = (info->key_reference & LASER_FS_REF_MASK) - LASER_FS_KEY_REF_MIN;
+		if (idx > sizeof(ordered_prkeys)/sizeof(struct sc_pkcs15_object *) - 1)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+
+		ordered_prkeys[idx] = prkeys[ii];
+		if (idx_max < idx)
+			idx_max  = idx;
+	}
+
+	for (idx = 0; idx < idx_max + 1; idx++)   {
 		struct laser_cmap_record cmap_rec;
 
-		if (ignore_id && sc_pkcs15_compare_id(ignore_id, &info->id))   {
-			sc_log(ctx, "Ignore (deleted?) key %s", sc_pkcs15_print_id(&info->id));
-			continue;
-		}
+		memset(&cmap_rec, 0, sizeof(cmap_rec));
 
-		rv = laser_cmap_record_init(ctx, prkeys[ii], &cmap_rec);
-		LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");
+		if (ordered_prkeys[idx])   {
+			struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)ordered_prkeys[idx]->data;
+
+			if (!(ignore_id && sc_pkcs15_compare_id(ignore_id, &info->id)))   {
+				rv = laser_cmap_record_init(ctx, ordered_prkeys[idx], &cmap_rec);
+				LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");
+			}
+			else   {
+				sc_log(ctx, "Ignore (deleted?) key %s", sc_pkcs15_print_id(&info->id));
+			}
+		}
 
 		*out = realloc(*out, *out_len + sizeof(cmap_rec));
 		if (*out == NULL)
