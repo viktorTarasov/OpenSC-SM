@@ -931,6 +931,7 @@ int sc_pkcs15_get_object_id(const struct sc_pkcs15_object *, struct sc_pkcs15_id
 int sc_pkcs15_get_object_guid(struct sc_pkcs15_card *, const struct sc_pkcs15_object *, unsigned,
 		char *, size_t);
 int sc_pkcs15_serialize_guid(unsigned char *, size_t, unsigned, char *, size_t);
+int sc_pkcs15_is_valid_guid (char *, size_t);
 int sc_encode_oid (struct sc_context *, struct sc_object_id *,
 		unsigned char **, size_t *);
 

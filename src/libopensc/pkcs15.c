@@ -2531,7 +2531,7 @@ sc_pkcs15_serialize_guid(unsigned char *in, size_t in_size, unsigned flags,
 }
 
 
-static int
+int
 sc_pkcs15_is_valid_guid (char *data, size_t data_len)
 {
 	unsigned ii;

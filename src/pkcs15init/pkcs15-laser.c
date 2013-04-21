@@ -621,6 +621,11 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_FUNC_CALLED(ctx);
 
 	sc_log(ctx, "Update DF with new key ID:%s", sc_pkcs15_print_id(&info->id));
+	if (sc_pkcs15_is_valid_guid((char *)(info->id.value), info->id.len))   {
+		sc_log(ctx, "Ignore update DF when ID is not GUID style");
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
 	LOG_TEST_RET(ctx, rv, "Invalid attribute file reference");

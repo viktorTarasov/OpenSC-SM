@@ -2861,6 +2861,7 @@ sc_pkcs15init_change_attrib(struct sc_pkcs15_card *p15card, struct sc_profile *p
 	struct sc_pkcs15_df *df;
 	struct sc_pkcs15_id new_id = *((struct sc_pkcs15_id *) new_value);
 
+	LOG_FUNC_CALLED(ctx);
 	if (object == NULL || object->df == NULL)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Cannot change attribute");
 	df_type = object->df->type;
@@ -2869,6 +2870,7 @@ sc_pkcs15init_change_attrib(struct sc_pkcs15_card *p15card, struct sc_profile *p
 	if (df == NULL)
 		LOG_TEST_RET(ctx, SC_ERROR_OBJECT_NOT_FOUND, "Cannot change attribute");
 
+	sc_log(ctx, "type of attribute to change %i; DF type %i", new_attrib_type, df_type);
 	switch(new_attrib_type)   {
 	case P15_ATTR_TYPE_LABEL:
 		if (new_len >= SC_PKCS15_MAX_LABEL_SIZE)
@@ -2916,7 +2918,9 @@ sc_pkcs15init_change_attrib(struct sc_pkcs15_card *p15card, struct sc_profile *p
 		}
 	}
 
-	return r < 0 ? r : 0;
+	if (r > 0)
+		r = 0;
+	LOG_FUNC_RETURN(ctx, r);
 }
 
 
