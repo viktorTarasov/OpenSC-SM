@@ -2536,7 +2536,7 @@ sc_pkcs15_is_valid_guid (char *data, size_t data_len)
 {
 	unsigned ii;
 
-	if (data_len < 38 || (strlen(data) != 36 && strlen(data) != 38))
+	if (data_len < 36 || (strlen(data) != 36 && strlen(data) != 38))
 		return SC_ERROR_INVALID_DATA;
 	if (strlen(data) == 38)   {
 		if (*data != '{' || *(data + 38) != '}' )
