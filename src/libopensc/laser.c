@@ -1413,16 +1413,9 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 	sc_log(ctx, "key ID %s", sc_pkcs15_print_id(&info->id));
 
 	memset(cmap_rec, 0, sizeof(struct laser_cmap_record));
-#if 0
 	for (ii=0; ii<guid_len; ii++)
 		cmap_rec->guid[2*ii] = *(info->cmap_record.guid + ii);
-#else
-	/* FIXME: This replaces completely the MD container GUID by internal intrinsic ID/GUID */
-	if (info->id.len >= CMAP_GUID_INFO_SIZE/2)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-	for (ii=0; ii<info->id.len; ii++)
-		cmap_rec->guid[2*ii] = info->id.value[ii];
-#endif
+
 	cmap_rec->guid_len = ii;
 	cmap_rec->flags = info->cmap_record.flags;
 

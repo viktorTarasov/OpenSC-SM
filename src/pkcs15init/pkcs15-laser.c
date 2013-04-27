@@ -225,10 +225,6 @@ laser_create_key_file(struct sc_profile *profile, struct sc_pkcs15_card *p15card
 	if (object->type != SC_PKCS15_TYPE_PRKEY_RSA)
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Create key failed: RSA only supported");
 
-	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
-	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
-
 	sc_log(ctx, "create private key(type:%X) ID:%s key-ref:0x%X", object->type, sc_pkcs15_print_id(&key_info->id), key_info->key_reference);
 	/* Here, the path of private key file should be defined.
 	 * Neverthelles, we need to instanciate private key to get the ACLs. */
@@ -305,10 +301,6 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	if (object->type != SC_PKCS15_TYPE_PRKEY_RSA)
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "For a while only RSA can be generated");
 
-	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
-	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
-
 	rv = sc_select_file(card, &key_info->path, &key_file);
 	LOG_TEST_RET(ctx, rv, "Failed to generate key: cannot select private key file");
 
@@ -352,15 +344,6 @@ laser_generate_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	pubkey->u.rsa.exponent.len  = args.exponent_len;
 	pubkey->u.rsa.exponent.data = args.exponent;
 
-	key_info->id.len = 0;
-	rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PUBKEY,
-			&key_info->id, pubkey);
-	LOG_TEST_RET(ctx, rv, "Select intrinsic ID error");
-
-        sc_log(ctx, "generated key ID %s", sc_pkcs15_print_id(&key_info->id));
-	snprintf(object->label, sizeof(object->label), "%s", (char *)key_info->id.value);
-        sc_log(ctx, "generated key label '%s'", object->label);
-
 	sc_file_free(key_file);
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -387,10 +370,6 @@ laser_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 			prkey->u.rsa.q.len, prkey->u.rsa.iqmp.len,
 			prkey->u.rsa.dmp1.len, prkey->u.rsa.dmq1.len);
 
-	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
-	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
-
 	rv = sc_select_file(p15card->card, &key_info->path, &file);
 	LOG_TEST_RET(ctx, rv, "Cannot store key: select key file failed");
 
@@ -404,14 +383,6 @@ laser_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 	rv = sc_card_ctl(p15card->card, SC_CARDCTL_ATHENA_UPDATE_KEY, &args);
 	LOG_TEST_RET(ctx, rv, "laser_generate_key() SC_CARDCTL_ATHENA_GENERATE_KEY failed");
-
-        /* Overwrite any supplied ID by GUID style intrinsic ID  */
-	key_info->id.len = 0;
-        rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_PRKEY,
-			&key_info->id, prkey);
-        LOG_TEST_RET(ctx, rv, "Cannot set intrinsic ID");
-
-	snprintf(object->label, sizeof(object->label), "%s", (char *)key_info->id.value);
 
 	free(args.data);
 	LOG_FUNC_RETURN(ctx, rv);
@@ -621,10 +592,6 @@ laser_update_df_create_private_key(struct sc_profile *profile, struct sc_pkcs15_
 	LOG_FUNC_CALLED(ctx);
 
 	sc_log(ctx, "Update DF with new key ID:%s", sc_pkcs15_print_id(&info->id));
-	if (sc_pkcs15_is_valid_guid((char *)(info->id.value), info->id.len))   {
-		sc_log(ctx, "Ignore update DF when ID is not GUID style");
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-	}
 
 	attrs_ref = (info->key_reference & LASER_FS_REF_MASK) - 1;
 	rv = laser_validate_attr_reference(attrs_ref);
@@ -1175,16 +1142,6 @@ laser_emu_store_certificate(struct sc_pkcs15_card *p15card,
 	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
-
-	/* Only 'GUID' ID style allowed.
-	 * For safety overwrite the profile setting in every 'create' pkcs15init handle. */
-	profile->id_style = SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID;
-
-	/* Enforce the 'GUID' style for certificate ID */
-	info->id.len = 0;
-	rv = sc_pkcs15init_select_intrinsic_id(p15card, profile, SC_PKCS15_TYPE_CERT_X509,
-			&info->id, &info->value);
-	LOG_TEST_RET(ctx, rv, "Cannot set certificate 'intrinsic ID'");
 
 	sc_log(ctx, "store certificate with ID '%s'", sc_pkcs15_print_id(&info->id));
 	rv = sc_pkcs15_find_prkey_by_id(p15card, &info->id, &key);

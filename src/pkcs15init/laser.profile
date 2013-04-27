@@ -14,7 +14,6 @@ pkcs15 {
     # direct-certificates = yes;
     # Have a lastUpdate field in the EF(TokenInfo)?
     do-last-update      = no;
-    pkcs15-id-style     = mozilla-guid;
 }
 
 # Define reasonable limits for PINs and PUK
