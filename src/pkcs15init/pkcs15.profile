@@ -26,8 +26,6 @@ pkcs15 {
     #     native: 'E' + number_of_present_objects_of_the_same_type
     #     mozilla: SHA1(modulus) for RSA, SHA1(pub) for DSA
     #     rfc2459: SHA1(SequenceASN1 of public key components as ASN1 integers)
-    #     mozilla-guid: serialized GUID calculated on 'mozilla' style ID
-    #     rfc2459-guid: serialized GUID calculated on 'rfc2459' style ID
     # default value: 'native'
     pkcs15-id-style	= mozilla;
 }

@@ -198,8 +198,6 @@ static struct map		idStyleNames[] = {
 	{ "native",		SC_PKCS15INIT_ID_STYLE_NATIVE },
 	{ "mozilla",		SC_PKCS15INIT_ID_STYLE_MOZILLA },
 	{ "rfc2459",		SC_PKCS15INIT_ID_STYLE_RFC2459 },
-	{ "mozilla-guid",	SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID },
-	{ "rfc2459-guid",	SC_PKCS15INIT_ID_STYLE_RFC2459_GUID },
 	{ NULL, 0 }
 };
 static struct map              mdStyleNames[] = {

@@ -1145,10 +1145,8 @@ sc_pkcs15init_encode_prvkey_content(struct sc_pkcs15_card *p15card, struct sc_pk
  * Prepare private key download, and initialize a prkdf entry
  */
 static int
-sc_pkcs15init_init_prkdf(struct sc_pkcs15_card *p15card,
-		struct sc_profile *profile,
-		struct sc_pkcs15init_prkeyargs *keyargs,
-		struct sc_pkcs15_prkey *key, int keybits,
+sc_pkcs15init_init_prkdf(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
+		struct sc_pkcs15init_prkeyargs *keyargs, struct sc_pkcs15_prkey *key, int keybits,
 		struct sc_pkcs15_object **res_obj)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -1172,7 +1170,7 @@ sc_pkcs15init_init_prkdf(struct sc_pkcs15_card *p15card,
 	}
 
 	if ((label = keyargs->label) == NULL)
-		label = "Private Key";
+		label = DEFAULT_PRIVATE_KEY_LABEL;
 
 	/* Create the prkey object now.
 	 * If we find out below that we're better off reusing an
@@ -1371,10 +1369,8 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
  * Store private key
  */
 int
-sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card,
-		struct sc_profile *profile,
-		struct sc_pkcs15init_prkeyargs *keyargs,
-		struct sc_pkcs15_object **res_obj)
+sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
+		struct sc_pkcs15init_prkeyargs *keyargs, struct sc_pkcs15_object **res_obj)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *object;
@@ -2235,7 +2231,6 @@ sc_pkcs15init_select_intrinsic_id(struct sc_pkcs15_card *p15card, struct sc_prof
 
 	switch (id_style)  {
 	case SC_PKCS15INIT_ID_STYLE_MOZILLA:
-	case SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID:
 		if (pubkey->algorithm == SC_ALGORITHM_RSA)
 			SHA1(pubkey->u.rsa.modulus.data, pubkey->u.rsa.modulus.len, id.value);
 		else if (pubkey->algorithm == SC_ALGORITHM_DSA)
@@ -2250,7 +2245,6 @@ sc_pkcs15init_select_intrinsic_id(struct sc_pkcs15_card *p15card, struct sc_prof
 		id.len = SHA_DIGEST_LENGTH;
 		break;
 	case SC_PKCS15INIT_ID_STYLE_RFC2459:
-	case SC_PKCS15INIT_ID_STYLE_RFC2459_GUID:
 		rv = sc_pkcs15_encode_pubkey(ctx, pubkey, &id_data, &id_data_len);
 		LOG_TEST_RET(ctx, rv, "Encoding public key error");
 
@@ -2264,20 +2258,6 @@ sc_pkcs15init_select_intrinsic_id(struct sc_pkcs15_card *p15card, struct sc_prof
 	default:
 		sc_log(ctx, "Unsupported ID style: %i", profile->id_style);
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Non supported ID style");
-	}
-
-	if (id_style == SC_PKCS15INIT_ID_STYLE_MOZILLA_GUID
-			|| id_style == SC_PKCS15INIT_ID_STYLE_RFC2459_GUID)   {
-		char guid[40];
-
-		rv = sc_pkcs15_serialize_guid(id.value, id.len, 1, guid, sizeof(guid));
-		LOG_TEST_RET(ctx, rv, "Cannot serialize GUID");
-
-		if (strlen(guid) > sizeof(id.value))
-			LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid GUID size");
-
-		memcpy(id.value, guid, strlen(guid));
-		id.len = strlen(guid);
 	}
 
 done:
