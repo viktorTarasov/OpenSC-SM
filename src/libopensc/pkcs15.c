@@ -2532,40 +2532,20 @@ sc_pkcs15_serialize_guid(unsigned char *in, size_t in_size, unsigned flags,
 
 
 int
-sc_pkcs15_is_valid_guid (char *data, size_t data_len)
-{
-	unsigned ii;
-
-	if (data_len < 36 || (strlen(data) != 36 && strlen(data) != 38))
-		return SC_ERROR_INVALID_DATA;
-	if (strlen(data) == 38)   {
-		if (*data != '{' || *(data + 38) != '}' )
-			return SC_ERROR_INVALID_DATA;
-		data++;
-		data_len -= 2;
-	}
-
-	if (*(data + 8) != '-' || *(data + 13) != '-' || *(data + 18) != '-' || *(data + 23) != '-')
-		return SC_ERROR_INVALID_DATA;
-
-	for (ii=0; ii<data_len; ii++)
-		if (!isxdigit(*(data + ii) ) && *(data + ii)  != '-')
-			return SC_ERROR_INVALID_DATA;
-	return SC_SUCCESS;
-}
-
-
-int
 sc_pkcs15_get_object_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object *obj,
 		                unsigned flags, char *out, size_t out_size)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_serial_number serialnr;
 	struct sc_pkcs15_id  id;
 	unsigned char guid_bin[SC_PKCS15_MAX_ID_SIZE + SC_MAX_SERIALNR];
 	int rv;
 
-	if (p15card->ops.get_guid)
-		return p15card->ops.get_guid(p15card, obj, out, out_size);
+	LOG_FUNC_CALLED(ctx);
+	if (p15card->ops.get_guid)   {
+		rv = p15card->ops.get_guid(p15card, obj, out, out_size);
+		LOG_FUNC_RETURN(ctx, rv);
+	}
 
 	memset(out, 0, out_size);
 	if ((obj->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY)   {
@@ -2575,25 +2555,15 @@ sc_pkcs15_get_object_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15
 			if (out_size < strlen(info->cmap_record.guid) + 1)
 				return SC_ERROR_BUFFER_TOO_SMALL;
 			memcpy(out, info->cmap_record.guid, strlen(info->cmap_record.guid));
-
-			return SC_SUCCESS;
+			LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 		}
 	}
 
 	rv = sc_pkcs15_get_object_id(obj, &id);
-	if (rv)
-		return rv;
-
-	if (sc_pkcs15_is_valid_guid((char *)(id.value), id.len))   {
-		if (out_size < id.len + 1)
-			return SC_ERROR_BUFFER_TOO_SMALL;
-		memcpy(out, id.value, id.len);
-		return SC_SUCCESS;
-	}
+	LOG_TEST_RET(ctx, rv, "Cannot get object's ID");
 
 	rv = sc_card_ctl(p15card->card, SC_CARDCTL_GET_SERIALNR, &serialnr);
-	if (rv)
-		return rv;
+	LOG_TEST_RET(ctx, rv, "'GET_SERIALNR' failed");
 
 	memset(guid_bin, 0, sizeof(guid_bin));
 	memcpy(guid_bin, id.value, id.len);
@@ -2607,7 +2577,8 @@ sc_pkcs15_get_object_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15
         serialnr.len = 0;
 #endif
 
-	return sc_pkcs15_serialize_guid(guid_bin, id.len + serialnr.len, flags, out, out_size);
+	rv = sc_pkcs15_serialize_guid(guid_bin, id.len + serialnr.len, flags, out, out_size);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 void sc_pkcs15_free_key_params(struct sc_pkcs15_key_params *params)
