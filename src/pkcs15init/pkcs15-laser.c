@@ -480,19 +480,23 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	struct sc_pkcs15_data_info *cmap_dobj_info = NULL;
 	unsigned char *cmap = NULL;
 	size_t cmap_len, data_len;
-	char guid[40];
+	unsigned char guid[40];
+	size_t guid_len = sizeof(guid);
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (object != NULL && (object->type & SC_PKCS15_TYPE_CLASS_MASK) == SC_PKCS15_TYPE_PRKEY)   {
 		info = (struct sc_pkcs15_prkey_info *)object->data;
 		if (!info->cmap_record.guid)   {
-			rv = sc_pkcs15_get_object_guid(p15card, object, 1, guid, sizeof(guid));
+			guid_len = sizeof(guid);
+			rv = sc_pkcs15_get_object_guid(p15card, object, 1, guid, &guid_len);
 			LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
-			info->cmap_record.guid = strdup(guid);
+			info->cmap_record.guid = malloc(guid_len);
 			if (!info->cmap_record.guid)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+			memcpy(info->cmap_record.guid, guid, guid_len);
+			info->cmap_record.guid_len = guid_len;
 
 			/* All new keys are 'key-exchange' keys.
 			 * FIXME: implement 'sign' key. */

@@ -1314,7 +1314,7 @@ iasecc_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 
 	switch(object->type & SC_PKCS15_TYPE_CLASS_MASK)   {
 	case SC_PKCS15_TYPE_PUBKEY:
-		sc_log(ctx, "Ignore delete of SDO-PubKey(ref:%X) '%s', path %s", key_ref, object->label, sc_print_path(path));
+		sc_log(ctx, "Ignore delete of SDO-PubKey '%s', path %s", object->label, sc_print_path(path));
 		key_ref = ((struct sc_pkcs15_pubkey_info *)object->data)->key_reference;
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	case SC_PKCS15_TYPE_PRKEY:
@@ -1369,7 +1369,8 @@ iasecc_md_gemalto_set_default(struct sc_pkcs15_card *p15card, struct sc_profile 
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *data_obj = NULL;
 	struct sc_pkcs15init_dataargs data_args;
-	char guid[39];
+	unsigned char guid[40];
+	size_t guid_len;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1378,7 +1379,10 @@ iasecc_md_gemalto_set_default(struct sc_pkcs15_card *p15card, struct sc_profile 
 	if (rv != SC_ERROR_OBJECT_NOT_FOUND)
 		LOG_TEST_RET(ctx, rv, "Find 'Default Key Container' data object error");
 
-	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, sizeof(guid));
+	memset(guid, 0, sizeof(guid));
+	guid_len = sizeof(guid);
+
+	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, &guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
 	if (!data_obj)   {
@@ -1386,8 +1390,8 @@ iasecc_md_gemalto_set_default(struct sc_pkcs15_card *p15card, struct sc_profile 
 		sc_init_oid(&data_args.app_oid);
 		data_args.label = "Default Key Container";
 		data_args.app_label = "CSP";
-		data_args.der_encoded.value = (unsigned char *)guid;
-		data_args.der_encoded.len = strlen(guid);
+		data_args.der_encoded.value = guid;
+		data_args.der_encoded.len = guid_len;
 
 		rv = sc_pkcs15init_store_data_object(p15card, profile, &data_args, NULL);
 		LOG_TEST_RET(ctx, rv, "Failed to store 'CSP'/'Default Key Container' data object");
@@ -1400,7 +1404,7 @@ iasecc_md_gemalto_set_default(struct sc_pkcs15_card *p15card, struct sc_profile 
                 rv = sc_select_file(p15card->card, &dinfo->path, &file);
                 LOG_TEST_RET(ctx, rv, "Cannot select data object file");
 
-                rv = sc_pkcs15init_update_file(profile, p15card, file, guid, strlen(guid));
+                rv = sc_pkcs15init_update_file(profile, p15card, file, guid, guid_len);
                 sc_file_free(file);
                 LOG_TEST_RET(ctx, rv, "Failed to update 'CSP'/'Default Key Container' data object");
 	}
@@ -1418,12 +1422,16 @@ iasecc_md_gemalto_unset_default(struct sc_pkcs15_card *p15card, struct sc_profil
 	struct sc_pkcs15_data *dod = NULL;
         struct sc_pkcs15_object *key_objs[32];
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *)key_obj->data;
-	char guid[39];
+	unsigned char guid[40];
+	size_t guid_len;
 	int rv, ii, keys_num;
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, sizeof(guid));
+	memset(guid, 0, sizeof(guid));
+	guid_len = sizeof(guid);
+
+	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, &guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
 	rv = sc_pkcs15_find_data_object_by_name(p15card, "CSP", "Default Key Container", &data_obj);
@@ -1433,7 +1441,7 @@ iasecc_md_gemalto_unset_default(struct sc_pkcs15_card *p15card, struct sc_profil
 	rv = sc_pkcs15_read_data_object(p15card, (struct sc_pkcs15_data_info *)data_obj->data, &dod);
 	LOG_TEST_RET(ctx, rv, "Cannot read from 'CSP/'Default Key Container'");
 
-	if (strlen(guid) != dod->data_len || memcmp(guid, dod->data, strlen(guid)))
+	if (guid_len != dod->data_len || memcmp(guid, dod->data, guid_len))
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 
 	rv = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, key_objs, 32);
@@ -1470,17 +1478,19 @@ iasecc_md_gemalto_new_prvkey(struct sc_pkcs15_card *p15card, struct sc_profile *
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_prkey_info *prkey_info = (struct sc_pkcs15_prkey_info *)key_obj->data;
 	struct sc_pkcs15init_dataargs data_args;
-	char guid[40];
 	unsigned char data[SC_PKCS15_MAX_ID_SIZE + 6];
-	size_t offs;
+	unsigned char guid[40];
+	size_t offs, guid_len;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
 	memset(guid, 0, sizeof(guid));
-	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, sizeof(guid) - 1);
+	guid_len = sizeof(guid) - 1;
+
+	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, &guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
-	sc_log(ctx, "New key GUID: '%s'", guid);
+	sc_log(ctx, "New key GUID: '%s'", (char *)guid);
 
 	offs = 0;
 	data[offs++] = 0x01;
@@ -1493,7 +1503,7 @@ iasecc_md_gemalto_new_prvkey(struct sc_pkcs15_card *p15card, struct sc_profile *
 
 	memset(&data_args, 0, sizeof(data_args));
 	sc_init_oid(&data_args.app_oid);
-	data_args.label = guid;
+	data_args.label = (char *)guid;
 	data_args.app_label = "CSP";
         data_args.der_encoded.value = data;
 	data_args.der_encoded.len = offs;
@@ -1518,15 +1528,19 @@ iasecc_md_gemalto_delete_prvkey(struct sc_pkcs15_card *p15card, struct sc_profil
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *data_obj = NULL;
-	char guid[39];
+	unsigned char guid[40];
+	size_t guid_len;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, sizeof(guid));
+	memset(guid, 0, sizeof(guid));
+	guid_len = sizeof(guid) - 1;
+
+	rv = sc_pkcs15_get_object_guid(p15card, key_obj, 1, guid, &guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
-	rv = sc_pkcs15_find_data_object_by_name(p15card, "CSP", guid, &data_obj);
+	rv = sc_pkcs15_find_data_object_by_name(p15card, "CSP", (char *)guid, &data_obj);
         if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	LOG_TEST_RET(ctx, rv, "Find 'CSP'/<key> data object error");

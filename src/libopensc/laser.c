@@ -795,7 +795,8 @@ laser_md_cmap_record_decode(struct sc_context *ctx, struct sc_pkcs15_data *data,
 
 
 int
-laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec, char **out)
+laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec,
+		unsigned char **out, size_t *out_len)
 {
 	int ii;
 
@@ -803,12 +804,15 @@ laser_md_cmap_record_guid(struct sc_context *ctx, struct laser_cmap_record *rec,
 
 	if (!rec || !out)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "cmap.record.guid(%i) 0x'%s'", rec->guid_len, sc_dump_hex(rec->guid, rec->guid_len*2));
 
 	*out = calloc(1, rec->guid_len + 1);
 	if (*out == NULL)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
 	for (ii=0; ii<rec->guid_len; ii++)
 		*(*out + ii) = rec->guid[2*ii];
+	*out_len = rec->guid_len;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -1394,7 +1398,6 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 		struct laser_cmap_record *cmap_rec)
 {
 	struct sc_pkcs15_prkey_info *info = NULL;
-	int guid_len;
 	unsigned ii;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1404,16 +1407,16 @@ laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 	info = (struct sc_pkcs15_prkey_info *)key_obj->data;
 	if (!info->cmap_record.guid)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-	guid_len = strlen(info->cmap_record.guid);
 
-	if ((guid_len == 0) || guid_len >= CMAP_GUID_INFO_SIZE/2)
+	if ((info->cmap_record.guid_len == 0) || info->cmap_record.guid_len >= CMAP_GUID_INFO_SIZE/2)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
-	sc_log(ctx, "encode CMAP container: guid:%s, flags:0x%X", info->cmap_record.guid, info->cmap_record.flags);
+	sc_log(ctx, "encode CMAP container: guid:0x'%s', flags:0x%X",
+			sc_dump_hex(info->cmap_record.guid,info->cmap_record.guid_len), info->cmap_record.flags);
 	sc_log(ctx, "key ID %s", sc_pkcs15_print_id(&info->id));
 
 	memset(cmap_rec, 0, sizeof(struct laser_cmap_record));
-	for (ii=0; ii<guid_len; ii++)
+	for (ii=0; ii<info->cmap_record.guid_len; ii++)
 		cmap_rec->guid[2*ii] = *(info->cmap_record.guid + ii);
 
 	cmap_rec->guid_len = ii;

@@ -412,6 +412,7 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 
 	pinfo = (struct sc_pkcs15_prkey_info *)pobj->data;
 
+#if 0
 	/* If ID is in Athena style, use it as object's GUID */
 	if (pinfo->id.len > SHA_DIGEST_LENGTH)   {
 		char *id = (char *)(&(pinfo->id.value[0]));
@@ -427,20 +428,29 @@ _create_prvkey(struct sc_pkcs15_card * p15card, unsigned file_id)
 			memcpy(pinfo->cmap_record.guid, pinfo->id.value, pinfo->id.len);
 		}
 	}
+#endif
 
 	if (!pinfo->cmap_record.guid)   {
-		char guid[40];
+		unsigned char guid[40];
+		size_t guid_len;
 
-		rv = sc_pkcs15_get_object_guid(p15card, pobj, 1, guid, sizeof(guid));
+		sc_log(ctx, "Key path %s; GUID %s", sc_print_path(&pinfo->path), pinfo->cmap_record.guid);
+		memset(guid, 0, sizeof(guid));
+		guid_len= sizeof(guid);
+
+		rv = sc_pkcs15_get_object_guid(p15card, pobj, 1, guid, &guid_len);
 		LOG_TEST_RET(ctx, rv, "Cannot get private key GUID");
 
-		pinfo->cmap_record.guid = strdup(guid);
+		pinfo->cmap_record.guid = calloc(1, guid_len + 1);
 		if (!pinfo->cmap_record.guid)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
+		memcpy(pinfo->cmap_record.guid, guid, guid_len);
+		pinfo->cmap_record.guid_len =  guid_len;
 	}
 
-	sc_log(ctx, "Key path %s; GUID %s", sc_print_path(&pinfo->path), pinfo->cmap_record.guid);
+	sc_log(ctx, "Key path %s", sc_print_path(&pinfo->path));
+	sc_log(ctx, "Key GUID 0x'%s'", sc_dump_hex(pinfo->cmap_record.guid, pinfo->cmap_record.guid_len));
+
 	free(data);
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -574,8 +584,8 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		struct sc_pkcs15_data *data = NULL;
 		struct laser_cmap_record *rec = NULL;
 		struct sc_pkcs15_object *prkeys[12];
-		size_t prkeys_num;
-		size_t offs = 0;
+		size_t prkeys_num, offs = 0;
+		int rec_num;
 
 		if (strcmp(dobjs[ii]->label, "cmapfile") || strcmp(dinfo->app_label, CMAP_DO_APPLICATION_NAME))
 			continue;
@@ -589,35 +599,41 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 		LOG_TEST_RET(ctx, rv, "Cannot create data PKCS#15 object");
 
 		sc_log(ctx, "Use '%s' DATA object to update private key MD data", dobjs[ii]->label);
-		for (offs = 0; offs < data->data_len;)   {
-			char *guid_str = NULL;
-
+		for (offs = 0, rec_num=0; offs < data->data_len; rec_num++)   {
 			rv = laser_md_cmap_record_decode(ctx, data, &offs, &rec);
 			LOG_TEST_RET(ctx, rv, "Failed to decode CMAP entry");
 			if (!rec)
 				break;
 			if (rec->keysize_sign || rec->keysize_keyexchange)   {
-				rv = laser_md_cmap_record_guid(ctx, rec, &guid_str);
-				LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
+				unsigned char *guid = NULL;
+				size_t guid_len = 0;
 
-				sc_log(ctx, "CMAP record GUID %s", guid_str);
+				rv = laser_md_cmap_record_guid(ctx, rec, &guid, &guid_len);
+				LOG_TEST_RET(ctx, rv, "Cannot get GUID string");
+				sc_log(ctx, "CMAP record(%i) GUID 0x'%s'", rec_num, sc_dump_hex(guid, guid_len));
+
 				for (ii=0; ii<prkeys_num; ii++)   {
 					struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
+					int key_idx = (info->key_reference & LASER_FS_REF_MASK) - LASER_FS_KEY_REF_MIN;
 
-					sc_log(ctx, "Key GUID %s", info->cmap_record.guid);
-					if (strcmp(info->cmap_record.guid, guid_str))
-						continue;
-
-					info->cmap_record.flags = rec->flags;
-					info->cmap_record.keysize_sign = rec->keysize_sign;
-					info->cmap_record.keysize_keyexchange = rec->keysize_keyexchange;
-					sc_log(ctx, "Updated MD container data: flags:0x%X, sign-size %i, keyexchange-size %i",
-							info->cmap_record.flags, info->cmap_record.keysize_sign,
-							info->cmap_record.keysize_keyexchange);
+					sc_log(ctx, "Key(ref:0x%X) GUID %s", info->key_reference, info->cmap_record.guid);
+					if (rec_num == key_idx)   {
+						info->cmap_record.guid = guid;
+						info->cmap_record.guid_len = guid_len;
+						info->cmap_record.flags = rec->flags;
+						info->cmap_record.keysize_sign = rec->keysize_sign;
+						info->cmap_record.keysize_keyexchange = rec->keysize_keyexchange;
+						sc_log(ctx, "Updated MD container data: flags:0x%X, sign-size %i, keyexchange-size %i",
+								info->cmap_record.flags, info->cmap_record.keysize_sign,
+								info->cmap_record.keysize_keyexchange);
+						break;
+					}
+				}
+				if (ii == prkeys_num)   {
+					LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "CMAP record without corresponding PKCS#15 private key object");
 				}
 			}
 
-			free(guid_str);
 			free(rec);
 		}
 
