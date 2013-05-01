@@ -337,6 +337,9 @@ app default {
                 # Verify (User) PIN using the chanllege-response procedure.
                 # Default: false
                 # secure_verify = true;
+                md_read_only = false;
+                md_supports_X509_enrollment = true;
+                md_id_as_guid = true;
         }
 
 	secure_messaging local_authentic  {
