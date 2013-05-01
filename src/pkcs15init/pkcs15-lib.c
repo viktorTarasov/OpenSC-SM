@@ -1294,6 +1294,7 @@ sc_pkcs15init_generate_key(struct sc_pkcs15_card *p15card, struct sc_profile *pr
 	LOG_TEST_RET(ctx, r, "Set up private key object error");
 
 	key_info = (struct sc_pkcs15_prkey_info *) object->data;
+
 	if (keygen_args->prkey_args.guid && keygen_args->prkey_args.guid_len)   {
 		key_info->cmap_record.guid = malloc(keygen_args->prkey_args.guid_len);
 		if (!key_info->cmap_record.guid)
@@ -1418,6 +1419,16 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card, struct sc_profil
 	r = sc_pkcs15init_encode_prvkey_content(p15card, &key, object);
 	LOG_TEST_RET(ctx, r, "Failed to encode public key");
 
+	if (keyargs->guid && keyargs->guid_len)   {
+		key_info->cmap_record.guid = malloc(keyargs->guid_len);
+		if (!key_info->cmap_record.guid)
+			LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "Cannot allocate guid");
+		memcpy(key_info->cmap_record.guid, keyargs->guid, keyargs->guid_len);
+		key_info->cmap_record.guid_len = keyargs->guid_len;
+		sc_log(ctx, "new key GUID: 0x'%s'", sc_dump_hex(key_info->cmap_record.guid, key_info->cmap_record.guid_len));
+		key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
+	}
+
 	/* Get the number of private keys already on this card */
 	idx = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_PRKEY, NULL, 0);
 
@@ -1434,16 +1445,6 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card, struct sc_profil
 	/* Now update the PrKDF */
 	r = sc_pkcs15init_add_object(p15card, profile, SC_PKCS15_PRKDF, object);
 	LOG_TEST_RET(ctx, r, "Failed to add new private key PKCS#15 object");
-
-	if (keyargs->guid && keyargs->guid_len)   {
-		key_info->cmap_record.guid = malloc(keyargs->guid_len);
-		if (!key_info->cmap_record.guid)
-			LOG_TEST_RET(ctx, SC_ERROR_OUT_OF_MEMORY, "Cannot allocate guid");
-		memcpy(key_info->cmap_record.guid, keyargs->guid, keyargs->guid_len);
-		key_info->cmap_record.guid_len = keyargs->guid_len;
-		sc_log(ctx, "new key GUID: 0x'%s'", sc_dump_hex(key_info->cmap_record.guid, key_info->cmap_record.guid_len));
-		key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
-	}
 
 	if (!r && profile->ops->emu_store_data)   {
 		r = profile->ops->emu_store_data(p15card, profile, object, NULL, NULL);
