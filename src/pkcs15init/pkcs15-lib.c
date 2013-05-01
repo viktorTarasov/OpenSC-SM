@@ -1426,7 +1426,7 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card, struct sc_profil
 		memcpy(key_info->cmap_record.guid, keyargs->guid, keyargs->guid_len);
 		key_info->cmap_record.guid_len = keyargs->guid_len;
 		sc_log(ctx, "new key GUID: 0x'%s'", sc_dump_hex(key_info->cmap_record.guid, key_info->cmap_record.guid_len));
-		key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
+		/* key_info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER; */
 	}
 
 	/* Get the number of private keys already on this card */

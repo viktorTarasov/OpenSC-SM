@@ -490,14 +490,14 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 			rv = laser_cmap_set_key_guid(ctx, info, &is_converted);
 			LOG_TEST_RET(ctx, rv, "Cannot set Laser style GUID");
-
-			/* All new keys are 'key-exchange' keys.
-			 * FIXME: implement 'sign' key. */
-			info->cmap_record.keysize_keyexchange = info->modulus_length;
-			info->cmap_record.keysize_sign = 0;
-
-			info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
 		}
+
+		/* All new keys are 'key-exchange' keys.
+		 * FIXME: implement 'sign' key. */
+		info->cmap_record.keysize_keyexchange = info->modulus_length;
+		info->cmap_record.keysize_sign = 0;
+
+		info->cmap_record.flags = SC_MD_CONTAINER_MAP_VALID_CONTAINER;
 	}
 
 	rv = laser_cmap_container_set_default(p15card, remove, object);
