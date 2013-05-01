@@ -1393,6 +1393,80 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 }
 
 
+int
+laser_cmap_set_key_guid(struct sc_context *ctx, struct sc_pkcs15_prkey_info *info, int *is_converted)
+{
+	unsigned char guid[CMAP_GUID_INFO_SIZE/2];
+	unsigned char bits[5];
+	unsigned offs;
+	int MSBset = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!info)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (is_converted)
+		*is_converted = 0;
+
+	if (!info->cmap_record.guid)   {
+		free(info->cmap_record.guid);
+		info->cmap_record.guid = NULL;
+		info->cmap_record.guid_len = 0;
+	}
+
+	sc_log(ctx, "Encode CMAP GUID from key ID %s", sc_pkcs15_print_id(&info->id));
+
+	memset(bits, 0, sizeof(bits));
+	memset(guid, 0, sizeof(guid));
+
+	for (offs=0; offs<info->id.len; offs++)   {
+		unsigned char guid_ch, id_ch = info->id.value[offs];
+
+		switch (id_ch)   {
+		case 0x5C:
+		case 0xDC:
+			guid_ch = 0x5B;
+			break;
+		case 0x00:
+		case 0x80:
+			guid_ch = 0x01;
+			break;
+		default:
+			guid_ch = id_ch;
+		}
+
+		if (guid_ch & 0x80)   {
+			if (offs > sizeof(bits)*7)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+			MSBset = 1;
+			guid[offs] = guid_ch & 0x7F;
+			bits[offs/7] |= 0x01 << (6 - (offs%7));
+		}
+		else   {
+			guid[offs] = guid_ch;
+		}
+	}
+
+	if (MSBset)   {
+		if (is_converted)
+			*is_converted = 1;
+		if (offs > sizeof(guid) - 5)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+		memcpy(guid + offs, bits, 5);
+		offs += 5;
+	}
+
+	info->cmap_record.guid = malloc(offs);
+	if (!info->cmap_record.guid)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memcpy(info->cmap_record.guid, guid, offs);
+	info->cmap_record.guid_len = offs;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 static int
 laser_cmap_record_init(struct sc_context *ctx, struct sc_pkcs15_object *key_obj,
 		struct laser_cmap_record *cmap_rec)
@@ -1477,6 +1551,11 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *objec
 			if (!(ignore_id && sc_pkcs15_compare_id(ignore_id, &info->id)))   {
 				rv = laser_cmap_record_init(ctx, ordered_prkeys[idx], &cmap_rec);
 				LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");
+
+				if (info->id.len == SHA1_DIGEST_LENGTH + 5)   {
+					sc_log(ctx, "Applied Laser style of CKA_ID to GUID conversion.");
+					cmap_rec.rfu |= 0x80; 
+				}
 			}
 			else   {
 				sc_log(ctx, "Ignore (deleted?) key %s", sc_pkcs15_print_id(&info->id));

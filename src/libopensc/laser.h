@@ -102,6 +102,10 @@
 
 #define LASER_CARDCF_PATH	"3F00300030034001"
 
+#ifndef SHA1_DIGEST_LENGTH
+#define SHA1_DIGEST_LENGTH      20
+#endif
+
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
  *
@@ -187,6 +191,7 @@ int laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkc
 int laser_encode_update_key(struct sc_context *ctx, struct sc_pkcs15_prkey *prkey,
 		struct sc_cardctl_laser_updatekey *update_data);
 
+int laser_cmap_set_key_guid(struct sc_context *ctx, struct sc_pkcs15_prkey_info *info, int *is_converted);
 int laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *ignore,
 		unsigned char **out, size_t *out_len);
 
