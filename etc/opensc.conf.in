@@ -342,6 +342,9 @@ app default {
                 md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		# md_container_no_key_import = true;
+		# md_supports_container_key_import = true;
+		# md_supports_container_key_gen = true;
         }
 
 	secure_messaging local_authentic  {
