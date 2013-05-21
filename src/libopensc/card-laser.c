@@ -1198,12 +1198,19 @@ laser_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 	pin_cmd.pin1.data = data;
 	pin_cmd.pin1.len = data_len;
 
+#if 0
 	rv = laser_pin_is_verified(card, &pin_cmd, tries_left);
 	if (data && !data_len)
 		LOG_FUNC_RETURN(ctx, rv);
 
 	if (rv != SC_ERROR_PIN_CODE_INCORRECT && rv != SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)
 		LOG_FUNC_RETURN(ctx, rv);
+#else
+	if (data && !data_len)   {
+		rv = laser_pin_is_verified(card, &pin_cmd, tries_left);
+		 LOG_FUNC_RETURN(ctx, rv);
+	}
+#endif
 
 	rv = laser_chv_verify(card, &pin_cmd, tries_left);
 	LOG_TEST_RET(ctx, rv, "PIN CHV verification error");
