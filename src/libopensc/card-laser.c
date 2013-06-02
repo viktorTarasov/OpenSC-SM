@@ -1388,23 +1388,26 @@ laser_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_l
 		rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
 		LOG_TEST_RET(ctx, rv, "Select PIN file error");
 
-		entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_RESET);
-		if (entry)   {
-			sc_log(ctx, "Acl(PIN_RESET): %04X", entry->key_ref);
-			if ((entry->key_ref & 0x00FF) == 0xFF)   {
-				LOG_TEST_RET(ctx, SC_ERROR_NOT_ALLOWED, "Reset PIN not allowed");
-			}
-			else if (entry->key_ref & 0xC000)   {
-				LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Reset PIN protectd by SM: not supported (TODO)");
-			}
-			else if (entry->key_ref & 0x00FF)   {
-				rv = laser_pin_verify(card, SC_AC_CHV, entry->key_ref & 0x00FF, data->pin1.data, data->pin1.len, tries_left);
-				LOG_TEST_RET(ctx, rv, "Verify PUK failed");
+		if (data->pin1.len)   {
+			entry = sc_file_get_acl_entry(pin_file, SC_AC_OP_PIN_RESET);
+			if (entry)   {
+				sc_log(ctx, "Acl(PIN_RESET): %04X", entry->key_ref);
+				if ((entry->key_ref & 0x00FF) == 0xFF)   {
+					LOG_TEST_RET(ctx, SC_ERROR_NOT_ALLOWED, "Reset PIN not allowed");
+				}
+				else if (entry->key_ref & 0xC000)   {
+					LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Reset PIN protectd by SM: not supported (TODO)");
+				}
+				else if (entry->key_ref & 0x00FF)   {
+					rv = laser_pin_verify(card, SC_AC_CHV, entry->key_ref & 0x00FF, data->pin1.data, data->pin1.len, tries_left);
+					LOG_TEST_RET(ctx, rv, "Verify PUK failed");
 
-				rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
-				LOG_TEST_RET(ctx, rv, "Select PIN file error");
+					rv =  laser_select_global_pin(card, data->pin_reference, &pin_file);
+					LOG_TEST_RET(ctx, rv, "Select PIN file error");
+				}
 			}
 		}
+
 		chv_ref = 0;
 	}
 
