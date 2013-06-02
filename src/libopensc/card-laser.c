@@ -102,6 +102,9 @@ unsigned char laser_ops_do[3] = {
 unsigned char laser_ops_ko[7] = {
 	SC_AC_OP_READ, SC_AC_OP_UPDATE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_RESET, SC_AC_OP_CRYPTO
 };
+unsigned char laser_ops_pin[7] = {
+	SC_AC_OP_READ, SC_AC_OP_PIN_CHANGE, SC_AC_OP_ADMIN, SC_AC_OP_DELETE_SELF, SC_AC_OP_GENERATE, SC_AC_OP_PIN_RESET, SC_AC_OP_CRYPTO
+};
 
 struct laser_card_capabilities  {
 	unsigned char supported_keys[5];
@@ -634,34 +637,55 @@ laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
 {
 	struct sc_context *ctx = card->ctx;
 	unsigned type = file->type;
-	unsigned char *attrs = file->sec_attr, *ops;
-	size_t len = file->sec_attr_len, ii, ops_len;
+	unsigned char *attrs = file->sec_attr;
+	size_t len = file->sec_attr_len;
+	unsigned char *ops = NULL;
+	size_t ii, ops_len;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "file type:%i, sec.attrs (%p,len:%i)", type, attrs, len);
 	if(type == SC_FILE_TYPE_INTERNAL_EF && len == sizeof(laser_ops_ko) * 2)   {
-		ops = &laser_ops_ko[0];
-		ops_len = sizeof(laser_ops_ko)/sizeof(laser_ops_ko[0]);
+		if (file->prop_attr_len > 2)   {
+			if (*(file->prop_attr + 2) == LASER_KO_ALGORITHM_PIN)   {
+				sc_log(ctx, "KO-PIN");
+				ops = &laser_ops_pin[0];
+				ops_len = sizeof(laser_ops_pin)/sizeof(laser_ops_pin[0]);
+			}
+			else {
+				sc_log(ctx, "KO algo:%X", *(file->prop_attr + 2));
+				ops = &laser_ops_ko[0];
+				ops_len = sizeof(laser_ops_ko)/sizeof(laser_ops_ko[0]);
+			}
+		}
+		else   {
+			sc_log(ctx, "KO");
+			ops = &laser_ops_ko[0];
+			ops_len = sizeof(laser_ops_ko)/sizeof(laser_ops_ko[0]);
+		}
 	}
 	else if (type == SC_FILE_TYPE_INTERNAL_EF && len == sizeof(laser_ops_do) * 2)   {
+		sc_log(ctx, "DO");
 		ops = &laser_ops_do[0];
 		ops_len = sizeof(laser_ops_do)/sizeof(laser_ops_do[0]);
 	}
 	else if (type == SC_FILE_TYPE_WORKING_EF)   {
+		sc_log(ctx, "EF");
 		ops = &laser_ops_ef[0];
 		ops_len = sizeof(laser_ops_ef)/sizeof(laser_ops_ef[0]);
 	}
 	else if (type == SC_FILE_TYPE_DF)   {
+		sc_log(ctx, "DF");
 		ops = &laser_ops_df[0];
 		ops_len = sizeof(laser_ops_df)/sizeof(laser_ops_df[0]);
 	}
 	else   {
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Unsupported file type");
 	}
+	sc_log(ctx, "sec.attrs(%i) %s, ops_len %i", len, sc_dump_hex(attrs, len), ops_len);
 
 	for (ii=0; ii<ops_len; ii++)   {
 		unsigned val = *(attrs + ii*2) * 0x100 + *(attrs + ii*2 + 1);
 
+		sc_log(ctx, "access rule 0x%04X, op 0x%X(%i)", val, *(ops + ii), *(ops + ii));
 		if (*(attrs + ii*2))   {
 			sc_log(ctx, "op:%X SC_AC_SCB, val:%X", *(ops + ii), val);
 			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_SCB, val);
@@ -674,7 +698,6 @@ laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
 			unsigned char ref = *(attrs + ii*2 + 1);
 			/* TODO: normally, here we should check the type of referenced KO */
 
-			sc_log(ctx, "op:%X SC_AC_CHV, val:%X", *(ops + ii), val);
 			if (ref == 0x30)   {
 				sc_log(ctx, "TODO: not supported LOGIC KO; here ref-30 changed for ref-20 : TODO");
 				ref = 0x20;
@@ -1294,7 +1317,8 @@ laser_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	if (data->pin1.len)   {
-		/* TODO: verify old PIN */
+		rv = laser_pin_verify(card, data->pin_type, data->pin_reference, data->pin1.data, data->pin1.len, tries_left);
+		LOG_TEST_RET(ctx, rv, "Cannot verify old PIN");
 	}
 
 	if (!data->pin2.len)
@@ -1358,9 +1382,6 @@ laser_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_l
 	if (data->pin_type != SC_AC_CHV)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	if (data->pin2.len)
-		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Not supported reset PIN with assigning of a new value (TODO)");
-
 	if (!(data->pin_reference & 0x80))   {
 		const struct sc_acl_entry *entry;
 
@@ -1394,6 +1415,15 @@ laser_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_l
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "PIN change failed");
+
+	if (data->pin2.len)   {
+		int save_len = data->pin1.len;
+
+		data->pin1.len = 0;
+		rv = laser_pin_change(card, data, tries_left);
+		data->pin1.len = save_len;
+		LOG_TEST_RET(ctx, rv, "Cannot set new PIN value");
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
