@@ -1,0 +1,30 @@
+#!/usr/bin/make -f
+# -*- makefile -*-
+# Sample debian/rules that uses debhelper.
+# This file was originally written by Joey Hess and Craig Small.
+# As a special exception, when this file is copied by dh-make into a
+# dh-make output file, you may use that output file without restriction.
+# This special exception was added by Craig Small in version 0.37 of dh-make.
+
+# Uncomment this to turn on verbose mode.
+export DH_VERBOSE=1
+
+%:
+	dh $@
+
+override_dh_auto_configure:
+	dh_auto_configure -- --sysconfdir=/etc/opensc \
+		--disable-openct \
+		--enable-pcsc \
+		--enable-strict \
+		--enable-doc \
+		--enable-man \
+		--enable-sm \
+		--htmldir=/usr/share/doc/opensc/html
+
+override_dh_strip:
+	dh_strip --dbg-package=libopensc2-dbg
+
+override_dh_installdocs:
+	dh_installdocs -A README NEWS
+
