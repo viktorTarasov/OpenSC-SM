@@ -2,7 +2,7 @@ Source: opensc-laser
 Priority: extra
 Section: utils
 Maintainer: Viktor Tarasov <viktor.tarasov@gmail.com>
-Build-Depends: debhelper (>= 7.0.50~), autotools-dev, libltdl3-dev, libssl-dev (>= 0.9.8), libpcsclite-dev (>= 1.5.5), libassuan-dev (>= 1.0.5-1), libxt-dev, flex, pkg-config
+Build-Depends: debhelper (>= 7.0.50~), autotools-dev, libltdl3-dev, libssl-dev (>= 0.9.8), libpcsclite-dev (>= 1.5.5), libassuan-dev (>= 1.0.5-1), libxt-dev, pkg-config
 Standards-Version: 3.8.4
 Homepage: https://github.com/OpenSC/OpenSC/wiki
 #Vcs-Git: git://git.debian.org/collab-maint/opensc-laser.git
