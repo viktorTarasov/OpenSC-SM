@@ -102,8 +102,8 @@
 
 #define LASER_CARDCF_PATH	"3F00300030034001"
 
-#ifndef SHA1_DIGEST_LENGTH
-#define SHA1_DIGEST_LENGTH      20
+#ifndef SHA_DIGEST_LENGTH
+#define SHA_DIGEST_LENGTH      20
 #endif
 
 /* From Windows Smart Card Minidriver Specification

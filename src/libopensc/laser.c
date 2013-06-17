@@ -1552,7 +1552,7 @@ laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *objec
 				rv = laser_cmap_record_init(ctx, ordered_prkeys[idx], &cmap_rec);
 				LOG_TEST_RET(ctx, rv, "Failed encode CMAP record");
 
-				if (info->id.len == SHA1_DIGEST_LENGTH + 5)   {
+				if (info->id.len == SHA_DIGEST_LENGTH + 5)   {
 					sc_log(ctx, "Applied Laser style of CKA_ID to GUID conversion.");
 					cmap_rec.rfu |= 0x80; 
 				}

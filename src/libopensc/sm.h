@@ -37,7 +37,6 @@ extern "C" {
 
 #ifndef SHA_DIGEST_LENGTH
 #define SHA_DIGEST_LENGTH	20
-#define SHA1_DIGEST_LENGTH	20
 #define SHA256_DIGEST_LENGTH	32
 #endif
 
