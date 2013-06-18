@@ -106,6 +106,8 @@
 #define SHA_DIGEST_LENGTH      20
 #endif
 
+#define LASER_TOKEN_INFO_LENGTH 160 
+
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
  *

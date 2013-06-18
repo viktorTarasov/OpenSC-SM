@@ -616,7 +616,7 @@ _parse_fs_data(struct sc_pkcs15_card * p15card)
 					struct sc_pkcs15_prkey_info *info = (struct sc_pkcs15_prkey_info *)prkeys[ii]->data;
 					int key_idx = (info->key_reference & LASER_FS_REF_MASK) - LASER_FS_KEY_REF_MIN;
 
-					sc_log(ctx, "Key(ref:0x%X) GUID %s", info->key_reference, info->cmap_record.guid);
+					sc_log(ctx, "Key(ref:0x%lX) GUID %s", info->key_reference, info->cmap_record.guid);
 					if (rec_num == key_idx)   {
 						info->cmap_record.guid = guid;
 						info->cmap_record.guid_len = guid_len;
@@ -685,7 +685,6 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	unsigned char *buf = NULL;
 	size_t buflen = 0;
 	int rv;
-	CK_TOKEN_INFO *ck_ti = NULL;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -693,22 +692,20 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	rv = sc_pkcs15_read_file(p15card, &path, &buf, &buflen);
 	LOG_TEST_RET(ctx, rv, "Cannot select&read TOKEN-INFO file");
 
-	if (buflen < sizeof(CK_TOKEN_INFO))
+	if (buflen < LASER_TOKEN_INFO_LENGTH)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid TOKEN-INFO data");
 
-	ck_ti = (CK_TOKEN_INFO *) buf;
-
-	rv = _alloc_ck_string(ck_ti->label, sizeof(ck_ti->label), &p15card->tokeninfo->label);
+	rv = _alloc_ck_string(buf + 0, 32, &p15card->tokeninfo->label);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate token label");
 
-	rv = _alloc_ck_string(ck_ti->manufacturerID, sizeof(ck_ti->manufacturerID), &p15card->tokeninfo->manufacturer_id);
+	rv = _alloc_ck_string(buf + + 32, 32, &p15card->tokeninfo->manufacturer_id);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate manufacturerID");
 
-	rv = _alloc_ck_string(ck_ti->serialNumber, sizeof(ck_ti->serialNumber), &p15card->tokeninfo->serial_number);
+	rv = _alloc_ck_string(buf + 80, 16, &p15card->tokeninfo->serial_number);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate serialNumber");
 
 	p15card->tokeninfo->version = 0;
-	p15card->tokeninfo->flags = ck_ti->flags;
+	p15card->tokeninfo->flags = (unsigned long)(int32_t *)(buf + 96);
 
 #if 0
 	rv = _create_application(p15card, "Athena LASER", "A0000001644C415345520001", "3F00");
