@@ -1,5 +1,5 @@
-opensc-laser (0.13.0git20130602222028-1) unstable; urgency=low
+#PACKAGE# (#VERSION#-1) unstable; urgency=low
 
-  * Initial release (Closes: #nnnn)  <nnnn is the bug number of your ITP>
+  * New upstream release.
 
- -- Viktor Tarasov <viktor.tarasov@gmail.com>  Sun, 16 Jun 2013 18:11:09 +0200
+ -- #USERNAME# <#EMAIL#>  #DATE#
