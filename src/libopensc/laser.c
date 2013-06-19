@@ -537,8 +537,9 @@ laser_attrs_pubkey_decode(struct sc_context *ctx,
 			have_public_key = 1;
 			break;
 		case CKA_MODULUS_BITS:
-			rv = _cka_get_unsigned(&attr, &info->modulus_length);
+			rv = _cka_get_unsigned(&attr, &uval);
 			LOG_TEST_RET(ctx, rv, "Invalid encoding of CKA_MODULUS_BITS");
+			info->modulus_length = uval;
 			break;
 		case CKA_LOCAL:
 			break;
@@ -887,7 +888,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + data_len++) = 0xFF;
 	*(data + data_len++) = 0xFF;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(uint32_t), &clazz);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS private key attribute");
 	attrs_num++;
 
@@ -903,7 +904,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_LABEL private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_TYPE, sizeof(CK_KEY_TYPE), &type_rsa);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_TYPE, sizeof(uint32_t), &type_rsa);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE private key attribute");
 	attrs_num++;
 
@@ -973,7 +974,7 @@ laser_attrs_prvkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_ALWAYS_SENSITIVE private key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_GEN_MECHANISM, sizeof(CK_ULONG), &ffff);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_GEN_MECHANISM, sizeof(uint32_t), &ffff);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_GEN_MECHANISM private key attribute");
 	attrs_num++;
 
@@ -1041,7 +1042,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	*(data + data_len++) = 0xFF;
 	*(data + data_len++) = 0xFF;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(uint32_t), &clazz);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS public key attribute");
 	attrs_num++;
 
@@ -1061,7 +1062,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_TRUSTED public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_TYPE, sizeof(CK_KEY_TYPE), &type_rsa);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_KEY_TYPE, sizeof(uint32_t), &type_rsa);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_KEY_TYPE public key attribute");
 	attrs_num++;
 
@@ -1110,7 +1111,7 @@ laser_attrs_pubkey_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_objec
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODULUS public key attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_MODULUS_BITS, sizeof(CK_ULONG), &info->modulus_length);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_MODULUS_BITS, sizeof(uint32_t), &info->modulus_length);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_MODULUS_BITS public key attribute");
 	attrs_num++;
 
@@ -1216,7 +1217,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	attrs_num++;
 	sha1_offs = data_len - SHA_DIGEST_LENGTH;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(uint32_t), &clazz);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS certificate attribute");
 	attrs_num++;
 
@@ -1236,7 +1237,7 @@ laser_attrs_cert_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object 
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_VALUE certificate attribute");
 	attrs_num++;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CERTIFICATE_TYPE, sizeof(CK_CERTIFICATE_TYPE), &cert_type);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CERTIFICATE_TYPE, sizeof(uint32_t), &cert_type);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CERTIFICATE_TYPE certificate attribute");
 	attrs_num++;
 
@@ -1331,7 +1332,7 @@ laser_attrs_data_object_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_
 	attrs_num++;
 	sha1_offs = data_len - SHA_DIGEST_LENGTH;
 
-	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(CK_OBJECT_CLASS), &clazz);
+	rv = laser_add_attribute(&data, &data_len, 0x00, CKA_CLASS, sizeof(uint32_t), &clazz);
 	LOG_TEST_RET(ctx, rv, "Failed to add CKA_CLASS DATA object attribute");
 	attrs_num++;
 
