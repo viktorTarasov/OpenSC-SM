@@ -1,9 +1,0 @@
-debian/tmp/usr/lib/libopensc.so.*
-debian/tmp/usr/lib/libsmm-local.so.*
-debian/tmp/usr/lib/opensc-pkcs11.so
-debian/tmp/usr/lib/opensc-pkcs11.la
-debian/tmp/usr/lib/pkcs11-spy.so
-debian/tmp/usr/lib/pkcs11-spy.la
-debian/tmp/usr/share/opensc-laser/*.profile
-etc/opensc.conf etc/opensc
-
