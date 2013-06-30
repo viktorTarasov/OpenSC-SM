@@ -917,7 +917,7 @@ laser_delete_file(struct sc_card *card, const struct sc_path *path)
 	struct sc_context *ctx = card->ctx;
 	struct sc_file *file = NULL;
 	struct sc_apdu apdu;
-	int rv, p2 = 0;
+	int rv, p1 = 0;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -925,12 +925,12 @@ laser_delete_file(struct sc_card *card, const struct sc_path *path)
 	LOG_TEST_RET(ctx, rv, "Cannot select file to delete");
 
 	if (file->type == SC_FILE_TYPE_DF)
-		p2 = 1;
+		p1 = 1;
 	sc_file_free(file);
 
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0xE4, 0x00, p2);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0xE4, p1, 0x00);
 
-	sc_log(ctx, "delete %s file '%s'", (p2 ? "DF" : "EF"), sc_print_path(path));
+	sc_log(ctx, "delete %s file '%s'", (p1 ? "DF" : "EF"), sc_print_path(path));
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
