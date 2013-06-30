@@ -45,7 +45,7 @@ filesystem {
 
 		DF Athena-AppDF {
 			ACL = *=NONE;
-			ACL = CREATE=CHV32, CRYPTO=NEVER;
+			ACL = CREATE=CHV32, CRYPTO=NEVER, DELETE-SELF=CHV16;
 			file-id		= 3000;
 			size = 40;
 

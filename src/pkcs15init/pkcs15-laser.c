@@ -76,9 +76,65 @@ static int
 laser_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *file = NULL;
+	struct sc_path path;
+	unsigned char files[SC_MAX_APDU_BUFFER_SIZE];
+	struct sc_pin_cmd_data data;
+	int rv, num, ii, tries_left = -1;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+        sc_format_path("3F00", &path);
+	rv = sc_select_file(p15card->card, &path, &file);
+	LOG_TEST_RET(ctx, rv, "Cannot select MF");
+
+	memset(&data, 0, sizeof(data));
+	data.cmd = SC_PIN_CMD_VERIFY;
+	data.pin_type = SC_AC_CHV;
+
+	data.pin_reference = LASER_TRANSPORT_PIN1_REFERENCE;
+	data.pin1.data = (unsigned char *)(LASER_TRANSPORT_PIN1_VALUE);
+	data.pin1.len = strlen(LASER_TRANSPORT_PIN1_VALUE);
+
+	rv = sc_pin_cmd(p15card->card, &data, &tries_left);
+	LOG_TEST_RET(ctx, rv, "Transport key verify error");
+
+	rv = sc_list_files(p15card->card, files, sizeof(files));
+	LOG_TEST_RET(ctx, rv, "List files error");
+
+	num = rv/2;
+	for (ii = 0; ii < num; ii++)   {
+		struct sc_path tmp_path;
+
+		sc_format_path("3F00", &tmp_path);
+		memcpy(tmp_path.value + tmp_path.len, files + 2*ii, 2);
+		tmp_path.len += 2;
+		tmp_path.type = SC_PATH_TYPE_PATH;
+
+		/* Ignore both transport PINs */
+		if ((*(files + 2*ii) == 0x00 && *(files + 2*ii + 1) == 0x01)
+				|| (*(files + 2*ii) == 0x00 && *(files + 2*ii + 1) == 0x02))    {
+			sc_log(ctx, "ignore file %s", sc_print_path(&tmp_path));
+		}
+		else   {
+			struct sc_file *file = NULL;
+
+			sc_log(ctx, "delete file %s", sc_print_path(&tmp_path));
+			rv = sc_select_file(p15card->card, &tmp_path, &file);
+			LOG_TEST_RET(ctx, rv, "Failed to select file to delete");
+
+			if (sc_file_get_acl_entry(file, SC_AC_OP_DELETE_SELF))   {
+				sc_log(ctx, "Found 'DELETE-SELF' acl");
+				rv = sc_pkcs15init_authenticate(profile, p15card, file, SC_AC_OP_DELETE_SELF);
+				sc_file_free(file);
+			}
+
+			rv = sc_delete_file(p15card->card, &tmp_path);
+			LOG_TEST_RET(ctx, rv, "Cannot delete file");
+		}
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

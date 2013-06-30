@@ -106,7 +106,14 @@
 #define SHA_DIGEST_LENGTH      20
 #endif
 
-#define LASER_TOKEN_INFO_LENGTH 160 
+#define LASER_TOKEN_INFO_LENGTH 160
+
+#define LASER_TRANSPORT_PIN1_VALUE	"1234"
+#define LASER_TRANSPORT_PIN1_REFERENCE	0x01
+
+#define LASER_TRANSPORT_PIN2		"LASER+"
+#define LASER_TRANSPORT_PIN2_REFERENCE	0x02
+
 
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
