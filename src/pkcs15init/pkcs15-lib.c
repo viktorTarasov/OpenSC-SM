@@ -802,10 +802,9 @@ sc_pkcs15init_add_app(struct sc_card *card, struct sc_profile *profile,
 			pin_attrs->flags |= SC_PKCS15_PIN_FLAG_UNBLOCK_DISABLED;
 
 		pin_obj = sc_pkcs15init_new_object(SC_PKCS15_TYPE_AUTH_PIN, pin_label, NULL, &pin_ainfo);
-
 		if (pin_obj)   {
 			/* When composing ACLs to create 'DIR' DF,
-			 * 	the references of the not-yet-existing PINs can be requested.
+			 *	the references of the not-yet-existing PINs can be requested.
 			 * For this, create a 'virtual' AUTH object 'SO PIN', accessible by the card specific part,
 			 * but not yet written into the on-card PKCS#15.
 			 */
@@ -3755,21 +3754,22 @@ sc_pkcs15init_qualify_pin(struct sc_card *card, const char *pin_name,
 	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_pin_attributes *pin_attrs;
 
+	LOG_FUNC_CALLED(ctx);
 	if (pin_len == 0 || auth_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
-		return SC_SUCCESS;
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 
 	pin_attrs = &auth_info->attrs.pin;
 
 	if (pin_len < pin_attrs->min_length) {
 		sc_log(ctx, "%s too short (min length %u)", pin_name, pin_attrs->min_length);
-		return SC_ERROR_WRONG_LENGTH;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_LENGTH);
 	}
 	if (pin_len > pin_attrs->max_length) {
 		sc_log(ctx, "%s too long (max length %u)", pin_name, pin_attrs->max_length);
-		return SC_ERROR_WRONG_LENGTH;
+		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_LENGTH);
 	}
 
-	return SC_SUCCESS;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
