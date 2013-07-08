@@ -724,6 +724,7 @@ laser_fcp_encode(struct sc_card *card, struct sc_file *file, unsigned char *out,
 	size_t ii, ops_len, file_size;
 
 	LOG_FUNC_CALLED(ctx);
+
 	if (file->type == SC_FILE_TYPE_DF)   {
 		ops = &laser_ops_df[0];
 		ops_len = sizeof(laser_ops_df);

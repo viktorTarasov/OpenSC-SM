@@ -44,6 +44,8 @@
 
 static int laser_update_df_create_data_object(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object);
+static int laser_emu_update_tokeninfo(struct sc_profile *profile,
+		struct sc_pkcs15_card *p15card, struct sc_pkcs15_tokeninfo *tinfo);
 
 static int
 laser_validate_attr_reference(int key_reference)
@@ -68,6 +70,17 @@ laser_delete_file(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
 
+/*
+ * Laser init card
+ */
+static int
+laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+
+	LOG_FUNC_CALLED(ctx);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 /*
  * Erase the card
@@ -143,9 +156,123 @@ laser_create_dir(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_file *df)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *file = NULL;
+	size_t ii;
+	int rv;
+	static const char *create_dfs[] = {
+//		"Athena-AppDF",
+		NULL
+	};
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	/* Create base Laser file-system */
+	for (ii = 0; create_dfs[ii]; ii++)   {
+		if (sc_profile_get_file(profile, create_dfs[ii], &file))   {
+			sc_log(ctx, "Inconsistent profile: cannot find %s", create_dfs[ii]);
+			LOG_TEST_RET(ctx, SC_ERROR_INCONSISTENT_PROFILE, "Some of mandatory file is absent in the init profile");
+		}
+
+		rv = sc_pkcs15init_create_file(profile, p15card, file);
+		sc_file_free(file);
+		if (rv != SC_ERROR_FILE_ALREADY_EXISTS)
+			LOG_TEST_RET(ctx, rv, "Failed to create Laser file");
+	}
+
+	//rv = laser_emu_update_tokeninfo(profile, p15card, &tinfo);
+	rv = laser_emu_update_tokeninfo(profile, p15card, NULL);
+	LOG_TEST_RET(ctx, rv, "Cannot update token-info");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+/*
+ * Store a PIN
+ */
+static int
+laser_create_pin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_file *df, struct sc_pkcs15_object *pin_obj,
+		const unsigned char *pin, size_t pin_len,
+		const unsigned char *puk, size_t puk_len)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_auth_info *auth_info = NULL;
+	struct sc_pkcs15_pin_attributes *pin_attrs = NULL;
+	struct sc_file *file = NULL;
+	int rv = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "pin_obj %p, pin %p/%i, puk %p/%i", pin_obj, pin, pin_len, puk, puk_len);
+	if (!pin_obj)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	auth_info = (struct sc_pkcs15_auth_info *) pin_obj->data;
+	if (auth_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_VALID);
+
+	pin_attrs = &auth_info->attrs.pin;
+	sc_log(ctx, "create '%s'; ref 0x%X; flags %X; max_tries %i", pin_obj->label, pin_attrs->reference, pin_attrs->flags, auth_info->max_tries);
+
+	if (pin_attrs->flags & SC_PKCS15_PIN_FLAG_SO_PIN)   {
+		rv = sc_profile_get_file(profile, "Athena-SoPIN", &file);
+		if (rv < 0)
+			LOG_TEST_RET(ctx, SC_ERROR_INCONSISTENT_PROFILE, "'Athena-SoPIN' file not defined");
+
+		if (pin_attrs->flags & SC_PKCS15_PIN_FLAG_UNBLOCKING_PIN)
+			LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "SOPIN unblocking is not supported");
+
+		/* TODO: do not check this, trust the profile */
+		if (pin_attrs->reference != 0x10)
+			LOG_TEST_RET(ctx, SC_ERROR_INVALID_PIN_REFERENCE, "Invalid SOPIN reference");
+
+	}
+	else {
+		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "############ Under construction ##############""");
+	}
+
+	if (file && pin && pin_len)   {
+		unsigned char prop_attr[15];
+		size_t offs;
+
+		file->size = pin_attrs->max_length;
+
+		sc_log(ctx, "laser PIN file: size %i; EF-type %i/%i; path %s",
+			file->size, file->type, file->ef_structure, sc_print_path(&file->path));
+
+		offs = 0;
+		memset(prop_attr, 0, sizeof(prop_attr));
+		prop_attr[offs++] = LASER_KO_NON_CRYPTO | LASER_KO_ALLOW_TICKET;
+		prop_attr[offs++] = LASER_KO_USAGE_AUTH_EXT;
+		prop_attr[offs++] = LASER_KO_ALGORITHM_PIN;
+		prop_attr[offs++] = LASER_KO_PADDING_NO;
+		prop_attr[offs++] = (auth_info->max_tries & 0x0F) | ((auth_info->max_tries << 4) & 0xF0);	/* tries/unlocks */
+		prop_attr[offs++] = pin_attrs->min_length;
+		prop_attr[offs++] = pin_attrs->max_length;
+		prop_attr[offs++] = 0;	/* upper case */
+		prop_attr[offs++] = 0;	/* lower case */
+		prop_attr[offs++] = 0;	/* digit */
+		prop_attr[offs++] = 0;	/* alpha */
+		prop_attr[offs++] = 0;	/* special */
+		prop_attr[offs++] = pin_attrs->max_length;	/* occurence */
+		prop_attr[offs++] = pin_attrs->max_length;	/* sequenve */
+		file->prop_attr = prop_attr;
+		file->prop_attr_len = offs;
+
+		file->encoded_content = malloc(2 + pin_len);
+		*(file->encoded_content + 0) = LASER_KO_DATA_TAG_PIN;
+		*(file->encoded_content + 1) = pin_len;
+		memcpy(file->encoded_content + 2, pin, pin_len);
+		file->encoded_content_len = 2 + pin_len;
+
+		rv = sc_pkcs15init_create_file(profile, p15card, file);
+		LOG_TEST_RET(ctx, rv, "Create PIN file failed");
+	}
+
+	if (file)
+		sc_file_free(file);
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -1072,7 +1199,7 @@ laser_emu_update_tokeninfo(struct sc_profile *profile, struct sc_pkcs15_card *p1
 	struct sc_context *ctx = p15card->card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1309,11 +1436,11 @@ laser_emu_store_data(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 static struct sc_pkcs15init_operations
 sc_pkcs15init_laser_operations = {
 	laser_erase_card,
-	NULL,				/* init_card  */
+	laser_init_card,
 	laser_create_dir,		/* create_dir */
 	NULL,				/* create_domain */
 	NULL,				/* select_pin_reference */
-	NULL,				/* create_pin*/
+	laser_create_pin,		/* create_pin*/
 	laser_select_key_reference,	/* select_key_reference */
 	laser_create_key_file,		/* create_key */
 	laser_store_key,		/* store_key */

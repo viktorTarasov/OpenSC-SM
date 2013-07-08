@@ -41,17 +41,24 @@ PIN so-pin {
 # main profile.
 filesystem {
 	DF MF {
-		ACL = *=CHV4;
+		ACL = *=NONE;
+		EF Athena-SoPIN {
+			ACL = *=NONE;
+			ACL = UPDATE=CHV16, CRYPTO=NONE, DELETE-SELF=CHV16, GENERATE=NEVER, PIN-RESET=NEVER, ADMIN=NEVER, READ=NEVER;
+			file-id = 0010;
+			type	= internal-ef;
+			structure = 8;
+		}
 
 		DF Athena-AppDF {
 			ACL = *=NONE;
-			ACL = CREATE=CHV32, CRYPTO=NEVER, DELETE-SELF=CHV16;
+			ACL = CREATE-EF=CHV16, CREATE-DF=CHV16, DELETE-SELF=CHV16, ADMIN=NEVER, ACTIVATE=NONE, DEACTIVATE=CHV16;
 			file-id		= 3000;
 			size = 40;
 
 			DF private-DF {
 				ACL = *=NEVER;
-				ACL = CREATE=CHV32, DELETE=NONE;
+				ACL = CREATE=CHV32, DELETE=NONE, DELETE-SELF=NONE;
 				file-id		= 3002;
 				size		= 40;
 
@@ -71,7 +78,7 @@ filesystem {
 
 			DF public-DF {
 				ACL = *=NEVER;
-				ACL = CREATE=NONE, DELETE=NONE;
+				ACL = CREATE=NONE, DELETE=NONE, DELETE-SELF=NONE;
 				file-id		= 3001;
 				size		= 80;
 
