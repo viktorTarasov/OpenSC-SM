@@ -124,9 +124,8 @@ laser_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		tmp_path.len += 2;
 		tmp_path.type = SC_PATH_TYPE_PATH;
 
-		/* Ignore both transport PINs */
-		if ((*(files + 2*ii) == 0x00 && *(files + 2*ii + 1) == 0x01)
-				|| (*(files + 2*ii) == 0x00 && *(files + 2*ii + 1) == 0x02))    {
+		/* Keep first transport PIN */
+		if (*(files + 2*ii) == 0x00 && *(files + 2*ii + 1) == 0x01)    {
 			sc_log(ctx, "ignore file %s", sc_print_path(&tmp_path));
 		}
 		else   {
@@ -160,7 +159,7 @@ laser_create_dir(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	size_t ii;
 	int rv;
 	static const char *create_dfs[] = {
-//		"Athena-AppDF",
+		"Athena-AppDF",
 		NULL
 	};
 
@@ -232,7 +231,6 @@ laser_create_pin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	}
 
 	if (file && pin && pin_len)   {
-		unsigned char prop_attr[15];
 		size_t offs;
 
 		file->size = pin_attrs->max_length;
@@ -241,22 +239,23 @@ laser_create_pin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 			file->size, file->type, file->ef_structure, sc_print_path(&file->path));
 
 		offs = 0;
-		memset(prop_attr, 0, sizeof(prop_attr));
-		prop_attr[offs++] = LASER_KO_NON_CRYPTO | LASER_KO_ALLOW_TICKET;
-		prop_attr[offs++] = LASER_KO_USAGE_AUTH_EXT;
-		prop_attr[offs++] = LASER_KO_ALGORITHM_PIN;
-		prop_attr[offs++] = LASER_KO_PADDING_NO;
-		prop_attr[offs++] = (auth_info->max_tries & 0x0F) | ((auth_info->max_tries << 4) & 0xF0);	/* tries/unlocks */
-		prop_attr[offs++] = pin_attrs->min_length;
-		prop_attr[offs++] = pin_attrs->max_length;
-		prop_attr[offs++] = 0;	/* upper case */
-		prop_attr[offs++] = 0;	/* lower case */
-		prop_attr[offs++] = 0;	/* digit */
-		prop_attr[offs++] = 0;	/* alpha */
-		prop_attr[offs++] = 0;	/* special */
-		prop_attr[offs++] = pin_attrs->max_length;	/* occurence */
-		prop_attr[offs++] = pin_attrs->max_length;	/* sequenve */
-		file->prop_attr = prop_attr;
+		file->prop_attr = calloc(1, 16);
+		if (!file->prop_attr)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		*(file->prop_attr + offs++) = LASER_KO_NON_CRYPTO | LASER_KO_ALLOW_TICKET;
+		*(file->prop_attr + offs++) = LASER_KO_USAGE_AUTH_EXT;
+		*(file->prop_attr + offs++) = LASER_KO_ALGORITHM_PIN;
+		*(file->prop_attr + offs++) = LASER_KO_PADDING_NO;
+		*(file->prop_attr + offs++) = (auth_info->max_tries & 0x0F) | ((auth_info->max_tries << 4) & 0xF0);	/* tries/unlocks */
+		*(file->prop_attr + offs++) = pin_attrs->min_length;
+		*(file->prop_attr + offs++) = pin_attrs->max_length;
+		*(file->prop_attr + offs++) = 0;	/* upper case */
+		*(file->prop_attr + offs++) = 0;	/* lower case */
+		*(file->prop_attr + offs++) = 0;	/* digit */
+		*(file->prop_attr + offs++) = 0;	/* alpha */
+		*(file->prop_attr + offs++) = 0;	/* special */
+		*(file->prop_attr + offs++) = pin_attrs->max_length;	/* occurence */
+		*(file->prop_attr + offs++) = pin_attrs->max_length;	/* sequenve */
 		file->prop_attr_len = offs;
 
 		file->encoded_content = malloc(2 + pin_len);
@@ -266,13 +265,13 @@ laser_create_pin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		file->encoded_content_len = 2 + pin_len;
 
 		rv = sc_pkcs15init_create_file(profile, p15card, file);
-		LOG_TEST_RET(ctx, rv, "Create PIN file failed");
+		LOG_TEST_RET(ctx, rv, "Create SoPIN file failed");
 	}
 
 	if (file)
 		sc_file_free(file);
 
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

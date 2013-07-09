@@ -50,6 +50,14 @@ filesystem {
 			structure = 8;
 		}
 
+		EF Athena-UserPIN {
+			ACL = *=NONE;
+			ACL = UPDATE=CHV16, CRYPTO=NONE, DELETE-SELF=CHV16, GENERATE=NEVER, PIN-RESET=CHV16, ADMIN=NEVER, READ=NEVER;
+			file-id = 0020;
+			type	= internal-ef;
+			structure = 8;
+		}
+
 		DF Athena-AppDF {
 			ACL = *=NONE;
 			ACL = CREATE-EF=CHV16, CREATE-DF=CHV16, DELETE-SELF=CHV16, ADMIN=NEVER, ACTIVATE=NONE, DEACTIVATE=CHV16;
