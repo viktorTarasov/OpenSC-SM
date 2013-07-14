@@ -240,6 +240,13 @@ _create_pin(struct sc_pkcs15_card * p15card, char *label,
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+int
+sc_pkcs15emu_laser_create_pin(struct sc_pkcs15_card * p15card, char *label,
+		char *pin_path, unsigned char auth_id, unsigned flags)
+{
+	return _create_pin(p15card, label, pin_path, auth_id, flags);
+}
+
 
 static int
 _create_certificate(struct sc_pkcs15_card * p15card, unsigned file_id)

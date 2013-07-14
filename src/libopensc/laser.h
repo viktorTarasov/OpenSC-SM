@@ -117,6 +117,10 @@
 #define LASER_TRANSPORT_PIN2		"LASER+"
 #define LASER_TRANSPORT_PIN2_REFERENCE	0x02
 
+#define LASER_USER_PIN_TYPE_PIN		0x01
+#define LASER_USER_PIN_TYPE_BIO		0x03
+#define LASER_USER_PIN_TYPE_PIN_BIO	0x04
+
 
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
@@ -207,4 +211,6 @@ int laser_cmap_set_key_guid(struct sc_context *ctx, struct sc_pkcs15_prkey_info 
 int laser_cmap_encode(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *ignore,
 		unsigned char **out, size_t *out_len);
 
+int sc_pkcs15emu_laser_create_pin(struct sc_pkcs15_card * p15card, char *label,
+		char *pin_path, unsigned char auth_id, unsigned flags);
 #endif
