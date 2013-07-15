@@ -835,6 +835,15 @@ laser_create_file(struct sc_card *card, struct sc_file *file)
 	sc_print_cache(card);
 	sc_log(ctx, "create file (type:%i, ID:0x%X, path:%s)", file->type, file->id, sc_print_path(&file->path));
 
+	/* Select parent */
+	if (file->path.len > 2)   {
+		struct sc_path parent_path = file->path;
+
+		parent_path.len -= 2;
+		rv = laser_select_file(card, &parent_path, NULL);
+		LOG_TEST_RET(ctx, rv, "Cannot select newly created file");
+	}
+
 	fcp_len = laser_fcp_encode(card, file, fcp, sizeof(fcp));
 	LOG_TEST_RET(ctx, fcp_len, "FCP encode error");
 
