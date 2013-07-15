@@ -72,36 +72,45 @@ laser_delete_file(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 
 
 static int
-laser_verify_transport_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
+laser_create_transport_pin_object(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_path path;
-	struct sc_pin_cmd_data data;
-	struct sc_pkcs15_auth_info pin_ainfo;
-	struct sc_pkcs15_object *pin_obj = NULL;
-	struct sc_pkcs15_pin_attributes *pin_attrs = &pin_ainfo.attrs.pin;
+	char label[SC_PKCS15_MAX_LABEL_SIZE];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = sc_pkcs15emu_laser_create_pin(p15card, "First Transport PIN", "3F000001", 0x01, 0);
-	LOG_TEST_RET(ctx, rv, "Cannot create Transport PIN ");
+	memset(label, 0, sizeof(label));
+	snprintf(label, sizeof(label) - 1, "Transport PIN#1 (default:%s)", LASER_TRANSPORT_PIN1_VALUE);
+	rv = sc_pkcs15emu_laser_create_pin(p15card, label, "3F000001", 0x01, 0);
+	LOG_TEST_RET(ctx, rv, "Cannot create Transport PIN#1");
 
-        sc_format_path("3F00", &path);
-	rv = sc_select_file(p15card->card, &path, NULL);
-	LOG_TEST_RET(ctx, rv, "Cannot select MF");
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
-	/* Verify First Transport KEY */
-	memset(&data, 0, sizeof(data));
-	data.cmd = SC_PIN_CMD_VERIFY;
-	data.pin_type = SC_AC_CHV;
 
-	data.pin_reference = LASER_TRANSPORT_PIN1_REFERENCE;
-	data.pin1.data = (unsigned char *)(LASER_TRANSPORT_PIN1_VALUE);
-	data.pin1.len = strlen(LASER_TRANSPORT_PIN1_VALUE);
+static int
+laser_create_pin_object(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_file *file, char  *title)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	char tmp_buf[SC_PKCS15_MAX_LABEL_SIZE];
+	char label[SC_PKCS15_MAX_LABEL_SIZE];
+	int rv;
 
-	rv = sc_pin_cmd(p15card->card, &data, NULL);
-	LOG_TEST_RET(ctx, rv, "Transport key verify error");
+	LOG_FUNC_CALLED(ctx);
+
+	memset(tmp_buf, 0, sizeof(tmp_buf));
+	memcpy(tmp_buf, file->encoded_content + 2, file->encoded_content_len - 2);
+
+	memset(label, 0, sizeof(label));
+	snprintf(label, sizeof(label) - 1, "%s (%s)", title, tmp_buf);
+
+	rv = sc_bin_to_hex(file->path.value, file->path.len, tmp_buf, sizeof(tmp_buf), 0);
+	LOG_TEST_RET(ctx, rv, "bin->hex error");
+
+	rv = sc_pkcs15emu_laser_create_pin(p15card, label, tmp_buf, file->path.value[file->path.len - 1], 0);
+	LOG_TEST_RET(ctx, rv, "Failed to create PIN object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -113,9 +122,7 @@ static int
 laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_file *file_in_profile = NULL, *file = NULL;
-	unsigned char files[SC_MAX_APDU_BUFFER_SIZE];
-	int rv, num, ii, tries_left = -1;
+	int rv, ii;
 	static const char *to_create[] = {
 		"Athena-SoPIN",
 		"Athena-UserPIN",
@@ -125,18 +132,30 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		"Athena-LogcalExpr-AdminOrUserOrTransport",
 		"Athena-AppDF",
 		"Athena-UserPinType",
+		"public-DF",
+		"private-DF",
+		"MiniDriver-DF",
+		"Athena-UserHist",
+		"Athena-tokenInfo",
+		"Athena-EEED",
+		"Athena-EEEE",
+		"Athena-EEEF",
+		"laser-cmap-attributes",
+		"laser-md-cardid",
+		"laser-md-cardcf",
+		"laser-md-cardapps",
+		"MiniDriver-mscp",
 		NULL
 	};
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = laser_verify_transport_key(profile, p15card);
-	LOG_TEST_RET(ctx, rv, "Cannot verify transport key");
+	rv = laser_create_transport_pin_object(profile, p15card);
+	LOG_TEST_RET(ctx, rv, "Cannot create transport PIN object");
 
 	for (ii=0; to_create[ii];ii++)   {
 		struct sc_file *file = NULL;
 		unsigned char user_pin_type = LASER_USER_PIN_TYPE_PIN_BIO;
-		size_t save_len =  0;
 
 		if (sc_profile_get_file(profile, to_create[ii], &file))   {
 			sc_log(ctx, "Inconsistent profile: cannot find %s", to_create[ii]);
@@ -154,6 +173,14 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 			rv = sc_update_binary(p15card->card, 0, &user_pin_type, 1, 0);
 			LOG_TEST_RET(ctx, rv, "Cannot update CARDCF file");
 		}
+		else if (!strcmp(to_create[ii], "Athena-SoPIN"))   {
+			rv = laser_create_pin_object(profile, p15card, file, "Default Admin PIN");
+			LOG_TEST_RET(ctx, rv, "Cannot create default Admin PIN object");
+		}
+		else if (!strcmp(to_create[ii], "Athena-UserPIN"))   {
+			rv = laser_create_pin_object(profile, p15card, file, "Default User PIN");
+			LOG_TEST_RET(ctx, rv, "Cannot create default User PIN object");
+		}
 
 		sc_file_free(file);
 	}
@@ -168,9 +195,8 @@ static int
 laser_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_file *file_in_profile = NULL, *file = NULL;
-	unsigned char files[SC_MAX_APDU_BUFFER_SIZE];
-	int rv, num, ii, tries_left = -1;
+	struct sc_file *file_in_profile = NULL;
+	int rv, ii;
 	static const char *path_to_delete[] = {
 		"Athena-AppDF",
 		"Athena-UserPinType",
@@ -185,7 +211,7 @@ laser_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 
 	LOG_FUNC_CALLED(ctx);
 
-	rv = laser_verify_transport_key(profile, p15card);
+	rv = laser_create_transport_pin_object(profile, p15card);
 	LOG_TEST_RET(ctx, rv, "Cannot verify transport key");
 
 	for (ii=0; path_to_delete[ii];ii++)   {
@@ -230,26 +256,10 @@ laser_create_dir(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	struct sc_file *file = NULL;
 	size_t ii;
 	int rv;
-	static const char *create_dfs[] = {
-		"Athena-AppDF",
-		NULL
-	};
 
 	LOG_FUNC_CALLED(ctx);
 
-	/* Create base Laser file-system */
-	for (ii = 0; create_dfs[ii]; ii++)   {
-		if (sc_profile_get_file(profile, create_dfs[ii], &file))   {
-			sc_log(ctx, "Inconsistent profile: cannot find %s", create_dfs[ii]);
-			LOG_TEST_RET(ctx, SC_ERROR_INCONSISTENT_PROFILE, "Some of mandatory file is absent in the init profile");
-		}
-
-		rv = sc_pkcs15init_create_file(profile, p15card, file);
-		sc_file_free(file);
-		if (rv != SC_ERROR_FILE_ALREADY_EXISTS)
-			LOG_TEST_RET(ctx, rv, "Failed to create Laser file");
-	}
-
+	/* TODO */
 	//rv = laser_emu_update_tokeninfo(profile, p15card, &tinfo);
 	rv = laser_emu_update_tokeninfo(profile, p15card, NULL);
 	LOG_TEST_RET(ctx, rv, "Cannot update token-info");
@@ -288,7 +298,7 @@ laser_create_sopin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 	rv = sc_select_file(p15card->card, &file->path, NULL);
 	if (rv == 0)   {
-		rv = laser_verify_transport_key(profile, p15card);
+		rv = laser_create_transport_pin_object(profile, p15card);
 		LOG_TEST_RET(ctx, rv, "Cannot verify transport key");
 
 		rv = sc_pkcs15init_delete_by_path(profile, p15card, &file->path);

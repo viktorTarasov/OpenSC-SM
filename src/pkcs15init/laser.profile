@@ -113,22 +113,20 @@ filesystem {
 		}
 
 		DF Athena-AppDF {
-			ACL = *=NONE;
-			ACL = CREATE-EF=CHV16, CREATE-DF=CHV16, DELETE-SELF=CHV16, ADMIN=NEVER, ACTIVATE=NONE, DEACTIVATE=CHV16;
+			ACL = CREATE=CHV16, CREATE-DF=CHV16, ADMIN=NEVER, DELETE-SELF=CHV16, ACTIVATE=NONE, DEACTIVATE=CHV16;
 			file-id		= 3000;
 			aid = 41:53:45:50:4b:43:53;
-			size = 40;
+			size = 0;
 
 			DF private-DF {
-				ACL = *=NEVER;
-				ACL = CREATE=CHV32, DELETE=NONE, DELETE-SELF=NONE;
+				ACL = CREATE=CHV32, CREATE-DF=CHV32, ADMIN=NEVER, DELETE-SELF=CHV16, ACTIVATE=NONE, DEACTIVATE=CHV16;
 				file-id	= 3002;
 				aid	= 50:52:49:56:41:54:45;
-				size	= 40;
+				size	= 0;
 
 				# Private RSA keys
 				EF laser-private-key-attributes   {
-					ACL	= WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
+					ACL = READ=NONE, WRITE=CHV32, ADMIN=NEVER, DELETE-SELF=CHV32;
 					file-id	= 0200;
 				}
 				EF template-private-key {
@@ -141,27 +139,26 @@ filesystem {
 			}
 
 			DF public-DF {
-				ACL = *=NEVER;
-				ACL = CREATE=NONE, DELETE=NONE, DELETE-SELF=NONE;
+				ACL = CREATE=NONE, CREATE-DF=NONE, ADMIN=NEVER, DELETE-SELF=CHV16, ACTIVATE=NONE, DEACTIVATE=CHV16;
 				file-id	= 3001;
 				aid	= 50:55:42:4c:49:43;
-				size	= 80;
+				size	= 0;
 
 				# Certificate
 				EF laser-certificate-attributes  {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
+					ACL = READ=NONE, WRITE=CHV32, ADMIN=NEVER, DELETE-SELF=CHV32;
 					file-id	= 8440;		# Certificate object
 				}
 
 				# Certificate with private key
 				EF laser-cmap-certificate-attributes  {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
+					ACL = READ=NONE, WRITE=CHV32, ADMIN=NEVER, DELETE-SELF=CHV32;
 					file-id	= 8400;		# Certificate object appear in cmapfile
 				}
 
 				#Public Key
 				EF laser-public-key-attributes {
-					ACL = WRITE=CHV32, UPDATE=CHV32, READ=NONE, DELETE-SELF=CHV32;
+					ACL = READ=NONE, WRITE=CHV32, ADMIN=NEVER, DELETE-SELF=CHV32;
 					file-id	= 0140;
 				}
 				EF template-public-key {
@@ -173,84 +170,87 @@ filesystem {
 
 				#Public DATA object
 				EF laser-public-data-attributes {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
+					ACL = READ=NONE, WRITE=NONE, ADMIN=NEVER, DELETE-SELF=NONE;
 					file-id	= 0640;
 				}
 
 				#CMAP ile
 				EF laser-cmap-attributes {
-					ACL = WRITE=CHV48, UPDATE=CHV48, READ=NONE, DELETE-SELF=CHV48;
+					ACL = READ=NONE, WRITE=CHV48, ADMIN=CHV48, DELETE-SELF=CHV48;
 					file-id	= 867F;
+					aid	= 63:6d:61:70:66:69:6c:65;
+					size	= 643;
 				}
 			}
 
 			DF MiniDriver-DF {
-				ACL = *=NEVER;
-				ACL = CREATE=CHV32, DELETE=NONE, DELETE-SELF=NONE;
+				ACL = CREATE=CHV48, CREATE-DF=CHV48, ADMIN=NEVER, DELETE-SELF=CHV48, ACTIVATE=NONE, DEACTIVATE=NEVER;
 				file-id	= 3003;
 				aid	= 4d:44;
-				size	= 40;
+				size	= 0;
 
-				EF laser-md-cardapps {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
-					file-id	= 4002;
-					aid = 63:61:72:64:61:70:70:73;
+				EF laser-md-cardid {
+					ACL = READ=NONE, WRITE=CHV16, ADMIN=NEVER, DELETE-SELF=CHV16;
+					file-id	= 4000;
+					aid	= 63:61:72:64:69:64;
+					size	= 18;
 				}
 
 				EF laser-md-cardcf {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
+					ACL	= READ=NONE, WRITE=CHV50, ADMIN=NEVER, DELETE-SELF=CHV50;
 					file-id	= 4001;
-					aid = 63:61:72:64:63:66;
+					aid	= 63:61:72:64:63:66;
+					size	= 8;
 				}
 
-				EF laser-md-cardid {
-					ACL = WRITE=NONE, UPDATE=NONE, READ=NONE, DELETE-SELF=NONE;
-					file-id	= 4000;
-					aid = 63:61:72:64:69:64;
+				EF laser-md-cardapps {
+					ACL	= READ=NONE, WRITE=CHV48, ADMIN=NEVER, DELETE-SELF=CHV48;
+					file-id	= 4002;
+					aid	= 63:61:72:64:61:70:70:73;
+					size	= 16;
 				}
 
 				DF MiniDriver-mscp {
-					ACL = *=NEVER;
-					ACL = CREATE=CHV32, DELETE=NONE, DELETE-SELF=NONE;
+					ACL	= CREATE=CHV48, CREATE-DF=CHV48, ADMIN=NEVER, DELETE-SELF=CHV48, ACTIVATE=NONE, DEACTIVATE=NEVER;
 					file-id	= 3005;
-					aid = 63:61:72:64:63 66;
+					aid	= 6d:73:63:70;
+					size	= 0;
 				}
 			}
 
-				# Private RSA keys
 			EF Athena-UserHist   {
-				ACL = *=NONE;
+				ACL	= READ=CHV48, WRITE=CHV48, ADMIN=CHV48, DELETE-SELF=CHV48;
 				file-id	= B000;
-				aid = 55:73:65:72:48:69:73:74;
-				size = 26;
+				aid	= 55:73:65:72:48:69:73:74;
+				size	= 26;
+			}
+
+			EF Athena-tokenInfo {
+				ACL	= READ=NONE, WRITE=CHV48, ADMIN=CHV48, DELETE-SELF=CHV48;
+				file-id	= C000;
+				aid	= 54:6f:6b:65:6e:49:6e:66:6f;
+				size	= 161;
 			}
 
 			EF Athena-EEED   {
-				ACL = *=NONE;
+				ACL	= READ=NONE, WRITE=CHV48, ADMIN=NEVER, DELETE-SELF=CHV48;
 				file-id	= EEED;
-				aid = 45:45:45:44;
-				size = 4;
-			}
-
-			EF Athena-EEEF   {
-				ACL = *=NONE;
-				file-id	= EEED;
-				aid = 45:45:45:46;
-				size = 15;
+				aid	= 45:45:45:44;
+				size	= 4;
 			}
 
 			EF Athena-EEEE   {
-				ACL = *=NONE;
+				ACL	= READ=NONE, WRITE=CHV16, ADMIN=NEVER, DELETE-SELF=CHV16;
 				file-id	= EEEE;
-				aid = 45:45:45:45;
-				size = 173;
+				aid	= 45:45:45:45;
+				size	= 173;
 			}
 
-			EF Athena-token-info {
-				ACL	= WRITE=CHV4, UPDATE=CHV4, READ=NONE, ERASE=NEVER;
-				file-id	= C000;
-				aid = 54:6f:6b:65:6e:49:6e:66::6f;
-				size	= 36;
+			EF Athena-EEEF   {
+				ACL	= READ=NONE, WRITE=CHV48, ADMIN=NEVER, DELETE-SELF=CHV48;
+				file-id	= EEEF;
+				aid	= 45:45:45:46;
+				size	= 15;
 			}
 		}
 	}
