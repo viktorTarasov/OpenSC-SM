@@ -705,7 +705,7 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	rv = _alloc_ck_string(buf + 0, 32, &p15card->tokeninfo->label);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate token label");
 
-	rv = _alloc_ck_string(buf + + 32, 32, &p15card->tokeninfo->manufacturer_id);
+	rv = _alloc_ck_string(buf + 32, 32, &p15card->tokeninfo->manufacturer_id);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate manufacturerID");
 
 	rv = _alloc_ck_string(buf + 80, 16, &p15card->tokeninfo->serial_number);
