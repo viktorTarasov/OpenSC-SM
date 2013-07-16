@@ -48,6 +48,22 @@ static int laser_emu_update_tokeninfo(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_tokeninfo *tinfo);
 
 static int
+laser_strcpy_bp(unsigned char * dst, char *src, size_t dstsize)
+{
+	size_t len;
+
+	if (!dst || !src || !dstsize)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	memset((char *)dst, ' ', dstsize);
+	len = strlen(src) > dstsize ? dstsize : strlen(src);
+	memcpy((char *)dst, src, len);
+
+	return SC_SUCCESS;
+}
+
+
+static int
 laser_validate_attr_reference(int key_reference)
 {
 	if (key_reference < LASER_FS_ATTR_REF_MIN)
@@ -136,7 +152,7 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		"private-DF",
 		"MiniDriver-DF",
 		"Athena-UserHist",
-		"Athena-tokenInfo",
+		"Athena-TokenInfo",
 		"Athena-EEED",
 		"Athena-EEEE",
 		"Athena-EEEF",
@@ -253,18 +269,16 @@ laser_create_dir(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_file *df)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_file *file = NULL;
-	size_t ii;
-	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
-	/* TODO */
-	//rv = laser_emu_update_tokeninfo(profile, p15card, &tinfo);
-	rv = laser_emu_update_tokeninfo(profile, p15card, NULL);
-	LOG_TEST_RET(ctx, rv, "Cannot update token-info");
+	p15card->tokeninfo->flags = CKF_TOKEN_INITIALIZED | CKF_USER_PIN_INITIALIZED | CKF_LOGIN_REQUIRED | CKF_RNG;
+	p15card->card->version.hw_major = LASER_VERSION_HW_MAJOR;
+	p15card->card->version.hw_minor = LASER_VERSION_HW_MINOR;
+	p15card->card->version.fw_major = LASER_VERSION_FW_MAJOR;
+	p15card->card->version.fw_minor = LASER_VERSION_FW_MAJOR;
 
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1313,8 +1327,45 @@ laser_emu_update_tokeninfo(struct sc_profile *profile, struct sc_pkcs15_card *p1
 		struct sc_pkcs15_tokeninfo *tinfo)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_file *file = NULL;
+	struct laser_token_info lti;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
+
+	memset(&lti, 0, sizeof(lti));
+
+	laser_strcpy_bp(lti.label, tinfo->label, sizeof(lti.label));
+	laser_strcpy_bp(lti.manufacturer_id, tinfo->manufacturer_id, sizeof(lti.manufacturer_id));
+	laser_strcpy_bp(lti.model, LASER_MODEL, sizeof(lti.model));
+	laser_strcpy_bp(lti.serial_number, tinfo->serial_number, sizeof(lti.serial_number));
+
+	lti.flags = tinfo->flags;
+
+        lti.max_pin_len = profile->pin_maxlen;
+        lti.min_pin_len = profile->pin_minlen;
+
+        lti.total_public_memory = (uint32_t)(-1);
+        lti.total_private_memory = (uint32_t)(-1);
+
+        lti.hardware_version.major = p15card->card->version.hw_major;
+        lti.hardware_version.minor = p15card->card->version.hw_minor;
+        lti.firmware_version.major = p15card->card->version.fw_major;
+        lti.firmware_version.minor = p15card->card->version.fw_minor;
+
+	if (tinfo->last_update.gtime)
+		free(tinfo->last_update.gtime);
+	rv = sc_pkcs15_get_generalized_time(ctx, &tinfo->last_update.gtime);
+	LOG_TEST_RET(ctx, rv, "Cannot allocate generalized time");
+
+	laser_strcpy_bp(lti.utc_time, tinfo->last_update.gtime, sizeof(lti.utc_time));
+
+	rv = sc_profile_get_file(profile, "Athena-TokenInfo", &file);
+	LOG_TEST_RET(ctx, rv, "'Athena-TokenInfo' not defined");
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, (unsigned char *)(&lti), sizeof(lti));
+	LOG_TEST_RET(ctx, rv, "Cannot update TokenInfo file");
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 

@@ -2,8 +2,8 @@
 # PKCS15 r/w profile for Athena LASER card
 #
 cardinfo {
-	label	= "LASER";
-	manufacturer	= "Athena";
+	label		= "IDProtect LASER";
+	manufacturer	= "Athena Smartcard Solutions";
 	max-pin-length	= 10;
 	min-pin-length	= 4;
 	pin-encoding	= ascii-numeric;
@@ -225,7 +225,7 @@ filesystem {
 				size	= 26;
 			}
 
-			EF Athena-tokenInfo {
+			EF Athena-TokenInfo {
 				ACL	= READ=NONE, WRITE=CHV48, ADMIN=CHV48, DELETE-SELF=CHV48;
 				file-id	= C000;
 				aid	= 54:6f:6b:65:6e:49:6e:66:6f;

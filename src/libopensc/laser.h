@@ -26,6 +26,7 @@
 #include "libopensc/types.h"
 
 #define LASER_TITLE "LASER"
+#define LASER_MODEL "IDProtect"
 
 #define LASER_KO_ALLOW_TICKET	0x80
 #define LASER_KO_NON_CRYPTO	0x00
@@ -121,6 +122,10 @@
 #define LASER_USER_PIN_TYPE_BIO		0x03
 #define LASER_USER_PIN_TYPE_PIN_BIO	0x04
 
+#define LASER_VERSION_HW_MAJOR	0x01
+#define LASER_VERSION_HW_MINOR	0x00
+#define LASER_VERSION_FW_MAJOR	0x01
+#define LASER_VERSION_FW_MINOR	0x00
 
 /* From Windows Smart Card Minidriver Specification
  * Version 7.06
@@ -175,6 +180,33 @@ struct sc_cardctl_laser_updatekey {
 	size_t len;
 };
 
+struct laser_version
+{
+	unsigned char major;
+	unsigned char minor;
+};
+
+struct laser_token_info
+{
+	unsigned char label[32];
+	unsigned char manufacturer_id[32];
+	unsigned char model[16];
+	unsigned char serial_number[16];
+	uint32_t flags;
+	uint32_t max_session_count;
+	uint32_t session_count;
+	uint32_t max_rw_session_count;
+	uint32_t rw_session_count;
+	uint32_t max_pin_len;
+	uint32_t min_pin_len;
+	uint32_t total_public_memory;
+	uint32_t free_public_memory;
+	uint32_t total_private_memory;
+	uint32_t free_private_memory;
+	struct laser_version hardware_version;
+	struct laser_version firmware_version;
+	unsigned char utc_time[16];
+};
 
 int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned type, unsigned base_file_id);
 
