@@ -131,6 +131,164 @@ laser_create_pin_object(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+static int
+laser_eeee_add_tag(unsigned tag, unsigned char *data, size_t data_len,
+		unsigned char *eeee, size_t eeee_size, size_t *offs)
+{
+	if (!data || !eeee || !offs || !eeee_size)
+		return SC_ERROR_INVALID_ARGUMENTS;
+
+	if (*offs + data_len >= eeee_size)
+		return SC_ERROR_INVALID_DATA;
+
+	*(eeee + *offs) = (tag >> 8) & 0xFF;
+	*(eeee + *offs + 1) = tag & 0xFF;
+	*(eeee + *offs + 2) = data_len;
+	memcpy(eeee + *offs + 3, data, data_len);
+	*offs += data_len + 3;
+
+	return SC_SUCCESS;
+}
+
+
+static int
+laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_file *file)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	unsigned char *eeee = NULL, buf[0x40];
+	size_t offs;
+	int rv;
+	struct sc_pkcs15_auth_info user_pin_info, admin_pin_info;
+
+	LOG_FUNC_CALLED(ctx);
+
+	eeee = calloc(1, file->size);
+	if (!eeee)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	offs = 0;
+	sc_profile_get_pin_info(profile, SC_PKCS15INIT_USER_PIN, &user_pin_info);
+	sc_profile_get_pin_info(profile, SC_PKCS15INIT_SO_PIN, &admin_pin_info);
+
+	/* 02C0 General information */
+	memset(buf, 0, sizeof(buf));
+	buf[2] = user_pin_info.max_tries;
+	buf[4] = admin_pin_info.max_tries;
+	buf[5] = 0;	/* S0 PIN is CHV */
+	buf[6] = 1;	/* User PIN is CHV */
+	rv = laser_eeee_add_tag(0x02C0, buf, 7, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C1 Card type (not used) */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02C1, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C2 User PIN policy */
+	memset(buf, 0, sizeof(buf));
+	buf[1] = user_pin_info.attrs.pin.min_length;
+	buf[2] = user_pin_info.attrs.pin.max_length;
+	/* No PIN policy restrictions: min alpha, upper, digit, non-alpha are zero; no history*/
+	rv = laser_eeee_add_tag(0x02C2, buf, 10, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C3 SO PIN policy */
+	memset(buf, 0, sizeof(buf));
+	buf[1] = admin_pin_info.attrs.pin.min_length;
+	buf[2] = admin_pin_info.attrs.pin.max_length;
+	/* No PIN policy restrictions: min alpha, upper, digit, non-alpha are zero; no history*/
+	rv = laser_eeee_add_tag(0x02C3, buf, 10, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C5 USER_PIN_VALID_FOR_SECONDS */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02C5, buf, 4, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C6 USER_EXPIRES_AFTER_DAYS */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02C6, buf, 4, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C8 ALLOW_CARD_WIPE */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02C8, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02C9 BIO_IMAGE_QUALITY */
+	memset(buf, 0, sizeof(buf));
+	buf[0] = 0x33;
+	rv = laser_eeee_add_tag(0x02C9, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02CA BIO_PURPOSE (0x7fffffff/10000) */
+	memset(buf, 0, sizeof(buf));
+	buf[0] = 0x00, buf[1] = 0x03, buf[2] = 0x46, buf[3] = 0xDC;
+	rv = laser_eeee_add_tag(0x02CA, buf, 4, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02CB BIO_MAX_FINGERS */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02CB, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02CC X931_USE */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02CC, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02CD BIO_MAX_UNBLOCK */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02CD, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02CF USER_MUST_CHNGE_AFTER_UNLOCK */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02CF, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D1 USER_PIN MAX REPEATING/SEQUENCE */
+	memset(buf, 0, sizeof(buf));
+	buf[0] = user_pin_info.attrs.pin.max_length;
+	buf[1] = user_pin_info.attrs.pin.max_length;
+	rv = laser_eeee_add_tag(0x02D1, buf, 2, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D2 ADMIN_PIN MAX REPEATING/SEQUENCE */
+	memset(buf, 0, sizeof(buf));
+	buf[0] = admin_pin_info.attrs.pin.max_length;
+	buf[1] = admin_pin_info.attrs.pin.max_length;
+	rv = laser_eeee_add_tag(0x02D2, buf, 2, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D3 DS_SUPPORT (disabled) */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02D3, buf, 0x3F, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D5 USER_PIN_ALWAYS */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02D5, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D6 BIO_TYPE */
+	memset(buf, 0, sizeof(buf));
+	buf[0] = 0x01;
+	rv = laser_eeee_add_tag(0x02D6, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+
+	/* 02D7 ???? */
+	memset(buf, 0, sizeof(buf));
+	rv = laser_eeee_add_tag(0x02D7, buf, 1, eeee, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
+	/* The END */
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, eeee, offs);
+	LOG_TEST_RET(ctx, rv, "Cannot update EEEE file");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 /*
  * Laser init card
  */
@@ -196,6 +354,10 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		else if (!strcmp(to_create[ii], "Athena-UserPIN"))   {
 			rv = laser_create_pin_object(profile, p15card, file, "Default User PIN");
 			LOG_TEST_RET(ctx, rv, "Cannot create default User PIN object");
+		}
+		else if (!strcmp(to_create[ii], "Athena-EEEE"))   {
+			rv = laser_update_eeee(profile, p15card, file);
+			LOG_TEST_RET(ctx, rv, "Cannot update EEEE");
 		}
 
 		sc_file_free(file);
