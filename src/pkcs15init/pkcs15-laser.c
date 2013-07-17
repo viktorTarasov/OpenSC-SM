@@ -153,6 +153,45 @@ laser_eeee_add_tag(unsigned tag, unsigned char *data, size_t data_len,
 
 
 static int
+laser_update_eeef(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_file *file)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	unsigned char *data = NULL, zero = 0;
+	char *gtime = NULL;
+	size_t offs;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	data = calloc(1, file->size);
+	if (!data)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	offs = 0;
+	/* 02C4 USER_MUST_CHANGE_AFTER_FIRST_USE */
+	rv = laser_eeee_add_tag(0x02C4, &zero, 1, data, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEF error: cannot add tag");
+
+	/* 02C7 START_DATE */
+	rv = sc_pkcs15_get_generalized_time(ctx, &gtime);
+	LOG_TEST_RET(ctx, rv, "Cannot allocate generalized time");
+
+	rv = laser_eeee_add_tag(0x02C7, (unsigned char *)gtime, 8, data, file->size, &offs);
+	LOG_TEST_RET(ctx, rv, "Encode EEEF error: cannot add tag");
+
+	free(gtime);
+	/* The End */
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, data, offs);
+	LOG_TEST_RET(ctx, rv, "Cannot update EEEF file");
+
+	free(data);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
 laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_file *file)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -287,6 +326,8 @@ laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, st
 	rv = sc_pkcs15init_update_file(profile, p15card, file, eeee, offs);
 	LOG_TEST_RET(ctx, rv, "Cannot update EEEE file");
 
+	free(eeee);
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 /*
@@ -355,9 +396,22 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 			rv = laser_create_pin_object(profile, p15card, file, "Default User PIN");
 			LOG_TEST_RET(ctx, rv, "Cannot create default User PIN object");
 		}
+		else if (!strcmp(to_create[ii], "Athena-EEED"))   {
+			unsigned char data[4] = {0x02, 0xD0, 0x01, 0x64};
+
+			if (file->size < sizeof(data))
+				LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "EEED file size is unsufficient");
+
+			rv = sc_pkcs15init_update_file(profile, p15card, file, data, sizeof(data));
+			LOG_TEST_RET(ctx, rv, "Cannot update EEEF file");
+		}
 		else if (!strcmp(to_create[ii], "Athena-EEEE"))   {
 			rv = laser_update_eeee(profile, p15card, file);
 			LOG_TEST_RET(ctx, rv, "Cannot update EEEE");
+		}
+		else if (!strcmp(to_create[ii], "Athena-EEEF"))   {
+			rv = laser_update_eeef(profile, p15card, file);
+			LOG_TEST_RET(ctx, rv, "Cannot update EEEF");
 		}
 
 		sc_file_free(file);
