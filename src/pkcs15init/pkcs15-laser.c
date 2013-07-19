@@ -46,6 +46,8 @@ static int laser_update_df_create_data_object(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *object);
 static int laser_emu_update_tokeninfo(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_tokeninfo *tinfo);
+static int laser_cmap_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_file *file);
 
 static int
 laser_strcpy_bp(unsigned char * dst, char *src, size_t dstsize)
@@ -133,7 +135,7 @@ laser_create_pin_object(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 
 
 static int
-laser_eeee_add_tag(unsigned tag, unsigned char *data, size_t data_len,
+laser_add_ee_tag(unsigned tag, unsigned char *data, size_t data_len,
 		unsigned char *eeee, size_t eeee_size, size_t *offs)
 {
 	if (!data || !eeee || !offs || !eeee_size)
@@ -169,14 +171,14 @@ laser_update_eeef(struct sc_profile *profile, struct sc_pkcs15_card *p15card, st
 
 	offs = 0;
 	/* 02C4 USER_MUST_CHANGE_AFTER_FIRST_USE */
-	rv = laser_eeee_add_tag(0x02C4, &zero, 1, data, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C4, &zero, 1, data, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEF error: cannot add tag");
 
 	/* 02C7 START_DATE */
 	rv = sc_pkcs15_get_generalized_time(ctx, &gtime);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate generalized time");
 
-	rv = laser_eeee_add_tag(0x02C7, (unsigned char *)gtime, 8, data, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C7, (unsigned char *)gtime, 8, data, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEF error: cannot add tag");
 
 	free(gtime);
@@ -216,12 +218,12 @@ laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, st
 	buf[4] = admin_pin_info.max_tries;
 	buf[5] = 0;	/* S0 PIN is CHV */
 	buf[6] = 1;	/* User PIN is CHV */
-	rv = laser_eeee_add_tag(0x02C0, buf, 7, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C0, buf, 7, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C1 Card type (not used) */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02C1, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C1, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C2 User PIN policy */
@@ -229,7 +231,7 @@ laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, st
 	buf[1] = user_pin_info.attrs.pin.min_length;
 	buf[2] = user_pin_info.attrs.pin.max_length;
 	/* No PIN policy restrictions: min alpha, upper, digit, non-alpha are zero; no history*/
-	rv = laser_eeee_add_tag(0x02C2, buf, 10, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C2, buf, 10, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C3 SO PIN policy */
@@ -237,89 +239,89 @@ laser_update_eeee(struct sc_profile *profile, struct sc_pkcs15_card *p15card, st
 	buf[1] = admin_pin_info.attrs.pin.min_length;
 	buf[2] = admin_pin_info.attrs.pin.max_length;
 	/* No PIN policy restrictions: min alpha, upper, digit, non-alpha are zero; no history*/
-	rv = laser_eeee_add_tag(0x02C3, buf, 10, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C3, buf, 10, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C5 USER_PIN_VALID_FOR_SECONDS */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02C5, buf, 4, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C5, buf, 4, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C6 USER_EXPIRES_AFTER_DAYS */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02C6, buf, 4, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C6, buf, 4, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C8 ALLOW_CARD_WIPE */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02C8, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C8, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02C9 BIO_IMAGE_QUALITY */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = 0x33;
-	rv = laser_eeee_add_tag(0x02C9, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02C9, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02CA BIO_PURPOSE (0x7fffffff/10000) */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = 0x00, buf[1] = 0x03, buf[2] = 0x46, buf[3] = 0xDC;
-	rv = laser_eeee_add_tag(0x02CA, buf, 4, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02CA, buf, 4, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02CB BIO_MAX_FINGERS */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02CB, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02CB, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02CC X931_USE */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02CC, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02CC, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02CD BIO_MAX_UNBLOCK */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02CD, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02CD, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02CF USER_MUST_CHNGE_AFTER_UNLOCK */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02CF, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02CF, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D1 USER_PIN MAX REPEATING/SEQUENCE */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = user_pin_info.attrs.pin.max_length;
 	buf[1] = user_pin_info.attrs.pin.max_length;
-	rv = laser_eeee_add_tag(0x02D1, buf, 2, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D1, buf, 2, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D2 ADMIN_PIN MAX REPEATING/SEQUENCE */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = admin_pin_info.attrs.pin.max_length;
 	buf[1] = admin_pin_info.attrs.pin.max_length;
-	rv = laser_eeee_add_tag(0x02D2, buf, 2, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D2, buf, 2, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D3 DS_SUPPORT (disabled) */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02D3, buf, 0x3F, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D3, buf, 0x3F, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D5 USER_PIN_ALWAYS */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02D5, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D5, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D6 BIO_TYPE */
 	memset(buf, 0, sizeof(buf));
 	buf[0] = 0x01;
-	rv = laser_eeee_add_tag(0x02D6, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D6, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 
 	/* 02D7 ???? */
 	memset(buf, 0, sizeof(buf));
-	rv = laser_eeee_add_tag(0x02D7, buf, 1, eeee, file->size, &offs);
+	rv = laser_add_ee_tag(0x02D7, buf, 1, eeee, file->size, &offs);
 	LOG_TEST_RET(ctx, rv, "Encode EEEE error: cannot add tag");
 	/* The END */
 
@@ -412,6 +414,10 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		else if (!strcmp(to_create[ii], "Athena-EEEF"))   {
 			rv = laser_update_eeef(profile, p15card, file);
 			LOG_TEST_RET(ctx, rv, "Cannot update EEEF");
+		}
+		else if (!strcmp(to_create[ii], "laser-cmap-attributes"))   {
+			rv = laser_cmap_create(profile, p15card, file);
+			LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
 		}
 
 		sc_file_free(file);
@@ -996,6 +1002,40 @@ laser_cmap_container_set_default(struct sc_pkcs15_card *p15card,
 
 
 static int
+laser_cmap_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_file *file)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object dobj;
+	struct sc_pkcs15_data_info dobj_info;
+	unsigned char zero_data[450];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&dobj, 0, sizeof(dobj));
+	memset(&dobj_info, 0, sizeof(dobj_info));
+	memset(zero_data, 0, sizeof(zero_data));
+
+	dobj.data = &dobj_info;
+
+	dobj.type = SC_PKCS15_TYPE_DATA_OBJECT;
+	dobj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE;
+	strncpy(dobj.label, "cmapfile", sizeof(dobj.label)-1);
+
+	dobj_info.path = file->path;
+	sc_init_oid(&dobj_info.app_oid);
+	dobj_info.data.value = zero_data;
+	dobj_info.data.len = sizeof(zero_data);
+	strncpy(dobj_info.app_label, CMAP_DO_APPLICATION_NAME, sizeof(dobj_info.app_label)-1);
+
+	rv = laser_update_df_create_data_object(profile, p15card, &dobj);
+	LOG_TEST_RET(ctx, rv, "Failed to update CMAP DATA file");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		int remove, struct sc_pkcs15_object *object)
 {
@@ -1055,6 +1095,9 @@ laser_cmap_update(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 
 	rv = laser_update_df_create_data_object(profile, p15card, cmap_dobj);
 	LOG_TEST_RET(ctx, rv, "Failed to update DATA-DF ");
+
+	if (cmap)
+		free (cmap);
 
 	LOG_FUNC_RETURN(ctx, rv);
 }

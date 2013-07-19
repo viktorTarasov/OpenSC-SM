@@ -762,7 +762,7 @@ laser_attrs_data_object_decode(struct sc_context *ctx,
 
 		if (file_id == CMAP_FID)   {
 			if (!strlen(info->app_label))
-				strncpy(info->app_label, CMAP_DO_APPLICATION_NAME,sizeof(info->app_label) - 1);
+				strncpy(info->app_label, CMAP_DO_APPLICATION_NAME, sizeof(info->app_label) - 1);
 			if (!strlen(object->label))
 				strncpy(object->label, "cmapfile", sizeof(object->label) - 1);
 		}
