@@ -48,6 +48,8 @@ static int laser_emu_update_tokeninfo(struct sc_profile *profile,
 		struct sc_pkcs15_card *p15card, struct sc_pkcs15_tokeninfo *tinfo);
 static int laser_cmap_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_file *file);
+static int laser_cardid_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_file *file);
 
 static int
 laser_strcpy_bp(unsigned char * dst, char *src, size_t dstsize)
@@ -418,6 +420,22 @@ laser_init_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 		else if (!strcmp(to_create[ii], "laser-cmap-attributes"))   {
 			rv = laser_cmap_create(profile, p15card, file);
 			LOG_TEST_RET(ctx, rv, "Failed to update 'cmapfile'");
+		}
+		else if (!strcmp(to_create[ii], "laser-md-cardid"))   {
+			rv =  laser_cardid_create(profile, p15card, file);
+			LOG_TEST_RET(ctx, rv, "Cannot update CARDID file");
+		}
+		else if (!strcmp(to_create[ii], "laser-md-cardcf"))   {
+			unsigned char data[8] =  {0x00, 0x06, 0x00, 0x03, 0x01, 0x00, 0x01, 0x00};
+
+			rv = sc_pkcs15init_update_file(profile, p15card, file, data, sizeof(data));
+			LOG_TEST_RET(ctx, rv, "Cannot update CARDCF file");
+		}
+		else if (!strcmp(to_create[ii], "laser-md-cardapps"))   {
+			unsigned char data[10] = {0x00, 0x08, 0x6D, 0x73, 0x63, 0x70, 0x00, 0x00, 0x00, 0x00};
+
+			rv = sc_pkcs15init_update_file(profile, p15card, file, data, sizeof(data));
+			LOG_TEST_RET(ctx, rv, "Cannot update CARDCF file");
 		}
 
 		sc_file_free(file);
@@ -998,6 +1016,34 @@ laser_cmap_container_set_default(struct sc_pkcs15_card *p15card,
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+laser_cardid_create(struct sc_profile *profile, struct sc_pkcs15_card *p15card, struct sc_file *file)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_serial_number sn;
+	unsigned char data[0x12];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = sc_card_ctl(p15card->card, SC_CARDCTL_GET_SERIALNR, &sn);
+	LOG_TEST_RET(ctx, rv, "Cannot get serial number");
+
+	if (sn.len > 0x10)
+		sn.len = 0x10;
+
+	data[0] = 0x00;
+	data[1] = 0x10;
+	strcpy((char *)(data + 2), "ATHENASN");
+	memcpy(data + 2 + 0x10 - sn.len, sn.value, sn.len);
+
+	rv = sc_pkcs15init_update_file(profile, p15card, file, data, sizeof(data));
+	LOG_TEST_RET(ctx, rv, "Cannot update CARDID file");
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 

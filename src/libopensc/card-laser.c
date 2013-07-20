@@ -1497,6 +1497,7 @@ laser_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 	card->serialnr = sn;
 	if (serial)
 		*serial = sn;
+	sc_log(ctx, "card laser serial '%s'", sc_dump_hex(sn.value, sn.len));
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
