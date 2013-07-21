@@ -50,7 +50,7 @@ filesystem {
 			type	= internal-ef;
 			structure = 8;
 			content	= "81083030303030303030";
-			prop-attr = "8001000033040A00000000001010";
+			prop-attr = "C001000033040A00000000001010";
 		}
 
 		EF Athena-UserPIN {

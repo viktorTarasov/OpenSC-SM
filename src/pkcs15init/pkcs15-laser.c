@@ -575,7 +575,7 @@ laser_create_sopin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	file->prop_attr = calloc(1, 16);
 	if (!file->prop_attr)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-	*(file->prop_attr + offs++) = LASER_KO_NON_CRYPTO | LASER_KO_ALLOW_TICKET;
+	*(file->prop_attr + offs++) = LASER_KO_NON_CRYPTO | LASER_KO_ALLOW_TICKET | LASER_KO_ALLOW_SECURE_VERIFY;
 	*(file->prop_attr + offs++) = LASER_KO_USAGE_AUTH_EXT;
 	*(file->prop_attr + offs++) = LASER_KO_ALGORITHM_PIN;
 	*(file->prop_attr + offs++) = LASER_KO_PADDING_NO;
