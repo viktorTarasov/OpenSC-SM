@@ -61,7 +61,7 @@ filesystem {
 			type	= internal-ef;
 			structure = 8;
 			content = "81083131313131313131";
-			prop-attr = "80010000A0040A00000000001010";
+			prop-attr = "C0010000A0040A00000000001010";
 		}
 
 		EF Athena-TransportPIN2 {
