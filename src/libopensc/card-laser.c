@@ -132,6 +132,7 @@ struct laser_private_data {
 };
 
 static int laser_get_serialnr(struct sc_card *, struct sc_serial_number *);
+static int laser_get_default_key(struct sc_card *, struct sc_cardctl_default_key *);
 static int laser_parse_sec_attrs(struct sc_card *, struct sc_file *);
 static int laser_process_fci(struct sc_card *, struct sc_file *, const unsigned char *, size_t);
 
@@ -149,7 +150,7 @@ static int
 laser_get_tag_data(struct sc_context *ctx, unsigned char *data, size_t data_len, struct sc_tlv_data *out)
 {
 	size_t taglen;
-	unsigned char *ptr = NULL;
+	const unsigned char *ptr = NULL;
 
 	if (!ctx || !data || !out)
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -696,13 +697,15 @@ laser_parse_sec_attrs(struct sc_card *card, struct sc_file *file)
 		}
 		else if (*(attrs + ii*2 + 1))   {
 			unsigned char ref = *(attrs + ii*2 + 1);
+			unsigned method = (ref == LASER_TRANSPORT_PIN1_REFERENCE) ? SC_AC_AUT : SC_AC_CHV;
 			/* TODO: normally, here we should check the type of referenced KO */
 
 			if (ref == 0x30)   {
 				sc_log(ctx, "TODO: not supported LOGIC KO; here ref-30 changed for ref-20 : TODO");
 				ref = 0x20;
 			}
-			sc_file_add_acl_entry(file, *(ops + ii), SC_AC_CHV, ref);
+
+			sc_file_add_acl_entry(file, *(ops + ii), method, ref);
 		}
 		else   {
 			sc_log(ctx, "op:%X SC_AC_NONE, val:%X", *(ops + ii));
@@ -1207,6 +1210,10 @@ laser_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Verify PIN(type:%X,ref:%i,data(len:%i,%p)", type, reference, data_len, data);
+
+	if (type == SC_AC_AUT && reference == LASER_TRANSPORT_PIN1_REFERENCE)
+		type = SC_AC_CHV;
+
 	if (type == SC_AC_AUT)   {
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
@@ -1503,6 +1510,33 @@ laser_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 
 
 static int
+laser_get_default_key(struct sc_card *card, struct sc_cardctl_default_key *data)
+{
+	struct sc_context *ctx = card->ctx;
+	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
+	scconf_block *atrblock = NULL;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	atrblock = _sc_match_atr_block(ctx, card->driver, &card->atr);
+	if (!atrblock)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NO_DEFAULT_KEY);
+
+	if (data->method == SC_AC_AUT && data->key_ref == 1)   {
+		const char *default_key = scconf_get_str(atrblock,
+				"default_transport_pin1", LASER_TRANSPORT_PIN1_VALUE);
+
+		rv = sc_hex_to_bin(default_key, data->key_data, &data->len);
+		LOG_TEST_RET(ctx, rv,  "Cannot get trasnport PIN01 default value: HEX to BIN conversion error");
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NO_DEFAULT_KEY);
+}
+
+
+static int
 laser_generate_key(struct sc_card *card, struct sc_cardctl_laser_genkey *args)
 {
 	struct sc_context *ctx = card->ctx;
@@ -1593,6 +1627,8 @@ laser_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 	switch (cmd) {
 	case SC_CARDCTL_GET_SERIALNR:
 		return laser_get_serialnr(card, (struct sc_serial_number *)ptr);
+	case SC_CARDCTL_GET_DEFAULT_KEY:
+		return laser_get_default_key(card, (struct sc_cardctl_default_key *)ptr);
 	case SC_CARDCTL_ATHENA_GENERATE_KEY:
 		sc_log(ctx, "CMD SC_CARDCTL_ATHENA_GENERATE_KEY");
 		return laser_generate_key(card, (struct sc_cardctl_laser_genkey *) ptr);
