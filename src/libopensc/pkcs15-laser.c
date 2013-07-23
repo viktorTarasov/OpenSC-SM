@@ -716,10 +716,10 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	p15card->tokeninfo->version = 0;
 	p15card->tokeninfo->flags = *((int32_t *)(buf + 96));
 
-	p15card->card->version.hw_major = *(buf + 156);
-	p15card->card->version.hw_minor = *(buf + 157);
-	p15card->card->version.fw_major = *(buf + 158);
-	p15card->card->version.fw_minor = *(buf + 159);
+	p15card->card->version.hw_major = *(buf + 140);
+	p15card->card->version.hw_minor = *(buf + 141);
+	p15card->card->version.fw_major = *(buf + 142);
+	p15card->card->version.fw_minor = *(buf + 143);
 
 #if 0
 	rv = _create_application(p15card, "Athena LASER", "A0000001644C415345520001", "3F00");

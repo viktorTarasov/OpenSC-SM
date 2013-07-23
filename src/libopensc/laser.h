@@ -190,25 +190,25 @@ struct laser_version
 
 struct laser_token_info
 {
-	unsigned char label[32];
-	unsigned char manufacturer_id[32];
-	unsigned char model[16];
-	unsigned char serial_number[16];
-	uint32_t flags;
-	uint32_t max_session_count;
-	uint32_t session_count;
-	uint32_t max_rw_session_count;
-	uint32_t rw_session_count;
-	uint32_t max_pin_len;
-	uint32_t min_pin_len;
-	uint32_t total_public_memory;
-	uint32_t free_public_memory;
-	uint32_t total_private_memory;
-	uint32_t free_private_memory;
-	struct laser_version hardware_version;
-	struct laser_version firmware_version;
-	unsigned char utc_time[16];
-};
+	unsigned char label[32];		/* 0   */
+	unsigned char manufacturer_id[32];	/* 32  */
+	unsigned char model[16];		/* 64  */
+	unsigned char serial_number[16];	/* 80  */
+	uint32_t flags;				/* 96  */
+	uint32_t max_session_count;		/* 100 */
+	uint32_t session_count;			/* 104 */
+	uint32_t max_rw_session_count;		/* 108 */
+	uint32_t rw_session_count;		/* 112 */
+	uint32_t max_pin_len;			/* 116 */
+	uint32_t min_pin_len;			/* 120 */
+	uint32_t total_public_memory;		/* 124 */
+	uint32_t free_public_memory;		/* 128 */
+	uint32_t total_private_memory;		/* 132 */
+	uint32_t free_private_memory;		/* 136 */
+	struct laser_version hardware_version;	/* 140 */
+	struct laser_version firmware_version;	/* 142 */
+	unsigned char utc_time[16];		/* 144 */
+};						/* 160 */
 
 int laser_get_free_index(struct sc_pkcs15_card *p15card, unsigned type, unsigned base_file_id);
 
