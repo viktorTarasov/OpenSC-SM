@@ -142,7 +142,7 @@ _alloc_ck_string(unsigned char *data, size_t max_len, char **out)
 	return SC_SUCCESS;
 }
 
-
+#if 0
 static int
 _create_application(struct sc_pkcs15_card * p15card,
 		char *label, char *aid_str, char *path_str)
@@ -182,6 +182,7 @@ _create_application(struct sc_pkcs15_card * p15card,
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
+#endif
 
 
 static int
@@ -197,6 +198,7 @@ _create_pin(struct sc_pkcs15_card * p15card, char *label,
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Create PIN '%s', path '%s'", label, pin_path);
 
 	memset(&auth_info, 0, sizeof(auth_info));
 	memset(&pin_obj, 0, sizeof(pin_obj));
@@ -212,7 +214,7 @@ _create_pin(struct sc_pkcs15_card * p15card, char *label,
 	props = (struct laser_ko_props *)file->prop_attr;
 
 	auth_info.auth_type = SC_PKCS15_PIN_AUTH_TYPE_PIN;
-	auth_info.auth_method   = SC_AC_CHV;
+	auth_info.auth_method = (auth_id == LASER_TRANSPORT_PIN1_AUTH_ID) ? SC_AC_AUT: SC_AC_CHV;
 	auth_info.auth_id.value[0] = auth_id;
 	auth_info.auth_id.len = 1;
 	auth_info.attrs.pin.reference = path.value[path.len - 1];
@@ -712,7 +714,7 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	LOG_TEST_RET(ctx, rv, "Cannot allocate serialNumber");
 
 	p15card->tokeninfo->version = 0;
-	p15card->tokeninfo->flags = (unsigned long)(int32_t *)(buf + 96);
+	p15card->tokeninfo->flags = *((int32_t *)(buf + 96));
 
 	p15card->card->version.hw_major = *(buf + 156);
 	p15card->card->version.hw_minor = *(buf + 157);
@@ -724,8 +726,10 @@ sc_pkcs15emu_laser_init(struct sc_pkcs15_card * p15card)
 	LOG_TEST_RET(ctx, rv, "Cannot create application");
 #endif
 
-	rv = _create_pin(p15card, "User PIN", PATH_USERPIN, AUTH_ID_PIN, 0);
-	LOG_TEST_RET(ctx, rv, "Cannot create 'User PIN' object");
+	if (p15card->tokeninfo->flags & CKF_USER_PIN_INITIALIZED)   {
+		rv = _create_pin(p15card, "User PIN", PATH_USERPIN, AUTH_ID_PIN, 0);
+		LOG_TEST_RET(ctx, rv, "Cannot create 'User PIN' object");
+	}
 
 	rv = _create_pin(p15card, "SO PIN", PATH_SOPIN, AUTH_ID_SOPIN, SC_PKCS15_PIN_FLAG_SO_PIN);
 	LOG_TEST_RET(ctx, rv, "Cannot create 'SO PIN' object");
