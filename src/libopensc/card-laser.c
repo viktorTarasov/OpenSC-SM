@@ -80,8 +80,27 @@ static struct sc_card_driver laser_drv = {
 };
 
 static struct sc_atr_table laser_known_atrs[] = {
-	{ "3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:01:0B:03:52:00:05:38", NULL,
-		"Athena LASER", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:00:00:00:00:00:00:00",
+	  "FF:FF:00:FF:F0:FF:FF:FF:FF:FF:FF:FF:FF:F0:FF:00:00:00:00:00:00:00",
+		"Athena LASER IDProtect(X)", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:D5:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:00",
+	  "FF:FF:00:FF:F0:FF:FF:FF:FF:FF:FF:FF:FF:F0:00",
+		"Athena LASER IDProtect", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:6C:00:FF:80:73:C8:21:13:66:01:06:11:59:00:01",
+	  "FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF",
+		"Athena LASER JaCarta EMV T0", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:FC:13:00:FF:81:31:FE:45:80:73:C8:21:13:66:01:06:11:59:00:01:3A",
+	  "FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF",
+		"Athena LASER JaCarta EMV T1", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:9A:00:81:31:FE:45:54:69:63:54:6F:6B:20:31:2E:30:00",
+	  "FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00",
+		"Athena LASER TicTok V1.0", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:31:2E:00:00",
+	  "FF:FF:00:FF:F0:FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00:00",
+		"Athena LASER TicTok V1.x", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	{ "3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:32:2E:00:00",
+	  "FF:FF:00:FF:F0:FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00:00",
+		"Athena LASER TicTok V2.x", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
 	{ NULL, NULL, NULL, 0, 0, NULL }
 };
 
@@ -1513,7 +1532,6 @@ static int
 laser_get_default_key(struct sc_card *card, struct sc_cardctl_default_key *data)
 {
 	struct sc_context *ctx = card->ctx;
-	struct laser_private_data *prv_data = (struct laser_private_data *)card->drv_data;
 	scconf_block *atrblock = NULL;
 	int rv;
 
@@ -1529,6 +1547,7 @@ laser_get_default_key(struct sc_card *card, struct sc_cardctl_default_key *data)
 
 		rv = sc_hex_to_bin(default_key, data->key_data, &data->len);
 		LOG_TEST_RET(ctx, rv,  "Cannot get trasnport PIN01 default value: HEX to BIN conversion error");
+
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	}
 
