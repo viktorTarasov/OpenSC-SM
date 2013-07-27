@@ -283,154 +283,167 @@ app default {
 
 	# IAS/ECC cards
 	card_atr 3B:7F:96:00:00:00:31:B9:64:40:70:14:10:73:94:01:80:82:90:00 {
-                type = 25001;
-                driver = "iasecc";
-                name = "Gemalto MultiApp IAS/ECC v1.0.1";
-                secure_messaging = local_gemalto_iam;
+		type = 25001;
+		driver = "iasecc";
+		name = "Gemalto MultiApp IAS/ECC v1.0.1";
+		secure_messaging = local_gemalto_iam;
 		# secure_messaging = local_adele;
 		md_read_only = false;
 		md_supports_X509_enrollment = true;
-        }
+	}
 	card_atr 3B:7F:96:00:00:00:31:B8:64:40:70:14:10:73:94:01:80:82:90:00 {
-                type = 25001;
-                driver = "iasecc";
-                name = "Gemalto MultiApp IAS/ECC v1.0.1";
-                secure_messaging = local_gemalto_iam;
+		type = 25001;
+		driver = "iasecc";
+		name = "Gemalto MultiApp IAS/ECC v1.0.1";
+		secure_messaging = local_gemalto_iam;
 		md_read_only = false;
 		md_supports_X509_enrollment = true;
-        }
-        #card_atr 3B:DD:18:00:81:31:FE:45:80:F9:A0:00:00:00:77:01:08:00:07:90:00:FE {
-        #        type = 25002;
-        #        driver = "iasecc";
-        #        name = "Oberthur IAS/ECC v1.0.1";
-        #        # No 'admin' application for this card -- no secure messaging
-        #}
-        #card_atr 3B:7F:18:00:00:00:31:B8:64:50:23:EC:C1:73:94:01:80:82:90:00 {
-        #        type = 25003;
-        #        driver = "iasecc";
-        #        name = "Morpho YpsID S3 IAS/ECC";
-        #        # secure_messaging = local_morpho_YpsID_S3;
-        #}
-        card_atr 3B:DF:18:FF:81:91:FE:1F:C3:00:31:B8:64:0C:01:EC:C1:73:94:01:80:82:90:00:B3 {
-                type = 25004;
-                driver = "iasecc";
-                name = "Amos IAS/ECC v1.0.1";
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
-                secure_messaging = local_amos;
-        }
+	}
+	#card_atr 3B:DD:18:00:81:31:FE:45:80:F9:A0:00:00:00:77:01:08:00:07:90:00:FE {
+	#	 type = 25002;
+	#	 driver = "iasecc";
+	#	 name = "Oberthur IAS/ECC v1.0.1";
+	#	 # No 'admin' application for this card -- no secure messaging
+	#}
+	#card_atr 3B:7F:18:00:00:00:31:B8:64:50:23:EC:C1:73:94:01:80:82:90:00 {
+	#	 type = 25003;
+	#	 driver = "iasecc";
+	#	 name = "Morpho YpsID S3 IAS/ECC";
+	#	 # secure_messaging = local_morpho_YpsID_S3;
+	#}
+	card_atr 3B:DF:18:FF:81:91:FE:1F:C3:00:31:B8:64:0C:01:EC:C1:73:94:01:80:82:90:00:B3 {
+		type = 25004;
+		driver = "iasecc";
+		name = "Amos IAS/ECC v1.0.1";
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
+		secure_messaging = local_amos;
+	}
 
 	# Athena Laser card ATRs
-        card_atr 3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:01:0B:03:52:00:05:38 {
+	card_atr 3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:01:0B:03:52:00:05:38 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:ff:ff:ff:ff:ff:ff:f0:ff:00:00:00:00:00:00:00";
-                type = 27001;
-                driver = "laser";
-                name = "Athena Laser IDProtect(X)";
+		type = 27001;
+		driver = "laser";
+		name = "Athena Laser IDProtect(X)";
 
 		# Minimal SM level:
 		# '0' -- secure messaging not initialized and not applied.
-		#        Nevertheless, SM will be used if suggested by access condition (ACL) of the next operation.
+		#	 Nevertheless, SM will be used if suggested by access condition (ACL) of the next operation.
 		# '1' -- secure messaging initialized when connecting card and applied to the card response
-		#        of the all transmitted APDUs.
-		#        Nevertheless, SM is also applied to the APDU command when suggested by ACL of the next operation.
+		#	 of the all transmitted APDUs.
+		#	 Nevertheless, SM is also applied to the APDU command when suggested by ACL of the next operation.
 		# '3' -- secure messaging initialized when connecting card and applied to the APDU command
-		#        and card response of the all transmitted APDUs.
+		#	 and card response of the all transmitted APDUs.
 		# SM do not applied for some APDU commands, like 'GET RESPONSE', 'CLEAR SECURITY STATUS', (probably some else -- VT).
 		sm_min_level = 0;
 
-                # Secure PIN verify:
-                # Verify (User) PIN using the chanllege-response procedure.
-                # Default: false
-                # secure_verify = true;
+		# Secure PIN verify:
+		# Verify (User) PIN using the chanllege-response procedure.
+		# Default: false
+		# secure_verify = true;
 
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
-
 		# default_transport_pin1 = 31:32:33:34;
-        }
-        card_atr 3B:D5:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:00 {
+	}
+	card_atr 3B:D5:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:ff:ff:ff:ff:ff:ff:f0:00";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER IDProtect";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER IDProtect";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
-        card_atr 3B:6C:00:FF:80:73:C8:21:13:66:01:06:11:59:00:01 {
+	card_atr 3B:6C:00:FF:80:73:C8:21:13:66:01:06:11:59:00:01 {
 		atrmask = "ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER JaCarta EMV T0";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER JaCarta EMV T0";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
-        card_atr 3B:FC:13:00:FF:81:31:FE:45:80:73:C8:21:13:66:01:06:11:59:00:01:3A {
+	card_atr 3B:FC:13:00:FF:81:31:FE:45:80:73:C8:21:13:66:01:06:11:59:00:01:3A {
 		atrmask = "ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER JaCarta EMV T1";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER JaCarta EMV T1";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
-        card_atr 3B:9A:00:81:31:FE:45:54:69:63:54:6F:6B:20:31:2E:30:00 {
+	card_atr 3B:FC:00:00:FF:10:00:80:73:C8:21:10:66:00:00:00:00:00:00 {
+		atrmask = "ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:f0:ff:00:00:00:00:00:00";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER PayProtect";
+		sm_min_level = 0;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
+		md_guid_as_id = true;
+		md_guid_as_label = true;
+		# md_supports_container_key_import = true;
+		# md_supports_container_key_gen = true;
+	}
+	card_atr 3B:9A:00:81:31:FE:45:54:69:63:54:6F:6B:20:31:2E:30:00 {
 		atrmask = "ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER TicTok V1.0";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER TicTok V1.0";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
-        card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:31:2E:00:00 {
+	card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:31:2E:00:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00:00";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER TicTok V1.x";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER TicTok V1.x";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
-        card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:32:2E:00:00 {
+	card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:32:2E:00:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00:00";
-                type = 27001;
-                driver = "laser";
-                name = "Athena LASER TicTok V2.x";
+		type = 27001;
+		driver = "laser";
+		name = "Athena LASER TicTok V2.x";
 		sm_min_level = 0;
-                # secure_verify = true;
-                md_read_only = false;
-                md_supports_X509_enrollment = true;
+		# secure_verify = true;
+		md_read_only = false;
+		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
 		# md_supports_container_key_import = true;
@@ -447,38 +460,38 @@ app default {
 
 		# SM mode:
 		# 'transmit' -- in this mode the procedure to securize an APDU is called by the OpenSC general
-                #               APDU transmit procedure.
+		#		APDU transmit procedure.
 		#		In this mode all APDUs, except the ones filtered by the card specific procedure,
-                #               are securized.
-                # 'acl' -- in this mode APDU are securized only if needed by the ACLs of the command to be executed.
-                #
+		#		are securized.
+		# 'acl' -- in this mode APDU are securized only if needed by the ACLs of the command to be executed.
+		#
 		#mode = transmit;
 
 		# SM type specific flags
-		# flags = 0x78;           # 0x78 -- level 3, channel 0
+		# flags = 0x78;		  # 0x78 -- level 3, channel 0
 
 		# Default KMC of the GP Card Manager for the Oberthur's Java cards
 		# kmc = "00:00:00:00:00:00:00:00:00:00:00:00:00:00:00:00";
 	}
 
-        secure_messaging local_gemalto_iam  {
+	secure_messaging local_gemalto_iam  {
 		module_name = @DEFAULT_SM_MODULE@;
 		module_path = @libdir@;
-                #module_data = "";
-                type = acl;             # transmit, acl
+		#module_data = "";
+		type = acl;		# transmit, acl
 
-                ifd_serial = "11:22:33:44:55:66:77:88";
+		ifd_serial = "11:22:33:44:55:66:77:88";
 
-                # Keyset values from IAM profiles of the Gemalto IAS/ECC cards
-                keyset_02_enc = "RW_PRIV_ENC_TEST";
-                keyset_02_mac = "RW_PRIV_MAC_TEST";
+		# Keyset values from IAM profiles of the Gemalto IAS/ECC cards
+		keyset_02_enc = "RW_PRIV_ENC_TEST";
+		keyset_02_mac = "RW_PRIV_MAC_TEST";
 
-                keyset_E828BD080FD2504543432D654944_01_enc = "RO_ENC_TEST_KEY_";
-                keyset_E828BD080FD2504543432D654944_01_mac = "RO_MAC_TEST_KEY_";
+		keyset_E828BD080FD2504543432D654944_01_enc = "RO_ENC_TEST_KEY_";
+		keyset_E828BD080FD2504543432D654944_01_mac = "RO_MAC_TEST_KEY_";
 
-                keyset_E828BD080FD2504543432D654944_03_enc = "RW_PUBL_ENC_TEST";
-                keyset_E828BD080FD2504543432D654944_03_mac = "RW_PUBL_MAC_TEST";
-        }
+		keyset_E828BD080FD2504543432D654944_03_enc = "RW_PUBL_ENC_TEST";
+		keyset_E828BD080FD2504543432D654944_03_mac = "RW_PUBL_MAC_TEST";
+	}
 
 	secure_messaging local_amos  {
 		module_name = @DEFAULT_SM_MODULE@;
@@ -489,39 +502,39 @@ app default {
 		keyset_02_mac = "MACROECHANTILLON";
 	}
 
-        secure_messaging local_amos_eid  {
+	secure_messaging local_amos_eid  {
 		module_name = @DEFAULT_SM_MODULE@;
 		module_path = @libdir@;
-                mode = acl;
-                ifd_serial = "11:22:33:44:55:66:77:88";
-                keyset_E828BD080FD2504543432D654944_03_enc = "RW_PUBL_ENC_TEST";
-                keyset_E828BD080FD2504543432D654944_03_mac = "RW_PUBL_MAC_TEST";
-        }
+		mode = acl;
+		ifd_serial = "11:22:33:44:55:66:77:88";
+		keyset_E828BD080FD2504543432D654944_03_enc = "RW_PUBL_ENC_TEST";
+		keyset_E828BD080FD2504543432D654944_03_mac = "RW_PUBL_MAC_TEST";
+	}
 
-        secure_messaging local_adele  {
+	secure_messaging local_adele  {
 		module_name = @DEFAULT_SM_MODULE@;
 		module_path = @libdir@;
-                #module_data = "";
-                type = acl;             # transmit, acl
+		#module_data = "";
+		type = acl;		# transmit, acl
 
 		ifd_serial = "11:22:33:44:55:66:77:88";
 
-                # Keyset values from 'Adele' profiles of the IAS/ECC cards
-                keyset_01_enc = "EMENCECHANTILLON";
-                keyset_01_mac = "EMMACECHANTILLON";
+		# Keyset values from 'Adele' profiles of the IAS/ECC cards
+		keyset_01_enc = "EMENCECHANTILLON";
+		keyset_01_mac = "EMMACECHANTILLON";
 
-                keyset_02_enc = "AAENCECHANTILLON";
-                keyset_02_mac = "AAMACECHANTILLON";
+		keyset_02_enc = "AAENCECHANTILLON";
+		keyset_02_mac = "AAMACECHANTILLON";
 
-                keyset_E828BD080FD2500000040301_02_enc = "E2ENCECHANTILLON";
-                keyset_E828BD080FD2500000040301_02_mac = "E2MACECHANTILLON";
+		keyset_E828BD080FD2500000040301_02_enc = "E2ENCECHANTILLON";
+		keyset_E828BD080FD2500000040301_02_mac = "E2MACECHANTILLON";
 
-                keyset_D2500000044164E86C650101_02_enc = "E1ENCECHANTILLON";
-                keyset_D2500000044164E86C650101_02_mac = "E1MACECHANTILLON";
+		keyset_D2500000044164E86C650101_02_enc = "E1ENCECHANTILLON";
+		keyset_D2500000044164E86C650101_02_mac = "E1MACECHANTILLON";
 
-                keyset_D2500000044164E86C650101_03_enc = "SIENCECHANTILLON";
-                keyset_D2500000044164E86C650101_03_mac = "SIMACECHANTILLON";
-        }
+		keyset_D2500000044164E86C650101_03_enc = "SIENCECHANTILLON";
+		keyset_D2500000044164E86C650101_03_mac = "SIMACECHANTILLON";
+	}
 
 	# Below are the framework specific configuration blocks.
 
@@ -588,25 +601,25 @@ app default {
 		#   obtained with the common procedures (ex. object creation protected by secure messaging).
 		#   Used by PKCS#11 module configurated to expose restricted number of slots.
 		#   (for ex. configurated to expose only User PIN slot, User and Sign PINs slots, ...)
-                application E828BD080FD25047656E65726963 {
-                        type = generic;
-                        model = "ECC Generic PKI";
-                }
+		application E828BD080FD25047656E65726963 {
+			type = generic;
+			model = "ECC Generic PKI";
+		}
 
-                application E828BD080FD2500000040301 {
-                        type = generic;
-                        model = "Adèle Générique";
-                }
+		application E828BD080FD2500000040301 {
+			type = generic;
+			model = "Adèle Générique";
+		}
 
-                application E828BD080FD2504543432D654944 {
-                        type = protected;
-                        model = "ECC eID";
-                }
+		application E828BD080FD2504543432D654944 {
+			type = protected;
+			model = "ECC eID";
+		}
 
-                application E828BD080FD2500000040201 {
-                        type = protected;
-                        model = "Adèle Admin-2";
-                }
+		application E828BD080FD2500000040201 {
+			type = protected;
+			model = "Adèle Admin-2";
+		}
 	}
 }
 
@@ -672,14 +685,14 @@ app opensc-pkcs11 {
 		# User PIN unblock style
 		#    none:  PIN unblock is not possible with PKCS#11 API;
 		#    set_pin_in_unlogged_session:  C_SetPIN() in unlogged session:
-		#       PUK is passed as the 'OldPin' argument of the C_SetPIN() call.
+		#	PUK is passed as the 'OldPin' argument of the C_SetPIN() call.
 		#    set_pin_in_specific_context:  C_SetPIN() in the CKU_SPECIFIC_CONTEXT logged session:
-		#       PUK is passed as the 'OldPin' argument of the C_SetPIN() call.
+		#	PUK is passed as the 'OldPin' argument of the C_SetPIN() call.
 		#    init_pin_in_so_session:  C_InitPIN() in CKU_SO logged session:
-		#       User PIN 'UNBLOCK' is protected by SOPIN. (PUK == SOPIN).
-		#       # Actually this style works only for the PKCS15 contents without SOPIN.
-		#       # For those with SOPIN, this mode will be usefull for the cards without
-		#       #   modes 00 and 01 of ISO command 'RESET RETRY COUNTER'. --vt
+		#	User PIN 'UNBLOCK' is protected by SOPIN. (PUK == SOPIN).
+		#	# Actually this style works only for the PKCS15 contents without SOPIN.
+		#	# For those with SOPIN, this mode will be usefull for the cards without
+		#	#   modes 00 and 01 of ISO command 'RESET RETRY COUNTER'. --vt
 		#
 		# Default: none
 		# user_pin_unblock_style = set_pin_in_unlogged_session;
@@ -708,26 +721,26 @@ app opensc-pkcs11 {
 		# Default: empty
 		# ignored_readers = "CardMan 1021", "SPR 532";
 
-                # Symbolic names of PINs for which slots are created
-                # Card can contain more then one PINs or more then one on-card application with
-                #   its own PINs. Normally, to access all of them with the PKCS#11 API a slot has to be
-                #   created for all of them. Many slots could be ennoying for some of widely used application,
-                #   like FireFox. This configuration parameter allows to select the PINs or on-card application
-                #   for which PKCS#11 slot will be created.
-                # Actually recognised following symbolic names:
-                #  'user', 'sign', 'application', all
-                # Only PINs initialised, non-SoPIN, non-unblocking are associated with symbolic name.
-                # 'user' is identified as first global or first local PIN.
-                # 'sign' is identified as second PIN: first local, second global or second local.
-                # 'application' slot created for each on-card application,
-                #   even if they use a common global PIN.
-                # 'all' slot created for all non-sopin, non-unblocking PINs,
-                #   optionally for PUK (see option 'create_puk_slot')
-                #
-                # Default: all
-                # create_slots_for_pins = "user,sign";
-                # create_slots_for_pins = application;
-                # create_slots_for_pins = "application,sign";
+		# Symbolic names of PINs for which slots are created
+		# Card can contain more then one PINs or more then one on-card application with
+		#   its own PINs. Normally, to access all of them with the PKCS#11 API a slot has to be
+		#   created for all of them. Many slots could be ennoying for some of widely used application,
+		#   like FireFox. This configuration parameter allows to select the PINs or on-card application
+		#   for which PKCS#11 slot will be created.
+		# Actually recognised following symbolic names:
+		#  'user', 'sign', 'application', all
+		# Only PINs initialised, non-SoPIN, non-unblocking are associated with symbolic name.
+		# 'user' is identified as first global or first local PIN.
+		# 'sign' is identified as second PIN: first local, second global or second local.
+		# 'application' slot created for each on-card application,
+		#   even if they use a common global PIN.
+		# 'all' slot created for all non-sopin, non-unblocking PINs,
+		#   optionally for PUK (see option 'create_puk_slot')
+		#
+		# Default: all
+		# create_slots_for_pins = "user,sign";
+		# create_slots_for_pins = application;
+		# create_slots_for_pins = "application,sign";
 	}
 }
 

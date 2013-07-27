@@ -80,25 +80,44 @@ static struct sc_card_driver laser_drv = {
 };
 
 static struct sc_atr_table laser_known_atrs[] = {
+        // 3b,dc,00,ff,80,91,fe,1f,c3,80,73,c8,21,10,66,00,00,00,00,00,00,00
 	{ "3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:00:00:00:00:00:00:00",
+        // ff,ff,00,ff,f0,ff,ff,ff,ff,ff,ff,ff,ff,f0,ff,00,00,00,00,00,00,00
 	  "FF:FF:00:FF:F0:FF:FF:FF:FF:FF:FF:FF:FF:F0:FF:00:00:00:00:00:00:00",
 		"Athena LASER IDProtect(X)", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,d5,00,ff,80,91,fe,1f,c3,80,73,c8,21,10,00
 	{ "3B:D5:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:00",
+	// ff,ff,00,ff,f0,ff,ff,ff,ff,ff,ff,ff,ff,f0,00
 	  "FF:FF:00:FF:F0:FF:FF:FF:FF:FF:FF:FF:FF:F0:00",
 		"Athena LASER IDProtect", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,6c,00,ff,80,73,c8,21,13,66,01,06,11,59,00,01
 	{ "3B:6C:00:FF:80:73:C8:21:13:66:01:06:11:59:00:01",
+	// ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff
 	  "FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF",
 		"Athena LASER JaCarta EMV T0", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,fc,13,00,ff,81,31,fe,45,80,73,c8,21,13,66,01,06,11,59,00,01,3a
 	{ "3B:FC:13:00:FF:81:31:FE:45:80:73:C8:21:13:66:01:06:11:59:00:01:3A",
+	// ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff
 	  "FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF",
 		"Athena LASER JaCarta EMV T1", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,fc,00,00,ff,10,00,80,73,c8,21,10,66,00,00,00,00,00,00
+	{ "3B:FC:00:00:FF:10:00:80:73:C8:21:10:66:00:00:00:00:00:00",
+	// ff,ff,00,ff,ff,ff,ff,ff,ff,ff,ff,f0,ff,00,00,00,00,00,00
+	  "FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:F0:FF:00:00:00:00:00:00",
+		"Athena LASER PayProtect", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,9a,00,81,31,fe,45,54,69,63,54,6f,6b,20,31,2e,30,00
 	{ "3B:9A:00:81:31:FE:45:54:69:63:54:6F:6B:20:31:2E:30:00",
+	// ff,ff,00,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,00
 	  "FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00",
 		"Athena LASER TicTok V1.0", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,da,00,ff,80,b1,fe,00,1f,c3,54,69,63,54,6f,6b,20,31,2e,00,00
 	{ "3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:31:2E:00:00",
+	// ff,ff,00,ff,f0,ff,ff,00,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,00,00
 	  "FF:FF:00:FF:F0:FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00:00",
 		"Athena LASER TicTok V1.x", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
+	// 3b,da,00,ff,80,b1,fe,00,1f,c3,54,69,63,54,6f,6b,20,32,2e,00,00
 	{ "3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:32:2E:00:00",
+	// ff,ff,00,ff,f0,ff,ff,00,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,ff,00,00
 	  "FF:FF:00:FF:F0:FF:FF:00:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:FF:00:00",
 		"Athena LASER TicTok V2.x", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
 	{ NULL, NULL, NULL, 0, 0, NULL }
