@@ -50,13 +50,77 @@
         </Component>
         <Component Id="opensc_minidriver.dll" Guid="*" Win64="$(var.Win64YesNo)">
           <File Source="$(var.SOURCE_DIR)\src\minidriver\opensc-minidriver.dll" Vital="yes"/>
-          <RegistryKey Id="Calais_Laser" Root="HKLM" Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Laser v0.0.1"
+          <RegistryKey Id="Calais_Laser_IDProtectX" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena Laser IDProtect(X)"
                         Action="createAndRemoveOnUninstall">
             <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
             <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
             <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
-            <RegistryValue Type="binary" Name="ATR" Value="3bdc18ff8191fe1fc38073c8211366010b0352000538"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bdc00ff8091fe1fc38073c821106600000000000000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00fff0fffffffffffffffff0ff00000000000000"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_IDProtect" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER IDProtect"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bd500ff8091fe1fc38073c8211000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00fff0fffffffffffffffff000"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_JaCarta_EMVT0" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER JaCarta EMV T0"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3b6c00ff8073c8211366010611590001"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffffffffffffffffffffffffffffffff"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_JaCarta_EMVT1" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER JaCarta EMV T1"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bfc1300ff8131fe458073c82113660106115900013a"/>
             <RegistryValue Type="binary" Name="ATRMask" Value="ffffffffffffffffffffffffffffffffffffffffffff"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_PayProtect" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER PayProtect"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bfc0000ff10008073c8211066000000000000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00fffffffffffffffff0ff000000000000"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_TicTok_V10" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER TicTok V1.0"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3b9a008131fe45546963546f6b20312e3000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00ffffffffffffffffffffffffffff00"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_TicTok_V1x" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER TicTok V1.x"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bda00ff80b1fe001fc3546963546f6b20312e0000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00fff0ffff00ffffffffffffffffffffff0000"/>
+          </RegistryKey>
+          <RegistryKey Id="Calais_Laser_TicTok_V2x" Root="HKLM"
+			Key="SOFTWARE\Microsoft\Cryptography\Calais\SmartCards\OpenSC Athena LASER TicTok V2.x"
+                        Action="createAndRemoveOnUninstall">
+            <RegistryValue Type="string" Name="80000001" Value="opensc-minidriver.dll"/>
+            <RegistryValue Type="string" Name="Crypto Provider" Value="Microsoft Base Smart Card Crypto Provider"/>
+            <RegistryValue Type="string" Name="Smart Card Key Storage Provider" Value="Microsoft Smart Card Key Storage Provider"/>
+            <RegistryValue Type="binary" Name="ATR"     Value="3bda00ff80b1fe001fc3546963546f6b20322e0000"/>
+            <RegistryValue Type="binary" Name="ATRMask" Value="ffff00fff0ffff00ffffffffffffffffffffff0000"/>
           </RegistryKey>
         </Component>
       </Directory>

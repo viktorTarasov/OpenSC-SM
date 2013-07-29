@@ -81,7 +81,7 @@ static struct sc_card_driver laser_drv = {
 
 static struct sc_atr_table laser_known_atrs[] = {
         // 3b,dc,00,ff,80,91,fe,1f,c3,80,73,c8,21,10,66,00,00,00,00,00,00,00
-	{ "3B:DC:18:FF:81:91:FE:1F:C3:80:73:C8:21:13:66:00:00:00:00:00:00:00",
+	{ "3B:DC:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:66:00:00:00:00:00:00:00",
         // ff,ff,00,ff,f0,ff,ff,ff,ff,ff,ff,ff,ff,f0,ff,00,00,00,00,00,00,00
 	  "FF:FF:00:FF:F0:FF:FF:FF:FF:FF:FF:FF:FF:F0:FF:00:00:00:00:00:00:00",
 		"Athena LASER IDProtect(X)", SC_CARD_TYPE_ATHENA_LASER, 0, NULL },
