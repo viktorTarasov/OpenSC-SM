@@ -8,7 +8,7 @@ OBJECTS			= pkcs11-global.obj pkcs11-session.obj pkcs11-object.obj misc.obj slot
 			  debug.obj pkcs11-display.obj versioninfo-pkcs11.res
 OBJECTS3		= pkcs11-spy.obj pkcs11-display.obj versioninfo-pkcs11-spy.res
 
-all: versioninfo-pkcs11.res versioninfo-pkcs11-spy.res $(TARGET1) $(TARGET3)
+all: versioninfo-pkcs11.res $(TARGET1) $(TARGET3) versioninfo-pkcs11-spy.res
 
 !INCLUDE $(TOPDIR)\win32\Make.rules.mak
 
