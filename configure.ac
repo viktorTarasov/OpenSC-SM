@@ -2,14 +2,13 @@ dnl -*- mode: m4; -*-
 
 AC_PREREQ(2.60)
 
-define([PACKAGE_BRANCH], [])
 define([PACKAGE_VERSION_MAJOR], [0])
 define([PACKAGE_VERSION_MINOR], [13])
 define([PACKAGE_VERSION_FIX], [0])
 define([PACKAGE_SUFFIX], [])
 define([PACKAGE_VERSION_REVISION], [0])
 
-AC_INIT([opensc[]PACKAGE_BRANCH],[PACKAGE_VERSION_MAJOR.PACKAGE_VERSION_MINOR.PACKAGE_VERSION_FIX[]PACKAGE_SUFFIX])
+AC_INIT([opensc-laser],[PACKAGE_VERSION_MAJOR.PACKAGE_VERSION_MINOR.PACKAGE_VERSION_FIX[]PACKAGE_SUFFIX])
 AC_CONFIG_AUX_DIR([.])
 AC_CONFIG_HEADERS([config.h])
 AC_CONFIG_MACRO_DIR([m4])
@@ -619,13 +618,17 @@ AC_CONFIG_FILES([
 	src/libopensc/libopensc.pc
 	src/libsm/Makefile
 	src/pkcs11/Makefile
+	src/pkcs11/versioninfo-pkcs11.rc
+	src/pkcs11/versioninfo-pkcs11-spy.rc
 	src/pkcs15init/Makefile
 	src/scconf/Makefile
 	src/tests/Makefile
 	src/tests/regression/Makefile
 	src/tools/Makefile
+	src/tools/versioninfo-tools.rc
 	src/smm/Makefile
 	src/minidriver/Makefile
+	src/minidriver/versioninfo-minidriver.rc
 	src/minidriver/opensc-minidriver.inf
 	win32/Makefile
 	win32/versioninfo.rc
@@ -644,6 +647,9 @@ OpenSC has been configured with the following options:
 
 
 Version:                 ${PACKAGE_VERSION}
+Version fix:		 ${OPENSC_VERSION_FIX}
+Version revision:	 ${OPENSC_VERSION_REVISION}
+
 User binaries:           $(eval eval eval echo "${bindir}")
 Configuration files:     $(eval eval eval echo "${sysconfdir}")
 XSL stylesheets:         ${xslstylesheetsdir}
