@@ -47,6 +47,10 @@ do
      esac
 done
 
+if [ ! -f configure.ac ]; then
+    cp configure.ac.in configure.ac
+fi
+
 set -e
 set -x
 if [ -f Makefile ]; then
