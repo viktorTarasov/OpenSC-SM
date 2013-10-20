@@ -1,6 +1,7 @@
 #!/bin/sh
 
 echo "DEBUG: Bootstrap failed"
+echo "DEBUG: Bootstrap failed bis"
 exit -1
 
 set -e
