@@ -1,5 +1,8 @@
 #!/bin/sh
 
+echo "DEBUG: Bootstrap failed"
+exit -1
+
 set -e
 set -x
 if test -f Makefile; then
