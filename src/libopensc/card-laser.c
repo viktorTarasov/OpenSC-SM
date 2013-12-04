@@ -348,6 +348,9 @@ laser_init(struct sc_card *card)
 	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
 	_sc_card_add_rsa_alg(card, 2048, flags, 0x10001);
 
+	card->caps |= SC_CARD_CAP_RNG;
+	card->caps |= SC_CARD_CAP_APDU_EXT;
+
 	atrblock = _sc_match_atr_block(ctx, card->driver, &card->atr);
 	if (atrblock)   {
 		int min_level = scconf_get_int(atrblock, "sm_min_level", 0);
@@ -1561,8 +1564,7 @@ laser_get_default_key(struct sc_card *card, struct sc_cardctl_default_key *data)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NO_DEFAULT_KEY);
 
 	if (data->method == SC_AC_AUT && data->key_ref == 1)   {
-		const char *default_key = scconf_get_str(atrblock,
-				"default_transport_pin1", LASER_TRANSPORT_PIN1_VALUE);
+		const char *default_key = scconf_get_str(atrblock, "default_transport_pin1", LASER_TRANSPORT_PIN1_VALUE);
 
 		rv = sc_hex_to_bin(default_key, data->key_data, &data->len);
 		LOG_TEST_RET(ctx, rv,  "Cannot get trasnport PIN01 default value: HEX to BIN conversion error");
