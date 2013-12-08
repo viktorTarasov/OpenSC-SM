@@ -363,6 +363,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -377,6 +378,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -391,6 +393,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -405,6 +408,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -419,6 +423,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -433,6 +438,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
@@ -447,6 +453,7 @@ app default {
 		md_supports_X509_enrollment = true;
 		md_guid_as_id = true;
 		md_guid_as_label = true;
+		pkcs11_enable_InitToken = true;
 		# md_supports_container_key_import = true;
 		# md_supports_container_key_gen = true;
 	}
