@@ -1622,8 +1622,10 @@ laser_emu_update_tokeninfo(struct sc_profile *profile, struct sc_pkcs15_card *p1
         lti.firmware_version.major = p15card->card->version.fw_major;
         lti.firmware_version.minor = p15card->card->version.fw_minor;
 
-	if (tinfo->last_update.gtime)
+	if (tinfo->last_update.gtime)   {
 		free(tinfo->last_update.gtime);
+		tinfo->last_update.gtime = NULL;
+	}
 	rv = sc_pkcs15_get_generalized_time(ctx, &tinfo->last_update.gtime);
 	LOG_TEST_RET(ctx, rv, "Cannot allocate generalized time");
 
