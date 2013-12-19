@@ -2383,9 +2383,49 @@ DWORD WINAPI CardGetChallenge(__in PCARD_DATA pCardData,
 	__deref_out_bcount(*pcbChallengeData) PBYTE *ppbChallengeData,
 	__out                                 PDWORD pcbChallengeData)
 {
+	VENDOR_SPECIFIC *vs;
+	unsigned char *random = NULL;
+	size_t random_len;
+	int rv;
+
 	logprintf(pCardData, 1, "\nP:%d T:%d pCardData:%p ",GetCurrentProcessId(), GetCurrentThreadId(), pCardData);
-	logprintf(pCardData, 1, "CardGetChallenge - unsupported\n");
-	return SCARD_E_UNSUPPORTED_FEATURE;
+	logprintf(pCardData, 1, "CardGetChallenge\n");
+
+	if(!pCardData)
+		return SCARD_E_INVALID_PARAMETER;
+	if (!ppbChallengeData || !pcbChallengeData)
+		return SCARD_E_INVALID_PARAMETER;
+
+	logprintf(pCardData, 1, "Challenge length %i\n", *pcbChallengeData);
+	if (*pcbChallengeData < 8)
+		return SCARD_E_INVALID_PARAMETER;
+
+	vs = (VENDOR_SPECIFIC*)(pCardData->pvVendorSpecific);
+
+	check_reader_status(pCardData);
+
+	random_len = (size_t)(*pcbChallengeData);
+	*pcbChallengeData = 0;
+
+	random = malloc(random_len);
+	if (!random)
+		return SCARD_E_NO_MEMORY;
+
+	rv = sc_get_challenge(vs->p15card->card, random, random_len);
+	if (rv < 0)
+		return SCARD_E_UNEXPECTED;
+
+	*ppbChallengeData = pCardData->pfnCspAlloc(rv);
+	if(!*ppbChallengeData)
+		return SCARD_E_NO_MEMORY;
+
+	memcpy(*ppbChallengeData, random, rv);
+	*pcbChallengeData = rv;
+	free(random);
+
+	logprintf(pCardData, 7, "returns %i bytes:\n", *pcbChallengeData);
+	loghex(pCardData, 7, *ppbChallengeData, *pcbChallengeData);
+	return SCARD_S_SUCCESS;
 }
 
 DWORD WINAPI CardAuthenticateChallenge(__in PCARD_DATA  pCardData,
@@ -3642,6 +3682,8 @@ DWORD WINAPI CardAcquireContext(IN PCARD_DATA pCardData, __in DWORD dwFlags)
 		pCardData->pfnCspGetDHAgreement = CspGetDHAgreement;
 
 		if (suppliedVersion > 5 ) {
+			logprintf(pCardData, 1, "Supplied version %i.\n", suppliedVersion);
+
 			pCardData->pfnCardGetChallengeEx = CardGetChallengeEx;
 			pCardData->pfnCardAuthenticateEx = CardAuthenticateEx;
 			pCardData->pfnCardChangeAuthenticatorEx = CardChangeAuthenticatorEx;
