@@ -1881,7 +1881,8 @@ laser_sm_open(struct sc_card *card)
 	BIGNUM *bn_ifd_y, *bn_N, *bn_g, *bn_icc_p;
 	DH *dh;
 	unsigned char uu, rbuf[SC_MAX_APDU_BUFFER_SIZE * 2];
-	int rv, rd, dh_check;
+	unsigned char pubkey[SC_MAX_APDU_BUFFER_SIZE];
+	int rv, rd, dh_check, pubkey_len;
 
 	LOG_FUNC_CALLED(ctx);
 	memset(&card->sm_ctx.info, 0, sizeof(card->sm_ctx.info));
@@ -1947,11 +1948,16 @@ laser_sm_open(struct sc_card *card)
 	sc_log(ctx, "shared-secret(%i) %s", dh_session->shared_secret.len,
 			sc_dump_hex(dh_session->shared_secret.value, dh_session->shared_secret.len));
 
+	/* Left padding with 0 */
+	pubkey_len = (dh_session->ifd_p.len + 7) / 8 * 8;
+	memset(pubkey, 0, sizeof(pubkey));
+	memcpy(pubkey + (pubkey_len - dh_session->ifd_p.len), dh_session->ifd_p.value, dh_session->ifd_p.len);
+
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x86, 0x00, 0x00);
 	apdu.cla = 0x80;
-	apdu.lc = dh_session->ifd_p.len;
-	apdu.datalen = dh_session->ifd_p.len;
-	apdu.data = dh_session->ifd_p.value;
+	apdu.lc = pubkey_len;
+	apdu.datalen = pubkey_len;
+	apdu.data = pubkey;
 	apdu.le = sizeof(dh_session->card_challenge);
 	apdu.resplen = sizeof(dh_session->card_challenge);
 	apdu.resp = dh_session->card_challenge;
