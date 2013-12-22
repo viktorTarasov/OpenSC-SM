@@ -24,6 +24,7 @@ PIN user-pin {
 	attempts	= 10;
 	max-length	= 16;
 	min-length	= 4;
+	max-unlocks	= 14;	# 0 -- no limits
 	flags	= case-sensitive, initialized;
 	reference = 0x20
 }

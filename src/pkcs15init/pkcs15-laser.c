@@ -571,7 +571,8 @@ laser_create_pin(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 	*(pin_file->prop_attr + offs++) = LASER_KO_USAGE_AUTH_EXT;
 	*(pin_file->prop_attr + offs++) = LASER_KO_ALGORITHM_PIN;
 	*(pin_file->prop_attr + offs++) = LASER_KO_PADDING_NO;
-	*(pin_file->prop_attr + offs++) = (auth_info->max_tries & 0x0F) | ((auth_info->max_tries << 4) & 0xF0);	/* tries/unlocks */
+	/* MSB:max-tries | LSB:max-unlocks */
+	*(pin_file->prop_attr + offs++) = ((auth_info->max_tries << 4) & 0xF0) | (auth_info->max_unlocks & 0x0F);
 	*(pin_file->prop_attr + offs++) = pin_attrs->min_length;
 	*(pin_file->prop_attr + offs++) = pin_attrs->max_length;
 	*(pin_file->prop_attr + offs++) = 0;	/* upper case */
