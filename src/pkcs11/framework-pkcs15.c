@@ -613,26 +613,27 @@ __pkcs15_create_pubkey_object(struct pkcs15_fw_data *fw_data,
 	 * During initialization process, the key may have been created
 	 * and saved as a file before the certificate has been created.
 	 */
-	if (pubkey->flags & SC_PKCS15_CO_FLAG_PRIVATE)   {	/* is the key private? */
-		p15_key = NULL;					/* will read key when needed */
+	/* if emulation already created pubkey use it */
+	if (pubkey->emulated && (fw_data->p15_card->flags & SC_PKCS15_CARD_FLAG_EMULATED)) {
+		p15_key = (struct sc_pkcs15_pubkey *) pubkey->emulated;
+		sc_log(context, "Using emulated pubkey %p", p15_key);
 	}
 	else {
-		/* if emulation already created pubkey use it */
-		if (pubkey->emulated && (fw_data->p15_card->flags & SC_PKCS15_CARD_FLAG_EMULATED)) {
-			p15_key = (struct sc_pkcs15_pubkey *) pubkey->emulated;
-			sc_log(context, "Using emulated pubkey %p", p15_key);
+		rv = sc_pkcs15_read_pubkey(fw_data->p15_card, pubkey, &p15_key);
+		if (rv < 0)   {
+			sc_log(context, "PKCS15 read public key error: %i", rv);
+			p15_key = NULL;
 		}
-		else {
-			rv = sc_pkcs15_read_pubkey(fw_data->p15_card, pubkey, &p15_key);
-			if (rv < 0)
-				 p15_key = NULL;
-		}
+		sc_log(context, "Using pubkey %p", p15_key);
 	}
 
 	/* Public key object */
 	rv = __pkcs15_create_object(fw_data, (struct pkcs15_any_object **) &object,
 			pubkey, &pkcs15_pubkey_ops, sizeof(struct pkcs15_pubkey_object));
-	if (rv >= 0) {
+	if (rv < 0)   {
+		sc_log(context, "Cannot create PKCS15 public key object, rv %i", rv);
+	}
+	else {
 		object->pub_info = (struct sc_pkcs15_pubkey_info *) pubkey->data;
 		object->pub_data = p15_key;
 		if (p15_key && object->pub_info->modulus_length == 0 && p15_key->algorithm == SC_ALGORITHM_RSA)
