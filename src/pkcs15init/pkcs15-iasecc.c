@@ -324,7 +324,10 @@ iasecc_file_convert_acls(struct sc_context *ctx, struct sc_profile *profile, str
 	int ii;
 
 	for (ii=0; ii<SC_MAX_AC_OPS;ii++)   {
-		struct sc_acl_entry *acl = sc_file_get_acl_entry(file, ii);
+		/* FIXME the acl object must not be modified, it is only defined in
+		 * sc_file_get_acl_entry. Accessing it here means we have a race
+		 * condition. */
+		struct sc_acl_entry *acl = (struct sc_acl_entry *) sc_file_get_acl_entry(file, ii);
 
 		if (acl)   {
 			switch (acl->method)   {
@@ -1085,6 +1088,8 @@ iasecc_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	struct iasecc_sdo *sdo_prvkey = NULL;
 	struct iasecc_sdo *sdo_pubkey = NULL;
 	struct sc_file	*file = NULL;
+	unsigned char *tmp = NULL;
+	size_t tmp_len;
 	unsigned long caps;
 	int rv;
 
@@ -1146,18 +1151,19 @@ iasecc_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 	memcpy(pubkey->u.rsa.exponent.data, sdo_pubkey->data.pub_key.e.value, pubkey->u.rsa.exponent.len);
 
-	rv = sc_pkcs15_encode_pubkey(ctx, pubkey, &pubkey->data.value, &pubkey->data.len);
+	rv = sc_pkcs15_encode_pubkey(ctx, pubkey, &tmp, &tmp_len);
 	LOG_TEST_RET(ctx, rv, "encode public key failed");
 
 	rv = iasecc_pkcs15_encode_supported_algos(p15card, object);
 	LOG_TEST_RET(ctx, rv, "encode private key access rules failed");
 
 	/* SDO PrvKey data replaced by public part of generated key */
-	rv = sc_pkcs15_allocate_object_content(ctx, object, pubkey->data.value, pubkey->data.len);
+	rv = sc_pkcs15_allocate_object_content(ctx, object, tmp, tmp_len);
 	LOG_TEST_RET(ctx, rv, "Failed to allocate public key as object content");
 
 	iasecc_sdo_free(card, sdo_pubkey);
 
+	free(tmp);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -1316,6 +1322,7 @@ iasecc_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 	case SC_PKCS15_TYPE_PUBKEY:
 		sc_log(ctx, "Ignore delete of SDO-PubKey '%s', path %s", object->label, sc_print_path(path));
 		key_ref = ((struct sc_pkcs15_pubkey_info *)object->data)->key_reference;
+		sc_log(ctx, "Ignore delete of SDO-PubKey(ref:%X) '%s', path %s", key_ref, object->label, sc_print_path(path));
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	case SC_PKCS15_TYPE_PRKEY:
 		sc_log(ctx, "delete PrivKey '%s', path %s", object->label, sc_print_path(path));
@@ -1669,12 +1676,9 @@ iasecc_store_data_object(struct sc_pkcs15_card *p15card, struct sc_profile *prof
 	LOG_TEST_RET(ctx, nn_objs, "IasEcc get pkcs15 DATA objects error");
 
 	for(indx = 1; indx < MAX_DATA_OBJS; indx++)   {
-		struct sc_path fpath;
-
 		rv = iasecc_pkcs15_new_file(profile, card, SC_PKCS15_TYPE_DATA_OBJECT, indx, &file);
 		LOG_TEST_RET(ctx, rv, "iasecc_store_data_object() pkcs15 new DATA file error");
 
-		fpath = file->path;
 		for (ii=0; ii<nn_objs; ii++)   {
 			struct sc_pkcs15_data_info *info = (struct sc_pkcs15_data_info *)p15objects[ii]->data;
 			int file_id = info->path.value[info->path.len - 2] * 0x100 + info->path.value[info->path.len - 1];
@@ -1799,14 +1803,6 @@ iasecc_emu_store_data(struct sc_pkcs15_card *p15card, struct sc_profile *profile
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);
-}
-
-
-static int
-iasecc_emu_update_tokeninfo(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
-		struct sc_pkcs15_tokeninfo *tinfo)
-{
-	LOG_FUNC_RETURN(p15card->card->ctx, SC_SUCCESS);
 }
 
 

@@ -61,7 +61,6 @@ void sc_format_apdu(sc_card_t *card, sc_apdu_t *apdu,
 	apdu->p2 = (u8) p2;
 }
 
-#if 0
 struct sc_apdu *
 sc_allocate_apdu(struct sc_apdu *copy_from, unsigned flags)
 {
@@ -118,7 +117,6 @@ sc_free_apdu(struct sc_apdu *apdu)
 	if (apdu->allocation_flags & SC_APDU_ALLOCATE_FLAG)
 		free (apdu);
 }
-#endif
 
 static sc_card_t * sc_card_new(sc_context_t *ctx)
 {
@@ -239,15 +237,22 @@ int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
 				goto err;
 			}
 		}
-	} else {
-		sc_debug(ctx, SC_LOG_DEBUG_MATCH, "matching built-in ATRs");
+	}
+	else {
+		sc_log(ctx, "matching built-in ATRs");
 		for (i = 0; ctx->card_drivers[i] != NULL; i++) {
 			struct sc_card_driver *drv = ctx->card_drivers[i];
 			const struct sc_card_operations *ops = drv->ops;
 
 			sc_log(ctx, "trying driver '%s'", drv->short_name);
-			if (ops == NULL || ops->match_card == NULL)
+			if (ops == NULL || ops->match_card == NULL)   {
 				continue;
+			}
+			else if (!ctx->enable_default_driver && !strcmp("default", drv->short_name))   {
+				sc_log(ctx , "ignore 'default' card driver");
+				continue;
+			}
+
 			/* Needed if match_card() needs to talk with the card (e.g. card-muscle) */
 			*card->ops = *ops;
 			if (ops->match_card(card) != 1)
@@ -371,10 +376,11 @@ int sc_lock(sc_card_t *card)
 {
 	int r = 0, r2 = 0;
 
-	LOG_FUNC_CALLED(card->ctx);
-
 	if (card == NULL)
 		return SC_ERROR_INVALID_ARGUMENTS;
+
+	LOG_FUNC_CALLED(card->ctx);
+
 	r = sc_mutex_lock(card->ctx, card->mutex);
 	if (r != SC_SUCCESS)
 		return r;

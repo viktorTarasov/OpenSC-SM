@@ -155,6 +155,12 @@ struct sc_pkcs15_der {
 };
 typedef struct sc_pkcs15_der sc_pkcs15_der_t;
 
+struct sc_pkcs15_u8 {
+	u8 *		value;
+	size_t		len;
+};
+typedef struct sc_pkcs15_u8 sc_pkcs15_u8_t;
+
 struct sc_pkcs15_pubkey_rsa {
 	sc_pkcs15_bignum_t modulus;
 	sc_pkcs15_bignum_t exponent;
@@ -215,13 +221,13 @@ struct sc_pkcs15_gost_parameters {
 
 struct sc_pkcs15_pubkey_ec {
 	struct sc_pkcs15_ec_parameters params;
-	struct sc_pkcs15_der		ecpointQ; /* note this is der */
+	struct sc_pkcs15_u8 ecpointQ; /* This is NOT DER, just value and length */
 };
 
 struct sc_pkcs15_prkey_ec {
 	struct sc_pkcs15_ec_parameters params;
 	sc_pkcs15_bignum_t	privateD; /* note this is bignum */
-	struct sc_pkcs15_der		ecpointQ; /* note this is der */
+	struct sc_pkcs15_u8		ecpointQ; /* This is NOT DER, just value and length */
 };
 
 struct sc_pkcs15_pubkey_gostr3410 {
@@ -245,9 +251,6 @@ struct sc_pkcs15_pubkey {
 		struct sc_pkcs15_pubkey_ec ec;
 		struct sc_pkcs15_pubkey_gostr3410 gostr3410;
 	} u;
-
-	/* DER encoded raw key */
-	struct sc_pkcs15_der data;
 };
 typedef struct sc_pkcs15_pubkey sc_pkcs15_pubkey_t;
 
@@ -468,6 +471,11 @@ struct sc_pkcs15_pubkey_info {
 	struct sc_pkcs15_key_params params;
 
 	struct sc_path path;
+
+	struct {
+		struct sc_pkcs15_der raw;
+		struct sc_pkcs15_der spki;
+	} direct;
 };
 typedef struct sc_pkcs15_pubkey_info sc_pkcs15_pubkey_info_t;
 
@@ -727,15 +735,17 @@ int sc_pkcs15_decode_pubkey(struct sc_context *,
 		struct sc_pkcs15_pubkey *, const u8 *, size_t);
 int sc_pkcs15_encode_pubkey(struct sc_context *,
 		struct sc_pkcs15_pubkey *, u8 **, size_t *);
+int sc_pkcs15_encode_pubkey_as_spki(struct sc_context *,
+		struct sc_pkcs15_pubkey *, u8 **, size_t *);
 void sc_pkcs15_erase_pubkey(struct sc_pkcs15_pubkey *);
 void sc_pkcs15_free_pubkey(struct sc_pkcs15_pubkey *);
 int sc_pkcs15_pubkey_from_prvkey(struct sc_context *, struct sc_pkcs15_prkey *,
 		struct sc_pkcs15_pubkey **);
 int sc_pkcs15_pubkey_from_cert(struct sc_context *, struct sc_pkcs15_der *,
 		struct sc_pkcs15_pubkey **);
-int sc_pkcs15_pubkey_from_spki_filename(struct sc_context *,
+int sc_pkcs15_pubkey_from_spki_file(struct sc_context *,
 		char *, struct sc_pkcs15_pubkey ** );
-int sc_pkcs15_pubkey_from_spki(struct sc_context *,
+int sc_pkcs15_pubkey_from_spki_fields(struct sc_context *,
 		struct sc_pkcs15_pubkey **, u8 *, size_t, int);
 int sc_pkcs15_encode_prkey(struct sc_context *,
 		struct sc_pkcs15_prkey *, u8 **, size_t *);

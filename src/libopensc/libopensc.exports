@@ -165,6 +165,7 @@ sc_pkcs15_encode_pubkey_dsa
 sc_pkcs15_encode_pubkey_rsa
 sc_pkcs15_encode_pubkey_ec
 sc_pkcs15_encode_pubkey_gostr3410
+sc_pkcs15_encode_pubkey_as_spki
 sc_pkcs15_encode_pukdf_entry
 sc_pkcs15_encode_tokeninfo
 sc_pkcs15_encode_unusedspace
@@ -318,7 +319,6 @@ sc_sm_allocate_apdu
 sc_sm_free_apdu
 sm_incr_ssc
 sm_decrypt_des_cbc3
-iasecc_sdo_encode_update_field
 iasecc_sm_create_file
 iasecc_sm_delete_file
 iasecc_sm_external_authentication
@@ -329,3 +329,4 @@ iasecc_sm_rsa_generate
 iasecc_sm_rsa_update
 iasecc_sm_update_binary
 iasecc_sm_sdo_update
+iasecc_sdo_encode_update_field

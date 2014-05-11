@@ -97,6 +97,9 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "westcos",	(void *(*)(void)) sc_get_westcos_driver },
 	{ "myeid",      (void *(*)(void)) sc_get_myeid_driver },
 	{ "sc-hsm",	(void *(*)(void)) sc_get_sc_hsm_driver },
+#ifdef ENABLE_OPENSSL
+	{ "dnie",       (void *(*)(void)) sc_get_dnie_driver },
+#endif
 	{ "sc-laser",	(void *(*)(void)) sc_get_laser_driver },
 
 /* Here should be placed drivers that need some APDU transactions to
@@ -106,8 +109,6 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "atrust-acos",(void *(*)(void)) sc_get_atrust_acos_driver },
 	{ "PIV-II",	(void *(*)(void)) sc_get_piv_driver },
 	{ "itacns",	(void *(*)(void)) sc_get_itacns_driver },
-	/* javacard without supported applet - last before default */
-	{ "javacard",	(void *(*)(void)) sc_get_javacard_driver },
 	/* The default driver should be last, as it handles all the
 	 * unrecognized cards. */
 	{ "default",	(void *(*)(void)) sc_get_default_driver },
@@ -183,6 +184,8 @@ static void set_defaults(sc_context_t *ctx, struct _sc_ctx_options *opts)
 		fclose(ctx->debug_file);
 	ctx->debug_file = stderr;
 	ctx->paranoid_memory = 0;
+	ctx->enable_default_driver = 0;
+
 #ifdef __APPLE__
 	/* Override the default debug log for OpenSC.tokend to be different from PKCS#11.
 	 * TODO: Could be moved to OpenSC.tokend */
@@ -200,8 +203,10 @@ static void set_defaults(sc_context_t *ctx, struct _sc_ctx_options *opts)
 int sc_ctx_log_to_file(sc_context_t *ctx, const char* filename)
 {
 	/* Close any existing handles */
-	if (ctx->debug_file && (ctx->debug_file != stderr && ctx->debug_file != stdout))
+	if (ctx->debug_file && (ctx->debug_file != stderr && ctx->debug_file != stdout))   {
 		fclose(ctx->debug_file);
+		ctx->debug_file = NULL;
+	}
 
 	/* Handle special names */
 	if (!strcmp(filename, "stdout"))
@@ -252,6 +257,9 @@ load_parameters(sc_context_t *ctx, scconf_block *block, struct _sc_ctx_options *
 
 	ctx->paranoid_memory = scconf_get_bool (block, "paranoid-memory",
 		ctx->paranoid_memory);
+
+	ctx->enable_default_driver = scconf_get_bool (block, "enable_default_driver",
+			ctx->enable_default_driver);
 
 	val = scconf_get_str(block, "force_card_driver", NULL);
 	if (val) {

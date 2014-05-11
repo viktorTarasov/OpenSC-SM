@@ -21,16 +21,18 @@ OBJECTS			= \
 	card-incrypto34.obj card-piv.obj card-muscle.obj card-acos5.obj \
 	card-asepcos.obj card-akis.obj card-gemsafeV1.obj card-rutoken.obj \
 	card-rtecp.obj card-westcos.obj card-myeid.obj card-ias.obj \
-	card-javacard.obj card-itacns.obj card-authentic.obj \
-	card-iasecc.obj iasecc-sdo.obj iasecc-sm.obj \
-	card-sc-hsm.obj card-laser.obj laser.obj \
+	card-itacns.obj card-authentic.obj \
+	card-iasecc.obj iasecc-sdo.obj iasecc-sm.obj cwa-dnie.obj cwa14890.obj \
+	card-sc-hsm.obj card-dnie.obj user-interface.obj \
+	card-laser.obj laser.obj \
 	\
 	pkcs15-openpgp.obj pkcs15-infocamere.obj pkcs15-starcert.obj \
 	pkcs15-tcos.obj pkcs15-esteid.obj pkcs15-postecert.obj pkcs15-gemsafeGPK.obj \
 	pkcs15-actalis.obj pkcs15-atrust-acos.obj pkcs15-tccardos.obj pkcs15-piv.obj \
 	pkcs15-esinit.obj pkcs15-westcos.obj pkcs15-pteid.obj pkcs15-oberthur.obj \
 	pkcs15-itacns.obj pkcs15-gemsafeV1.obj pkcs15-sc-hsm.obj \
-	pkcs15-itacns.obj pkcs15-gemsafeV1.obj pkcs15-sc-hsm.obj pkcs15-laser.obj \
+	pkcs15-dnie.obj \
+	pkcs15-laser.obj \
 	compression.obj p15card-helper.obj sm.obj \
 	$(TOPDIR)\win32\versioninfo.res
 

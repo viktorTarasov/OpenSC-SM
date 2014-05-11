@@ -102,6 +102,7 @@ typedef struct common_key_info_st {
 	int pubkey_from_file;
 	int key_alg;
 	unsigned int pubkey_len;
+	struct sc_pkcs15_pubkey *pubkey_from_cert;
 	int not_present;
 } common_key_info;
 
@@ -119,17 +120,17 @@ typedef struct common_key_info_st {
  */
 
 static int piv_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object *obj,
-		char *out, size_t out_size)
+		unsigned char *out, size_t *out_size)
 {
 	struct sc_serial_number serialnr;
 	struct sc_pkcs15_id  id;
 	unsigned char guid_bin[SC_PKCS15_MAX_ID_SIZE + SC_MAX_SERIALNR];
-	size_t bin_size, offs, tlen;
-	int r, i;
+	size_t bin_size, offs, tlen, i;
+	int r;
 	unsigned char fbit, fbits, fbyte, fbyte2, fnibble;
 	unsigned char *f5p, *f8p;
 
-	if (!p15card || !obj || !out || out_size < 3)
+	if (!p15card || !obj || !out || *out_size < 3)
 		return SC_ERROR_INCORRECT_PARAMETERS;
 
 	r = sc_pkcs15_get_object_id(obj, &id);
@@ -141,7 +142,7 @@ static int piv_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_o
 		return r;
 
 	memset(guid_bin, 0, sizeof(guid_bin));
-	memset(out, 0, out_size);
+	memset(out, 0, *out_size);
 
 	if (id.len == 1 && serialnr.len == 25) {
 
@@ -211,14 +212,14 @@ static int piv_get_guid(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_o
 	}
 
 	/* reserve one byte for the 'C' line ending */
-	bin_size = (out_size - 1)/2;
+	bin_size = (*out_size - 1)/2;
 	if (bin_size > tlen)
 		bin_size = tlen;
 
 	offs = tlen - bin_size;
 
 	for (i=0; i<bin_size; i++)
-		sprintf(out + i*2, "%02x", guid_bin[offs + i]);
+		sprintf((char *) out + i*2, "%02x", guid_bin[offs + i]);
 
 	return SC_SUCCESS;
 }
@@ -609,6 +610,8 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 
 	SC_FUNC_CALLED(card->ctx, SC_LOG_DEBUG_VERBOSE);
 
+	memset(&serial, 0, sizeof(serial));
+
 	/* could read this off card if needed */
 
 	/* CSP does not like a - in the name */
@@ -703,6 +706,7 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 		ckis[i].pubkey_found = 0;
 		ckis[i].pubkey_from_file = 0;
 		ckis[i].pubkey_len = 0;
+		ckis[i].pubkey_from_cert = NULL;
 
 		memset(&cert_info, 0, sizeof(cert_info));
 		memset(&cert_obj,  0, sizeof(cert_obj));
@@ -755,6 +759,8 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 				sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "Unsuported key.algorithm %d", cert_out->key->algorithm);
 				ckis[i].pubkey_len = 0; /* set some value for now */
 		}
+		ckis[i].pubkey_from_cert = cert_out->key;
+		cert_out->key = NULL;
 		sc_pkcs15_free_certificate(cert_out);
 
 		r = sc_pkcs15emu_add_x509_cert(p15card, &cert_obj, &cert_info);
@@ -869,11 +875,13 @@ sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "DEE Adding pin %d label=%s",i, label);
 			
 			sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,"Adding pubkey from file %s",filename);
 
-			r = sc_pkcs15_pubkey_from_spki_filename(card->ctx, 
-						filename,
-						&p15_key);
+			r = sc_pkcs15_pubkey_from_spki_file(card->ctx,  filename, &p15_key);
 			if (r < 0) 
 				continue;
+
+			/* Lets also try another method. */
+			r = sc_pkcs15_encode_pubkey_as_spki(card->ctx, p15_key, &pubkey_info.direct.spki.value, &pubkey_info.direct.spki.len);
+        		LOG_TEST_RET(card->ctx, r, "SPKI encode public key error");
 			
 			/* Only get here if no cert, and the the above found the
 			 * pub key file (actually the SPKI version). This only 
@@ -905,6 +913,12 @@ sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "DEE Adding pin %d label=%s",i, label);
 			}
 			pubkey_obj.emulated = p15_key;
 			p15_key = NULL;
+		}
+		else if (ckis[i].pubkey_from_cert)   {
+			r = sc_pkcs15_encode_pubkey_as_spki(card->ctx, ckis[i].pubkey_from_cert, &pubkey_info.direct.spki.value, &pubkey_info.direct.spki.len);
+        		LOG_TEST_RET(card->ctx, r, "SPKI encode public key error");
+
+			pubkey_obj.emulated = ckis[i].pubkey_from_cert;
 		}
 
 		sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL,"adding pubkey for %d keyalg=%d",i, ckis[i].key_alg);

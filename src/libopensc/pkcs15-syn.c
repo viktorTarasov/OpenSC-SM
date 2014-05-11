@@ -67,6 +67,8 @@ extern int sc_pkcs15emu_itacns_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
 extern int sc_pkcs15emu_sc_hsm_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t *,
+					sc_pkcs15emu_opt_t *);
 extern int sc_pkcs15emu_laser_init_ex(sc_pkcs15_card_t *,
 					sc_pkcs15emu_opt_t *);
 
@@ -91,7 +93,8 @@ static struct {
 	{ "entersafe",  sc_pkcs15emu_entersafe_init_ex  },
 	{ "pteid",	sc_pkcs15emu_pteid_init_ex	},
 	{ "oberthur",   sc_pkcs15emu_oberthur_init_ex	},
-	{ "sc-hsm",     sc_pkcs15emu_sc_hsm_init_ex	},
+	{ "sc-hsm",   	sc_pkcs15emu_sc_hsm_init_ex	},
+	{ "dnie",       sc_pkcs15emu_dnie_init_ex	},
 	{ "laser",	sc_pkcs15emu_laser_init_ex	},
 	{ NULL, NULL }
 };
@@ -116,6 +119,11 @@ int sc_pkcs15_is_emulation_only(sc_card_t *card)
 		case SC_CARD_TYPE_OPENPGP_V1:
 		case SC_CARD_TYPE_OPENPGP_V2:
 		case SC_CARD_TYPE_SC_HSM:
+		case SC_CARD_TYPE_DNIE_BASE:
+		case SC_CARD_TYPE_DNIE_BLANK:
+		case SC_CARD_TYPE_DNIE_ADMIN:
+		case SC_CARD_TYPE_DNIE_USER:
+		case SC_CARD_TYPE_DNIE_TERMINATED:
 			return 1;
 		default:
 			return 0;
@@ -168,7 +176,7 @@ sc_pkcs15_bind_synthetic(sc_pkcs15_card_t *p15card)
 							/* we got a hit */
 							goto out;
 					}
-			}	
+			}
 		}
 		else if (builtin_enabled) {
 			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "no emulator list in config file, trying all builtin emulators\n");
@@ -182,11 +190,12 @@ sc_pkcs15_bind_synthetic(sc_pkcs15_card_t *p15card)
 		}
 
 		/* search for 'emulate foo { ... }' entries in the conf file */
-		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "searching for 'emulate foo { ... }' blocks\n");
+		sc_log(ctx, "searching for 'emulate foo { ... }' blocks\n");
 		blocks = scconf_find_blocks(ctx->conf, conf_block, "emulate", NULL);
+		sc_log(ctx, "Blocks: %p", blocks);
 		for (i = 0; blocks && (blk = blocks[i]) != NULL; i++) {
 			const char *name = blk->name->data;
-			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "trying %s\n", name);
+			sc_log(ctx, "trying %s", name);
 			r = parse_emu_block(p15card, blk);
 			if (r == SC_SUCCESS) {
 				free(blocks);
@@ -196,20 +205,21 @@ sc_pkcs15_bind_synthetic(sc_pkcs15_card_t *p15card)
 		if (blocks)
 			free(blocks);
 	}
-		
+
 	/* Total failure */
-	return SC_ERROR_WRONG_CARD;
+	LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_CARD);
 
 out:	if (r == SC_SUCCESS) {
 		p15card->magic  = SC_PKCS15_CARD_MAGIC;
 		p15card->flags |= SC_PKCS15_CARD_FLAG_EMULATED;
-	} else if (r != SC_ERROR_WRONG_CARD) {
-		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "Failed to load card emulator: %s\n",
-				sc_strerror(r));
+	}
+	else if (r != SC_ERROR_WRONG_CARD) {
+		sc_log(ctx, "Failed to load card emulator: %s", sc_strerror(r));
 	}
 
-	return r;
+	LOG_FUNC_RETURN(ctx, r);
 }
+
 
 static int parse_emu_block(sc_pkcs15_card_t *p15card, scconf_block *conf)
 {

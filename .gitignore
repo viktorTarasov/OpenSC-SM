@@ -77,12 +77,15 @@ src/tools/cardos-info
 src/tools/cryptoflex-tool
 src/tools/netkey-tool
 src/tools/pkcs11-tool
+src/tools/dnie-tool
 
 win32/OpenSC.iss
 win32/OpenSC.wxs
 win32/winconfig.h
 
 MacOSX/build-package
+MacOSX/Distribution.xml
+
 *.dmg
 *.pkg
 OpenSC.tokend/

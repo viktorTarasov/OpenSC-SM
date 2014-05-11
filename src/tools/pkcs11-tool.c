@@ -389,7 +389,9 @@ int main(int argc, char * argv[])
 	CK_RV rv;
 
 #ifdef _WIN32
-	if (_set_fmode(_O_BINARY) == EINVAL)
+	if(_setmode(_fileno(stdout), _O_BINARY ) == -1)
+		util_fatal("Cannot set FMODE to O_BINARY");
+	if(_setmode(_fileno(stdin), _O_BINARY ) == -1)
 		util_fatal("Cannot set FMODE to O_BINARY");
 #endif
 
@@ -1461,7 +1463,7 @@ static void hash_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 
 	if (opt_input == NULL)
 		fd = 0;
-	else if ((fd = open(opt_input, O_RDONLY)) < 0)
+	else if ((fd = open(opt_input, O_RDONLY|O_BINARY)) < 0)
 		util_fatal("Cannot open %s: %m", opt_input);
 
 	while ((r = read(fd, buffer, sizeof(buffer))) > 0) {
@@ -1622,28 +1624,37 @@ static void	parse_certificate(struct x509cert_info *cert,
 	if (!x) {
 		util_fatal("OpenSSL error during X509 certificate parsing");
 	}
-	p = cert->subject;
-	n = i2d_X509_NAME(x->cert_info->subject, &p);
+	/* check length first */
+	n = i2d_X509_NAME(x->cert_info->subject, NULL);
 	if (n < 0)
 		util_fatal("OpenSSL error while encoding subject name");
 	if (n > (int)sizeof (cert->subject))
 		util_fatal("subject name too long");
+	/* green light, actually do it */
+	p = cert->subject;
+	n = i2d_X509_NAME(x->cert_info->subject, &p);
 	cert->subject_len = n;
 
-	p = cert->issuer;
-	n = i2d_X509_NAME(x->cert_info->issuer, &p);
+	/* check length first */
+	n = i2d_X509_NAME(x->cert_info->issuer, NULL);
 	if (n < 0)
 		util_fatal("OpenSSL error while encoding issuer name");
 	if (n > (int)sizeof (cert->issuer))
 		util_fatal("issuer name too long");
+	/* green light, actually do it */
+	p = cert->issuer;
+	n = i2d_X509_NAME(x->cert_info->issuer, &p);
 	cert->issuer_len = n;
 
-	p = cert->serialnum;
-	n = i2d_ASN1_INTEGER(x->cert_info->serialNumber, &p);
+	/* check length first */
+	n = i2d_ASN1_INTEGER(x->cert_info->serialNumber, NULL);
 	if (n < 0)
 		util_fatal("OpenSSL error while encoding serial number");
 	if (n > (int)sizeof (cert->serialnum))
 		util_fatal("serial number too long");
+	/* green light, actually do it */
+	p = cert->serialnum;
+	n = i2d_ASN1_INTEGER(x->cert_info->serialNumber, &p);
 	cert->serialnum_len = n;
 }
 
@@ -1783,12 +1794,14 @@ static int write_object(CK_SESSION_HANDLE session)
 	CK_RV rv;
 	int need_to_parse_certdata = 0;
 	unsigned char *oid_buf = NULL;
+	CK_OBJECT_CLASS clazz;
+	CK_CERTIFICATE_TYPE cert_type;
+	CK_KEY_TYPE type = CKK_RSA;
 #ifdef ENABLE_OPENSSL
 	struct x509cert_info cert;
 	struct rsakey_info rsa;
 	struct gostkey_info gost;
 	EVP_PKEY *evp_key = NULL;
-	CK_KEY_TYPE type = CKK_RSA;
 
 	memset(&cert, 0, sizeof(cert));
 	memset(&rsa,  0, sizeof(rsa));
@@ -1864,8 +1877,8 @@ static int write_object(CK_SESSION_HANDLE session)
 	}
 
 	if (opt_object_class == CKO_CERTIFICATE) {
-		CK_OBJECT_CLASS clazz = CKO_CERTIFICATE;
-		CK_CERTIFICATE_TYPE cert_type = CKC_X_509;
+		clazz = CKO_CERTIFICATE;
+		cert_type = CKC_X_509;
 
 		FILL_ATTR(cert_templ[0], CKA_TOKEN, &_true, sizeof(_true));
 		FILL_ATTR(cert_templ[1], CKA_VALUE, contents, contents_len);
@@ -1898,7 +1911,7 @@ static int write_object(CK_SESSION_HANDLE session)
 	}
 	else
 	if (opt_object_class == CKO_PRIVATE_KEY) {
-		CK_OBJECT_CLASS clazz = CKO_PRIVATE_KEY;
+		clazz = CKO_PRIVATE_KEY;
 
 		n_privkey_attr = 0;
 		FILL_ATTR(privkey_templ[n_privkey_attr], CKA_CLASS, &clazz, sizeof(clazz));
@@ -1945,7 +1958,7 @@ static int write_object(CK_SESSION_HANDLE session)
 		}
 #if OPENSSL_VERSION_NUMBER >= 0x10000000L && !defined(OPENSSL_NO_EC)
 		else if (evp_key->type == NID_id_GostR3410_2001)   {
-			CK_KEY_TYPE type = CKK_GOSTR3410;
+			type = CKK_GOSTR3410;
 
 			FILL_ATTR(privkey_templ[n_privkey_attr], CKA_KEY_TYPE, &type, sizeof(type));
 			n_privkey_attr++;
@@ -1963,8 +1976,8 @@ static int write_object(CK_SESSION_HANDLE session)
 	}
 	else
 	if (opt_object_class == CKO_PUBLIC_KEY) {
-		CK_OBJECT_CLASS clazz = CKO_PUBLIC_KEY;
-		CK_KEY_TYPE type = CKK_RSA;
+		clazz = CKO_PUBLIC_KEY;
+		type = CKK_RSA;
 
 		FILL_ATTR(pubkey_templ[0], CKA_CLASS, &clazz, sizeof(clazz));
 		FILL_ATTR(pubkey_templ[1], CKA_KEY_TYPE, &type, sizeof(type));
@@ -2003,7 +2016,7 @@ static int write_object(CK_SESSION_HANDLE session)
 	}
 	else
 	if (opt_object_class == CKO_DATA) {
-		CK_OBJECT_CLASS clazz = CKO_DATA;
+		clazz = CKO_DATA;
 		FILL_ATTR(data_templ[0], CKA_CLASS, &clazz, sizeof(clazz));
 		FILL_ATTR(data_templ[1], CKA_TOKEN, &_true, sizeof(_true));
 		FILL_ATTR(data_templ[2], CKA_VALUE, &contents, contents_len);
@@ -2572,6 +2585,7 @@ show_key(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj)
 			unsigned char *bytes = NULL;
 			unsigned int n;
 			int ksize;
+
 			bytes = getEC_POINT(sess, obj, &size);
 			/*
 			 * (We only support uncompressed for now)
@@ -2587,10 +2601,10 @@ show_key(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj)
 			else
 				ksize = (size - 5) * 4;
 
-			printf(" EC_POINT %d bits\n", ksize);
+			printf("  EC_POINT %d bits\n", ksize);
 			if (bytes) {
 				if ((CK_LONG)size > 0) { /* Will print the point here */
-					printf(" EC_POINT:  ");
+					printf("  EC_POINT:   ");
 					for (n = 0; n < size; n++)
 						printf("%02x", bytes[n]);
 					printf("\n");
@@ -4143,7 +4157,7 @@ static void test_kpgen_certwrite(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	CK_OBJECT_HANDLE	pub_key, priv_key;
 	CK_ULONG		i, num_mechs = 0;
 	CK_RV			rv;
-	CK_BYTE			buf[20], *tmp, *mod;
+	CK_BYTE			buf[20], *tmp;
 	CK_BYTE			md5_and_digestinfo[34] = "\x30\x20\x30\x0c\x06\x08\x2a\x86\x48\x86\xf7\x0d\x02\x05\x05\x00\x04\x10";
 	CK_BYTE			*data, sig[512];
 	CK_ULONG		data_len, sig_len;
@@ -4192,7 +4206,7 @@ static void test_kpgen_certwrite(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	memcpy(opt_object_id, tmp, opt_object_id_len);
 
 	/* This is done in NSS */
-	mod = getMODULUS(session, priv_key, &mod_len);
+	getMODULUS(session, priv_key, &mod_len);
 	if (mod_len < 5 || mod_len > 10000) { /* should be resonable limits */
 		printf("ERR: GetAttribute(privkey, CKA_MODULUS) doesn't seem to work\n");
 		return;
@@ -4310,7 +4324,7 @@ static void test_ec(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	CK_OBJECT_HANDLE	pub_key, priv_key;
 	CK_ULONG		i, num_mechs = 0;
 	CK_RV			rv;
-	CK_BYTE			*tmp, *ec_params, *ec_point;
+	CK_BYTE			*tmp;
 	CK_BYTE			*data_to_sign = (CK_BYTE *)"My Heart's in the Highland";
 	CK_BYTE			*data, sig[512];
 	CK_ULONG		data_len, sig_len;
@@ -4347,12 +4361,12 @@ static void test_ec(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	memcpy(opt_object_id, tmp, opt_object_id_len);
 
 	/* This is done in NSS */
-	ec_params = getEC_PARAMS(session, priv_key, &ec_params_len);
+	getEC_PARAMS(session, priv_key, &ec_params_len);
 	if (ec_params_len < 5 || ec_params_len > 10000) {
 		printf("ERR: GetAttribute(privkey, CKA_EC_PARAMS) doesn't seem to work\n");
 		return;
 	}
-	ec_point = getEC_POINT(session, pub_key, &ec_point_len);
+	getEC_POINT(session, pub_key, &ec_point_len);
 	if (ec_point_len < 5 || ec_point_len > 10000) {
 		printf("ERR: GetAttribute(pubkey, CKA_EC_POINT) doesn't seem to work\n");
 		return;

@@ -281,14 +281,18 @@ asn1_decode_ec_params(sc_context_t *ctx, void **paramp,
 	sc_format_asn1_entry(asn1_ec_params + 1, &curve, 0, 0);
 
 	/* Some signature algorithms will not have any data */
-	if (buflen == 0 || buf == NULL ) 
+	if (buflen == 0 || buf == NULL) {
+		free(ecp);
 		return 0;
+	}
 
 	r = sc_asn1_decode_choice(ctx, asn1_ec_params, buf, buflen, NULL, NULL);
 	/* r = index into asn1_ec_params */
-sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_decode_ec_params r=%d", r);
-	if (r < 0)
+	sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_decode_ec_params r=%d", r);
+	if (r < 0) {
+		free(ecp);
 		return r;
+	}
 	if (r <= 1) {
 		ecp->der = malloc(buflen);
 
@@ -297,7 +301,7 @@ sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_decode_ec_params r=%d", r);
 
 		ecp->der_len = buflen;
 
-sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_decode_ec_params paramp=%p %p:%d %d",
+		sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_decode_ec_params paramp=%p %p:%d %d",
 		ecp, ecp->der, ecp->der_len, ecp->type);
 		memcpy(ecp->der, buf, buflen); /* copy der parameters */
 	} else 
@@ -311,13 +315,23 @@ static int
 asn1_encode_ec_params(sc_context_t *ctx, void *params,
 u8 **buf, size_t *buflen, int depth) 
 {
-	int r;
-	/* TODO: -DEE EC paramameters are DER so is there anything to do? */
-	/* I have not needed this yet */
-	sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_encode_ec_params");
-	r = SC_ERROR_NOT_IMPLEMENTED;
+	 struct sc_ec_params * ecp = (struct sc_ec_params *) params;
 
-	return r;
+	/* Only handle named curves. They may be absent too */
+	sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - asn1_encode_ec_params");
+	*buf = NULL;
+	*buflen = 0;
+	if (ecp && ecp->type == 1 && ecp->der) { /* named curve */
+		*buf = malloc(ecp->der_len);
+		if (*buf == NULL)
+			return SC_ERROR_OUT_OF_MEMORY;
+
+		memcpy(*buf, ecp->der, ecp->der_len);
+		*buflen = ecp->der_len;
+	} else
+		sc_debug(ctx, SC_LOG_DEBUG_ASN1, "DEE - Not named curve");
+
+	return 0;
 }
 
 static void

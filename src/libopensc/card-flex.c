@@ -539,10 +539,8 @@ static int select_file_id(sc_card_t *card, const u8 *buf, size_t buflen,
 	sc_apdu_t apdu;
         u8 rbuf[SC_MAX_APDU_BUFFER_SIZE];
         sc_file_t *file;
-	char	debug_buf[32];
 
-	sc_bin_to_hex(buf, buflen, debug_buf, sizeof(debug_buf), 0);
-	sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "called, p1=%u, path=%s\n", p1, debug_buf);
+	sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "called, p1=%u, path=%s\n", p1, sc_dump_hex(buf, buflen));
 
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, p1, 0);
 	apdu.resp = rbuf;
@@ -858,9 +856,7 @@ cyberflex_construct_file_attrs(sc_card_t *card, const sc_file_t *file,
 				 u8 *buf, size_t *buflen)
 {
 	u8 *p = buf;
-	int i;
 	size_t size = file->size;
-	int ops[6];
 
 	/* cyberflex wants input parameters length added */
 	switch (file->type) {
@@ -905,20 +901,6 @@ cyberflex_construct_file_attrs(sc_card_t *card, const sc_file_t *file,
 			return -1;
 		}
 	p[5] = 0x01;	/* status?? */
-	for (i = 0; i < 6; i++)
-		ops[i] = -1;
-	if (file->type == SC_FILE_TYPE_DF) {
-		ops[0] = SC_AC_OP_LIST_FILES;
-		ops[2] = SC_AC_OP_DELETE;
-		ops[3] = SC_AC_OP_CREATE;
-	} else {
-		ops[0] = SC_AC_OP_READ;
-		ops[1] = SC_AC_OP_UPDATE;
-		ops[2] = SC_AC_OP_READ;
-		ops[3] = SC_AC_OP_UPDATE;
-		ops[4] = SC_AC_OP_REHABILITATE;
-		ops[5] = SC_AC_OP_INVALIDATE;
-	}
 	p[6] = p[7] = 0;
 	
 	*buflen = 16;

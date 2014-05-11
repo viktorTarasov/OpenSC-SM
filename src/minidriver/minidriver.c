@@ -149,6 +149,12 @@ typedef struct _VENDOR_SPECIFIC
 
 	SCARDCONTEXT hSCardCtx;
 	SCARDHANDLE hScard;
+
+	/* These will be used in CardAuthenticateEx to display a dialog box when doing
+	 * external PIN verification.
+	 */
+	HWND hwndParent;
+	LPWSTR wszPinContext;
 }VENDOR_SPECIFIC;
 
 /*
@@ -795,7 +801,7 @@ static DWORD
 md_pkcs15_encode_cmapfile(PCARD_DATA pCardData, unsigned char **out, size_t *out_len)
 {
 	VENDOR_SPECIFIC *vs;
-	unsigned char *encoded, *ret;
+	unsigned char *encoded, *ret, *p;
 	size_t guid_len, encoded_len, flags_len, ret_len;
 	int idx;
 
@@ -835,11 +841,13 @@ md_pkcs15_encode_cmapfile(PCARD_DATA pCardData, unsigned char **out, size_t *out
 			return SCARD_F_INTERNAL_ERROR;
 		}
 
-		ret = realloc(ret, ret_len + encoded_len);
-		if (!ret)   {
+		p = realloc(ret, ret_len + encoded_len);
+		if (!p)   {
 			logprintf(pCardData, 3, "MdEncodeCMapFile(): realloc failed\n");
+			free(ret);
 			return SCARD_E_NO_MEMORY;
 		}
+		ret = p;
 		memcpy(ret + ret_len, encoded, encoded_len);
 		free(encoded);
 		ret_len += encoded_len;
@@ -2161,7 +2169,8 @@ DWORD WINAPI CardGetContainerInfo(__in PCARD_DATA pCardData, __in BYTE bContaine
 	__in PCONTAINER_INFO pContainerInfo)
 {
 	VENDOR_SPECIFIC *vs = NULL;
-	DWORD sz = 0, ret;
+	DWORD sz = 0;
+	DWORD ret = SCARD_F_UNKNOWN_ERROR;
 	struct md_pkcs15_container *cont = NULL;
 	struct sc_pkcs15_der pubkey_der;
 	int rv;
@@ -2198,9 +2207,10 @@ DWORD WINAPI CardGetContainerInfo(__in PCARD_DATA pCardData, __in BYTE bContaine
 	pubkey_der.value = NULL;
 	pubkey_der.len = 0;
 
-	ret = SCARD_S_SUCCESS;
-	if ((cont->prkey_obj->content.value != NULL) && (cont->prkey_obj->content.len > 0))
+	if ((cont->prkey_obj->content.value != NULL) && (cont->prkey_obj->content.len > 0))   {
 		sc_der_copy(&pubkey_der, &cont->prkey_obj->content);
+		ret = SCARD_S_SUCCESS;
+	}
 
 	if (!pubkey_der.value && cont->pubkey_obj)   {
 		struct sc_pkcs15_pubkey *pubkey = NULL;
@@ -2208,10 +2218,11 @@ DWORD WINAPI CardGetContainerInfo(__in PCARD_DATA pCardData, __in BYTE bContaine
 		logprintf(pCardData, 1, "now read public key '%s'\n", cont->pubkey_obj->label);
 		rv = sc_pkcs15_read_pubkey(vs->p15card, cont->pubkey_obj, &pubkey);
 		if (!rv)   {
-			if(pubkey->algorithm == SC_ALGORITHM_RSA)
-				sc_der_copy(&pubkey_der, &pubkey->data);
-			else
-				ret = SCARD_E_UNSUPPORTED_FEATURE;
+			rv = sc_pkcs15_encode_pubkey(vs->ctx, pubkey, &pubkey_der.value, &pubkey_der.len);
+			if (rv)   {
+				logprintf(pCardData, 1, "encode public key error %d\n", rv);
+				ret = SCARD_F_INTERNAL_ERROR;
+			}
 			sc_pkcs15_free_pubkey(pubkey);
 		}
 		else {
@@ -2226,10 +2237,12 @@ DWORD WINAPI CardGetContainerInfo(__in PCARD_DATA pCardData, __in BYTE bContaine
 		logprintf(pCardData, 1, "now read certificate '%s'\n", cont->cert_obj->label);
 		rv = sc_pkcs15_read_certificate(vs->p15card, (struct sc_pkcs15_cert_info *)(cont->cert_obj->data), &cert);
 		if(!rv)   {
-			if(cert->key->algorithm == SC_ALGORITHM_RSA)
-				sc_der_copy(&pubkey_der, &cert->key->data);
-			else
-				ret = SCARD_E_UNSUPPORTED_FEATURE;
+			rv = sc_pkcs15_encode_pubkey(vs->ctx, cert->key, &pubkey_der.value, &pubkey_der.len);
+			if (rv)   {
+				logprintf(pCardData, 1, "encode certificate public key error %d\n", rv);
+				ret = SCARD_F_INTERNAL_ERROR;
+			}
+
 			sc_pkcs15_free_certificate(cert);
 		}
 		else   {
@@ -2297,7 +2310,6 @@ DWORD WINAPI CardAuthenticatePin(__in PCARD_DATA pCardData,
 	__in DWORD cbPin,
 	__out_opt PDWORD pcAttemptsRemaining)
 {
-	int r, pin_min_length = 0;
 	struct sc_pkcs15_object *pin_obj = NULL;
 	struct sc_pkcs15_auth_info *auth_info = NULL;
 	char type[256];
@@ -2305,6 +2317,8 @@ DWORD WINAPI CardAuthenticatePin(__in PCARD_DATA pCardData,
 	struct md_file *cardcf_file = NULL;
 	CARD_CACHE_FILE_FORMAT *cardcf = NULL;
 	DWORD dwret;
+	int r;
+	int pin_min_length = 0;
 
 	if(!pCardData)
 		return SCARD_E_INVALID_PARAMETER;
@@ -3006,7 +3020,6 @@ DWORD WINAPI CardRSADecrypt(__in PCARD_DATA pCardData,
 					logprintf(pCardData, 2, "Cannot strip PKCS1 padding: %i\n", r);
 					return SCARD_F_INTERNAL_ERROR;
 				}
-				pInfo->cbData = r;
 			}
 			else if (pInfo->dwPaddingType == CARD_PADDING_OAEP)   {
 				/* TODO: Handle OAEP padding if present - can call PFN_CSP_UNPAD_DATA */
@@ -3279,12 +3292,13 @@ DWORD WINAPI CardAuthenticateEx(__in PCARD_DATA pCardData,
 	__out_opt PDWORD pcbSessionPin,
 	__out_opt PDWORD pcAttemptsRemaining)
 {
-	int r, pin_min_length = 0;
 	VENDOR_SPECIFIC *vs;
 	CARD_CACHE_FILE_FORMAT *cardcf = NULL;
 	DWORD dwret;
 	struct sc_pkcs15_object *pin_obj = NULL;
 	struct sc_pkcs15_auth_info *auth_info = NULL;
+	int r;
+	int pin_min_length = 0;
 
 	logprintf(pCardData, 1, "\nP:%d T:%d pCardData:%p ",GetCurrentProcessId(), GetCurrentThreadId(), pCardData);
 	logprintf(pCardData, 1, "CardAuthenticateEx\n");
@@ -3299,13 +3313,15 @@ DWORD WINAPI CardAuthenticateEx(__in PCARD_DATA pCardData,
 
 	check_reader_status(pCardData);
 
-	if (dwFlags == CARD_AUTHENTICATE_GENERATE_SESSION_PIN || dwFlags == CARD_AUTHENTICATE_SESSION_PIN)
-		return SCARD_E_UNSUPPORTED_FEATURE;
+	if (dwFlags == CARD_AUTHENTICATE_GENERATE_SESSION_PIN || dwFlags == CARD_AUTHENTICATE_SESSION_PIN) {
+		if (! (vs->reader->capabilities & SC_READER_CAP_PIN_PAD))
+			return SCARD_E_UNSUPPORTED_FEATURE;
+	}
 
-	if (dwFlags && dwFlags != CARD_PIN_SILENT_CONTEXT)
+	if (dwFlags && (dwFlags & CARD_PIN_SILENT_CONTEXT) && NULL == pbPinData)
 		return SCARD_E_INVALID_PARAMETER;
 
-	if (NULL == pbPinData)
+	if (!(vs->reader->capabilities & SC_READER_CAP_PIN_PAD) && NULL == pbPinData)
 		return SCARD_E_INVALID_PARAMETER;
 
 	if (PinId != ROLE_USER)
@@ -3323,6 +3339,26 @@ DWORD WINAPI CardAuthenticateEx(__in PCARD_DATA pCardData,
 	if (!pin_obj)
 		return SCARD_F_INTERNAL_ERROR;
 	auth_info = (struct sc_pkcs15_auth_info *)pin_obj->data;
+
+	/* Do we need to display a prompt to enter PIN on pin pad? */
+	logprintf(pCardData, 7, "PIN pad=%s, pbPinData=%p, hwndParent=%d\n",
+		vs->reader->capabilities & SC_READER_CAP_PIN_PAD ? "yes" : "no", pbPinData, vs->hwndParent);
+	if ((vs->reader->capabilities & SC_READER_CAP_PIN_PAD) && NULL == pbPinData) {
+		char buf[200];
+		snprintf(buf, sizeof(buf), "Please enter PIN %s",
+			NULL == vs->wszPinContext ? "on reader pinpad." : vs->wszPinContext);
+		logprintf(pCardData, 7, "About to display message box for external PIN verification\n");
+		/* @TODO: Ideally, this should probably be a non-modal dialog with just a cancel button
+		 * that goes away as soon as a key is pressed on the pinpad.
+		 */
+		r = MessageBox(vs->hwndParent, buf, "PIN Entry Required",
+				MB_OKCANCEL | MB_ICONINFORMATION);
+		if (IDCANCEL == r) {
+			logprintf(pCardData, 2, "User canceled PIN verification\n");
+			/* @TODO: is this the right code to return? */
+			return SCARD_E_INVALID_PARAMETER;
+		}
+	}
 
 	if (md_is_ignore_pin_length(pCardData))   {
 		logprintf(pCardData, 2, "Accept PIN with length less then minimal.\n");
@@ -3592,7 +3628,7 @@ DWORD WINAPI CardGetProperty(__in PCARD_DATA pCardData,
 		if (p->dwVersion != PIN_INFO_CURRENT_VERSION)
 			return ERROR_REVISION_MISMATCH;
 
-		p->PinType = AlphaNumericPinType;
+		p->PinType = vs->reader->capabilities & SC_READER_CAP_PIN_PAD ? ExternalPinType : AlphaNumericPinType;
 		p->dwFlags = 0;
 		switch (dwFlags)   {
 			case ROLE_USER:
@@ -3664,14 +3700,18 @@ DWORD WINAPI CardSetProperty(__in   PCARD_DATA pCardData,
 	__in DWORD cbDataLen,
 	__in DWORD dwFlags)
 {
+	VENDOR_SPECIFIC *vs;
+
 	logprintf(pCardData, 1, "\nP:%d T:%d pCardData:%p ",GetCurrentProcessId(), GetCurrentThreadId(), pCardData);
 	logprintf(pCardData, 1, "CardSetProperty\n");
 
 	if (!pCardData)
 		return SCARD_E_INVALID_PARAMETER;
 
-	logprintf(pCardData, 2, "CardSetProperty wszProperty=%S, cbDataLen=%u, dwFlags=%u",\
-		NULLWSTR(wszProperty),cbDataLen,dwFlags);
+	logprintf(pCardData, 2, "CardSetProperty wszProperty=%S, pbData=%p, cbDataLen=%u, dwFlags=%u",\
+		NULLWSTR(wszProperty),pbData,cbDataLen,dwFlags);
+
+	vs = (VENDOR_SPECIFIC*)(pCardData->pvVendorSpecific);
 
 	if (!wszProperty)
 		return SCARD_E_INVALID_PARAMETER;
@@ -3683,8 +3723,11 @@ DWORD WINAPI CardSetProperty(__in   PCARD_DATA pCardData,
 	if (dwFlags)
 		return SCARD_E_INVALID_PARAMETER;
 
-	if (wcscmp(CP_PIN_CONTEXT_STRING, wszProperty) == 0)
+	if (wcscmp(CP_PIN_CONTEXT_STRING, wszProperty) == 0) {
+		vs->wszPinContext = (LPWSTR) pbData;
+		logprintf(pCardData, 3, "Saved PIN context string: %S\n", pbData);
 		return SCARD_S_SUCCESS;
+	}
 
 	if (wcscmp(CP_CARD_CACHE_MODE, wszProperty) == 0 ||
 			wcscmp(CP_SUPPORTS_WIN_X509_ENROLLMENT, wszProperty) == 0 ||
@@ -3696,15 +3739,20 @@ DWORD WINAPI CardSetProperty(__in   PCARD_DATA pCardData,
 	if (!pbData || !cbDataLen)
 		return SCARD_E_INVALID_PARAMETER;
 
+	/* This property and CP_PIN_CONTEXT_STRING are set just prior to a call to
+	 * CardAuthenticateEx if the PIN required is declared of type ExternalPinType.
+	 */
 	if (wcscmp(CP_PARENT_WINDOW, wszProperty) == 0) {
-		if (cbDataLen != sizeof(DWORD))   {
+		if (cbDataLen != sizeof(HWND))   {
 			return SCARD_E_INVALID_PARAMETER;
 		}
 		else   {
 			HWND cp = *((HWND *) pbData);
 			if (cp!=0 && !IsWindow(cp))
 				return SCARD_E_INVALID_PARAMETER;
+			vs->hwndParent = cp;
 		}
+		logprintf(pCardData, 3, "Saved parent window (%u)\n", vs->hwndParent);
 		return SCARD_S_SUCCESS;
 	}
 

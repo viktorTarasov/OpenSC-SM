@@ -251,6 +251,13 @@ enum {
 	SC_CARDCTL_SC_HSM_UNWRAP_KEY,
 
 	/*
+	 * DNIe specific calls
+	 */
+	SC_CARDCTL_DNIE_BASE = _CTL_PREFIX('D', 'N', 'I'),
+	SC_CARDCTL_DNIE_GENERATE_KEY,
+	SC_CARDCTL_DNIE_GET_INFO,
+	
+	/*
 	 * Athena
 	 */
 	SC_CARDCTL_ATHENA_BASE = _CTL_PREFIX('A', 'T', 'H'),
@@ -938,8 +945,9 @@ typedef struct sc_cardctl_sc_hsm_init_param {
 	u8 *user_pin;				/* Initial user PIN */
 	size_t user_pin_len;		/* Length of user PIN */
 	u8 user_pin_retry_counter;	/* Retry counter default value */
-	u8 options[2];				/* Initilization options */
+	u8 options[2];				/* Initialization options */
 	char dkek_shares;			/* Number of DKEK shares, 0 for card generated, -1 for none */
+	char *label;				/* Token label to be set in EF.TokenInfo (2F03) */
 } sc_cardctl_sc_hsm_init_param_t;
 
 typedef struct sc_cardctl_sc_hsm_dkek {

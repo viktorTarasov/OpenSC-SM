@@ -81,7 +81,6 @@ enum {
 #define NELEMENTS(x)	(sizeof(x)/sizeof((x)[0]))
 
 static int	authenticate(sc_pkcs15_object_t *obj);
-static int	pubkey_pem_encode(sc_pkcs15_pubkey_t *, sc_pkcs15_der_t *, sc_pkcs15_der_t *);
 
 static const struct option options[] = {
 	{ "learn-card",		no_argument, NULL,		'L' },
@@ -647,6 +646,9 @@ static int read_public_key(void)
 	sc_pkcs15_cert_t *cert = NULL;
 	sc_pkcs15_der_t pem_key;
 
+	pem_key.value = NULL;
+	pem_key.len = 0;
+
 	id.len = SC_PKCS15_MAX_ID_SIZE;
 	sc_pkcs15_hex_string_to_id(opt_pubkey, &id);
 
@@ -682,7 +684,7 @@ static int read_public_key(void)
 		return 1;
 	}
 
-	r = pubkey_pem_encode(pubkey, &pubkey->data, &pem_key);
+	r = sc_pkcs15_encode_pubkey_as_spki(ctx, pubkey, &pem_key.value, &pem_key.len);
 	if (r < 0) {
 		fprintf(stderr, "Error encoding PEM key: %s\n", sc_strerror(r));
 		r = 1;
@@ -1337,7 +1339,7 @@ static int unblock_pin(void)
 		if (puk_obj)   {
 			struct sc_pkcs15_auth_info *puk_info = (sc_pkcs15_auth_info_t *) puk_obj->data;
 
-			if (puk_info->auth_type == SC_PKCS15_TYPE_AUTH_PIN)    {
+			if (puk_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)    {
 				/* TODO: Print PUK's label */
 				puk = get_pin("Enter PUK", puk_obj);
 				if (!pinpad_present && puk == NULL)
@@ -1354,6 +1356,7 @@ static int unblock_pin(void)
 	if (puk == NULL && verbose)
 		printf("PUK value will be prompted with pinpad.\n");
 
+	/* FIXME should OPENSSL_cleanse on pin/puk data */
 	pin = opt_pin ? opt_pin : opt_newpin;
 	while (pin == NULL) {
 		u8 *pin2;
@@ -1381,6 +1384,7 @@ static int unblock_pin(void)
 	r = sc_pkcs15_unblock_pin(p15card, pin_obj,
 			puk, puk ? strlen((char *) puk) : 0,
 			pin, pin ? strlen((char *) pin) : 0);
+	/* FIXME must free the puk somewhere */
 	if (r == SC_ERROR_PIN_CODE_INCORRECT) {
 		fprintf(stderr, "PUK code incorrect; tries left: %d\n", pinfo->tries_left);
 		return 3;
@@ -1474,6 +1478,7 @@ static int change_pin(void)
 	}
 	if (verbose)
 		printf("PIN code changed successfully.\n");
+	/* FIXME must free the pincode somewhere */
 	return 0;
 }
 
@@ -1483,6 +1488,7 @@ static int read_and_cache_file(const sc_path_t *path)
 	const sc_acl_entry_t *e;
 	u8 *buf;
 	int r;
+	size_t size;
 
 	if (verbose) {
 		printf("Reading file ");
@@ -1500,12 +1506,17 @@ static int read_and_cache_file(const sc_path_t *path)
 			printf("Skipping; ACL for read operation is not NONE.\n");
 		return -1;
 	}
-	buf = malloc(tfile->size);
+	if (tfile->size) {
+		size = 1024;
+	} else {
+		size = tfile->size;
+	}
+	buf = malloc(size);
 	if (!buf) {
 		printf("out of memory!");
 		return -1;
 	}
-	r = sc_read_binary(card, 0, buf, tfile->size, 0);
+	r = sc_read_binary(card, 0, buf, size, 0);
 	if (r < 0) {
 		fprintf(stderr, "sc_read_binary() failed: %s\n", sc_strerror(r));
 		free(buf);
@@ -1811,6 +1822,8 @@ int main(int argc, char * const argv[])
 	int action_count = 0;
 	sc_context_param_t ctx_param;
 
+	c = OPT_PUK;
+
 	while (1) {
 		c = getopt_long(argc, argv, "r:cuko:va:LR:CwDTU", options, &long_optind);
 		if (c == -1)
@@ -1838,6 +1851,7 @@ int main(int argc, char * const argv[])
 			break;
 		case OPT_VERIFY_PIN:
 			do_verify_pin = 1;
+			action_count++;
 			break;
 		case OPT_CHANGE_PIN:
 			do_change_pin = 1;
@@ -2094,26 +2108,3 @@ static const struct sc_asn1_entry	c_asn1_pem_key[] = {
 	{ "publicKey",	SC_ASN1_STRUCT, SC_ASN1_CONS | SC_ASN1_TAG_SEQUENCE, 0, NULL, NULL},
 	{ NULL, 0, 0, 0, NULL, NULL }
 };
-
-static int pubkey_pem_encode(sc_pkcs15_pubkey_t *pubkey, sc_pkcs15_der_t *key, sc_pkcs15_der_t *out)
-{
-	struct sc_asn1_entry	asn1_pem_key[2],
-				asn1_pem_key_items[3];
-	struct sc_algorithm_id algorithm;
-	size_t key_len;
-
-	memset(&algorithm, 0, sizeof(algorithm));
-	sc_init_oid(&algorithm.oid);
-	algorithm.algorithm = pubkey->algorithm;
-	if (algorithm.algorithm == SC_ALGORITHM_GOSTR3410)
-		algorithm.params = &pubkey->u.gostr3410.params;
-
-	sc_copy_asn1_entry(c_asn1_pem_key, asn1_pem_key);
-	sc_copy_asn1_entry(c_asn1_pem_key_items, asn1_pem_key_items);
-	sc_format_asn1_entry(asn1_pem_key + 0, asn1_pem_key_items, NULL, 1);
-	sc_format_asn1_entry(asn1_pem_key_items + 0, &algorithm, NULL, 1);
-	key_len = 8 * key->len;
-	sc_format_asn1_entry(asn1_pem_key_items + 1, key->value, &key_len, 1);
-
-	return sc_asn1_encode(ctx, asn1_pem_key, &out->value, &out->len);
-}

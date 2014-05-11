@@ -45,6 +45,12 @@ app default {
 	#
 	# paranoid_memory = false;
 
+        # Enable default card driver
+        # Default card driver is explicitely enabled for the 'opensc-explorer' and 'opensc-tool'.
+        #
+        # Default: false
+        # enable_default_driver = true;
+
 	# CT-API module configuration.
 	reader_driver ctapi {
 		# module @libdir@/libtowitoko.so {
@@ -323,7 +329,7 @@ app default {
 	# Athena Laser card ATRs
 	card_atr 3B:DC:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:66:00:00:00:00:00:00:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:ff:ff:ff:ff:ff:ff:f0:ff:00:00:00:00:00:00:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena Laser IDProtect(X)";
 
@@ -355,7 +361,7 @@ app default {
 	}
 	card_atr 3B:D5:00:FF:80:91:FE:1F:C3:80:73:C8:21:10:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:ff:ff:ff:ff:ff:ff:f0:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER IDProtect";
 		sm_min_level = 0;
@@ -371,7 +377,7 @@ app default {
 	}
 	card_atr 3B:6C:00:FF:80:73:C8:21:13:66:01:06:11:59:00:01 {
 		atrmask = "ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER JaCarta EMV T0";
 		sm_min_level = 0;
@@ -387,7 +393,7 @@ app default {
 	}
 	card_atr 3B:FC:13:00:FF:81:31:FE:45:80:73:C8:21:13:66:01:06:11:59:00:01:3A {
 		atrmask = "ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER JaCarta EMV T1";
 		sm_min_level = 0;
@@ -403,7 +409,7 @@ app default {
 	}
 	card_atr 3B:FC:00:00:FF:10:00:80:73:C8:21:10:66:00:00:00:00:00:00 {
 		atrmask = "ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:f0:ff:00:00:00:00:00:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER PayProtect";
 		sm_min_level = 0;
@@ -419,7 +425,7 @@ app default {
 	}
 	card_atr 3B:9A:00:81:31:FE:45:54:69:63:54:6F:6B:20:31:2E:30:00 {
 		atrmask = "ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER TicTok V1.0";
 		sm_min_level = 0;
@@ -435,7 +441,7 @@ app default {
 	}
 	card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:31:2E:00:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER TicTok V1.x";
 		sm_min_level = 0;
@@ -451,7 +457,7 @@ app default {
 	}
 	card_atr 3B:DA:00:FF:80:B1:FE:00:1F:C3:54:69:63:54:6F:6B:20:32:2E:00:00 {
 		atrmask = "ff:ff:00:ff:f0:ff:ff:00:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:ff:00:00";
-		type = 27001;
+		type = 32001;
 		driver = "laser";
 		name = "Athena LASER TicTok V2.x";
 		sm_min_level = 0;
@@ -757,6 +763,10 @@ app opensc-pkcs11 {
 		# create_slots_for_pins = "user,sign";
 		# create_slots_for_pins = application;
 		# create_slots_for_pins = "application,sign";
+		#
+		# For the module to simulate the opensc-onepin module behavior the following option
+		# must be set:
+		# create_slots_for_pins = "user"
 
                 # Enable C_Login to accept all PIN's lengths.
                 #

@@ -46,6 +46,7 @@ enum {
 	SC_CARD_TYPE_CARDOS_M4_2C,
 	SC_CARD_TYPE_CARDOS_CIE_V1, /* Italian CIE (eID) v1 */
 	SC_CARD_TYPE_CARDOS_M4_4,
+	SC_CARD_TYPE_CARDOS_V5_0,
 
 	/* flex/cyberflex drivers */
 	SC_CARD_TYPE_FLEX_BASE = 2000,
@@ -166,6 +167,7 @@ enum {
 	SC_CARD_TYPE_GEMSAFEV1_BASE = 21000,
 	SC_CARD_TYPE_GEMSAFEV1_GENERIC,
 	SC_CARD_TYPE_GEMSAFEV1_PTEID,
+	SC_CARD_TYPE_GEMSAFEV1_SEEID,
 
 	/* IAS cards */
 	SC_CARD_TYPE_IAS_BASE = 22000,
@@ -192,8 +194,15 @@ enum {
 	/* SmartCard-HSM */
 	SC_CARD_TYPE_SC_HSM = 26000,
 
+	/* Spanish DNIe card */
+	SC_CARD_TYPE_DNIE_BASE = 27000,
+	SC_CARD_TYPE_DNIE_BLANK, /* ATR LC byte: 00 */
+	SC_CARD_TYPE_DNIE_ADMIN, /* ATR LC byte: 01 */
+	SC_CARD_TYPE_DNIE_USER,  /* ATR LC byte: 03 */
+	SC_CARD_TYPE_DNIE_TERMINATED, /* ATR LC byte: 0F */
+
 	/* Athena */
-	SC_CARD_TYPE_ATHENA = 27000,
+	SC_CARD_TYPE_ATHENA = 32000,
 	SC_CARD_TYPE_ATHENA_LASER
 };
 
@@ -226,11 +235,11 @@ extern sc_card_driver_t *sc_get_westcos_driver(void);
 extern sc_card_driver_t *sc_get_myeid_driver(void);
 extern sc_card_driver_t *sc_get_ias_driver(void);
 extern sc_card_driver_t *sc_get_sc_hsm_driver(void);
-extern sc_card_driver_t *sc_get_javacard_driver(void);
 extern sc_card_driver_t *sc_get_itacns_driver(void);
 extern sc_card_driver_t *sc_get_authentic_driver(void);
 extern sc_card_driver_t *sc_get_iasecc_driver(void);
 extern sc_card_driver_t *sc_get_epass2003_driver(void);
+extern sc_card_driver_t *sc_get_dnie_driver(void);
 extern sc_card_driver_t *sc_get_laser_driver(void);
 
 #ifdef __cplusplus
