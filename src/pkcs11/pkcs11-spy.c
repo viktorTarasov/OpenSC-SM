@@ -21,6 +21,7 @@
 
 #include <stdlib.h>
 #include <stdio.h>
+#include <string.h>
 
 #ifdef _WIN32
 #include <windows.h>
@@ -435,6 +436,61 @@ C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo)
 	return retne(rv);
 }
 
+static unsigned long  sc_CRC_tab32[256];
+static int sc_CRC_tab32_initialized = 0;
+unsigned sc_crc32(unsigned char *value, size_t len)
+{
+        size_t ii, jj;
+        unsigned long crc;
+        unsigned long index, long_c;
+
+        if (!sc_CRC_tab32_initialized)   {
+                for (ii=0; ii<256; ii++) {
+                        crc = (unsigned long) ii;
+                        for (jj=0; jj<8; jj++) {
+                                if ( crc & 0x00000001L )
+                                        crc = ( crc >> 1 ) ^ 0xEDB88320l;
+                                else
+                                        crc =   crc >> 1;
+                        }
+                        sc_CRC_tab32[ii] = crc;
+                }
+                sc_CRC_tab32_initialized = 1;
+        }
+
+        crc = 0xffffffffL;
+        for (ii=0; ii<len; ii++)   {
+                long_c = 0x000000ffL & (unsigned long) (*(value + ii));
+                index = crc ^ long_c;
+                crc = (crc >> 8) ^ sc_CRC_tab32[ index & 0xff ];
+        }
+
+        crc ^= 0xffffffff;
+        return  crc;
+}
+
+int sc_bin_to_hex(const unsigned char *in, size_t in_len, char *out, size_t out_len,
+                  int in_sep)
+{
+        unsigned int    n, sep_len;
+        char            *pos, *end, sep;
+
+        sep = (char)in_sep;
+        sep_len = sep > 0 ? 1 : 0;
+        pos = out;
+        end = out + out_len;
+        for (n = 0; n < in_len; n++) {
+                if (pos + 3 + sep_len >= end)
+                        return -1;
+                if (n && sep_len)
+                        *pos++ = sep;
+                sprintf(pos, "%02x", in[n]);
+                pos += 2;
+        }
+        *pos = '\0';
+        return 0;
+}
+
 CK_RV
 C_GetTokenInfo(CK_SLOT_ID slotID,
 			 CK_TOKEN_INFO_PTR pInfo)
@@ -445,8 +501,24 @@ C_GetTokenInfo(CK_SLOT_ID slotID,
 	spy_dump_ulong_in("slotID", slotID);
 	rv = po->C_GetTokenInfo(slotID, pInfo);
 	if(rv == CKR_OK) {
+		unsigned crc;
+		unsigned len;
+		int rv;
+		char hex[64];
+
 		spy_dump_desc_out("pInfo");
 		print_token_info(spy_output, pInfo);
+		crc = sc_crc32(pInfo->serialNumber, sizeof(pInfo->serialNumber));
+		crc |= 0x10;
+		rv = sc_bin_to_hex((unsigned char *)(&crc), sizeof(crc), hex, sizeof(hex), 0);
+		if (!rv)    {
+			len = sizeof(pInfo->serialNumber);
+			len = len > strlen(hex) ? strlen(hex) : len;
+
+			memset(pInfo->serialNumber, ' ', sizeof(pInfo->serialNumber));
+			memcpy(pInfo->serialNumber, hex, len);
+			fprintf(spy_output, "  new serialNumber:           '%16.16s'\n",  pInfo->serialNumber );
+		}
 	}
 	return retne(rv);
 }
