@@ -106,6 +106,7 @@ int sc_pkcs15_is_emulation_only(sc_card_t *card)
 		case SC_CARD_TYPE_DNIE_ADMIN:
 		case SC_CARD_TYPE_DNIE_USER:
 		case SC_CARD_TYPE_DNIE_TERMINATED:
+		case SC_CARD_TYPE_VSCTPM_GENERIC:
 			return 1;
 		default:
 			return 0;
