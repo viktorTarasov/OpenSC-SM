@@ -64,6 +64,7 @@ static int vsctpm_select_aid(struct sc_card *, struct sc_aid *, unsigned char *,
 static int vsctpm_get_data(struct sc_card *, unsigned, unsigned, unsigned char **, size_t *);
 static int vsctpm_get_md_entries(struct sc_card *);
 static int vsctpm_get_serialnr(struct sc_card *, struct sc_serial_number *);
+static int vsctpm_pin_verify(struct sc_card *, struct sc_pin_cmd_data *, int *);
 
 static int
 vsctpm_match_card(struct sc_card *card)
@@ -512,6 +513,68 @@ vsctpm_list_files(struct sc_card *card, u8 *buf, size_t buflen)
 }
 
 
+static int
+vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+        struct sc_context *ctx = card->ctx;
+        int rv = SC_ERROR_NOT_SUPPORTED;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
+                        data->cmd, data->pin_type, data->pin_reference,
+                        data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
+
+        switch (data->cmd)   {
+        case SC_PIN_CMD_VERIFY:
+                rv = vsctpm_pin_verify(card, data, tries_left);
+                break;
+        case SC_PIN_CMD_CHANGE:
+        case SC_PIN_CMD_UNBLOCK:
+        case SC_PIN_CMD_GET_INFO:
+        default:
+                sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
+                rv = SC_ERROR_NOT_SUPPORTED;
+        }
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
+{
+        struct sc_context *ctx = card->ctx;
+        struct sc_apdu apdu;
+        int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
+
+        if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
+                sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
+        }
+        else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
+                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
+                apdu.data = pin_cmd->pin1.data;
+                apdu.datalen = pin_cmd->pin1.len;
+                apdu.lc = pin_cmd->pin1.len;
+        }
+        else   {
+                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+        }
+
+        rv = sc_transmit_apdu(card, &apdu);
+        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+
+        if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
+                *tries_left = apdu.sw2 & 0x0F;
+
+        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+
 static struct
 sc_card_driver *sc_get_driver(void)
 {
@@ -525,7 +588,7 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.select_file = vsctpm_select_file;
 	vsctpm_ops.card_ctl = vsctpm_card_ctl;
 	vsctpm_ops.list_files = vsctpm_list_files;
-
+	vsctpm_ops.pin_cmd = vsctpm_pin_cmd;
 	return &vsctpm_drv;
 }
 
