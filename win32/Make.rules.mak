@@ -3,28 +3,17 @@ OPENSC_FEATURES = pcsc
 #Include support for minidriver
 MINIDRIVER_DEF = /DENABLE_MINIDRIVER
 
+PKCS11_VSC_DEF = /DENABLE_PKCS11_VSC
+
 #Build MSI with the Windows Installer XML (WIX) toolkit, requires WIX >= 3.6
-!IF "$(BUILD_ON)" == "WIN64"
-WIX_PATH = "C:\Program Files (x86)\Windows Installer XML v3.6"
-WIX_INCL_DIR = "/IC:\Program Files (x86)\Windows Installer XML v3.6\SDK\inc"
+WIX_PATH = C:\Program Files (x86)\WiX Toolset v3.8
+WIX_INCL_DIR = "/I$(WIX_PATH)\SDK\VS2010\inc"
+WIX_LIB_DIR = $(WIX_PATH)\SDK\VS2010\lib
 !IF "$(BUILD_FOR)" == "WIN64"
-WIX_LIBS = "C:\Program Files (x86)\Windows Installer XML v3.6\SDK\lib\dutil_2010_x64.lib" "C:\Program Files (x86)\Windows Installer XML v3.6\SDK\lib\wcautil_2010_x64.lib"
+WIX_LIBS = "$(WIX_LIB_DIR)\x64\dutil.lib" "$(WIX_LIB_DIR)\x64\wcautil.lib"
 !ELSE
-WIX_LIBS = "C:\Program Files (x86)\Windows Installer XML v3.6\SDK\lib\dutil_2010.lib" "C:\Program Files (x86)\Windows Installer XML v3.6\SDK\lib\wcautil_2010.lib"
+WIX_LIBS = "$(WIX_LIB_DIR)\x86\dutil.lib" "$(WIX_LIB_DIR)\x86\wcautil.lib"
 !ENDIF
-
-!ELSE
-WIX_PATH = "C:\Program Files\Windows Installer XML v3.6"
-WIX_INCL_DIR = "/IC:\Program Files\Windows Installer XML v3.6\SDK\inc"
-!IF "$(BUILD_FOR)" == "WIN64"
-WIX_LIBS = "C:\Program Files\Windows Installer XML v3.6\SDK\lib\dutil_2010_x64.lib" "C:\Program Files\Windows Installer XML v3.6\SDK\lib\wcautil_2010_x64.lib"
-!ELSE
-WIX_LIBS = "C:\Program Files\Windows Installer XML v3.6\SDK\lib\dutil_2010.lib" "C:\Program Files\Windows Installer XML v3.6\SDK\lib\wcautil_2010.lib"
-!ENDIF
-
-!ENDIF
-
-
 
 #Include support for Secure Messaging
 SM_DEF = /DENABLE_SM
@@ -88,10 +77,10 @@ ALL_INCLUDES = /I$(TOPDIR)\win32 /I$(TOPDIR)\src $(OPENSSL_INCL_DIR) $(ZLIB_INCL
 !IF "$(DEBUG_DEF)" == "/DDEBUG"
 LINKDEBUGFLAGS = /NODEFAULTLIB:LIBCMT /DEBUG
 CODE_OPTIMIZATION =
-COPTS =  /W3 /D_CRT_SECURE_NO_DEPRECATE /MTd /nologo /DHAVE_CONFIG_H $(ALL_INCLUDES) /D_WIN32_WINNT=0x0502 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) $(MINIDRIVER_DEF) $(SM_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\"" /DDEBUG /Zi /Od
+COPTS =  /W3 /D_CRT_SECURE_NO_DEPRECATE /MTd /nologo /DHAVE_CONFIG_H $(ALL_INCLUDES) /D_WIN32_WINNT=0x0502 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) $(MINIDRIVER_DEF) $(PKCS11_VSC_DEF) $(SM_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\"" /DDEBUG /Zi /Od
 !ELSE
 LINKDEBUGFLAGS = /NODEFAULTLIB:LIBCMTD
-COPTS =  /W3 /D_CRT_SECURE_NO_DEPRECATE /MT /nologo /DHAVE_CONFIG_H $(ALL_INCLUDES) /D_WIN32_WINNT=0x0502 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) $(MINIDRIVER_DEF) $(SM_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\""
+COPTS =  /W3 /D_CRT_SECURE_NO_DEPRECATE /MT /nologo /DHAVE_CONFIG_H $(ALL_INCLUDES) /D_WIN32_WINNT=0x0502 /DWIN32_LEAN_AND_MEAN $(OPENSSL_DEF) $(ZLIB_DEF) $(MINIDRIVER_DEF) $(PKCS11_VSC_DEF) $(SM_DEF) /DOPENSC_FEATURES="\"$(OPENSC_FEATURES)\""
 !ENDIF
 
 

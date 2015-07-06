@@ -42,6 +42,7 @@ libopensc_la_SOURCES = \
 	card-iasecc.c iasecc-sdo.c iasecc-sm.c card-sc-hsm.c \
 	card-dnie.c cwa14890.c cwa-dnie.c user-interface.c \
 	card-isoApplet.c card-masktech.c \
+	card-vsctpm.c \
 	\
 	pkcs15-openpgp.c pkcs15-infocamere.c pkcs15-starcert.c \
 	pkcs15-tcos.c pkcs15-esteid.c pkcs15-postecert.c pkcs15-gemsafeGPK.c \
@@ -49,6 +50,7 @@ libopensc_la_SOURCES = \
 	pkcs15-esinit.c pkcs15-westcos.c pkcs15-pteid.c pkcs15-oberthur.c \
 	pkcs15-itacns.c pkcs15-gemsafeV1.c pkcs15-sc-hsm.c \
 	pkcs15-dnie.c \
+	pkcs15-vsctpm.c \
 	compression.c p15card-helper.c sm.c \
 	libopensc.exports
 if WIN32

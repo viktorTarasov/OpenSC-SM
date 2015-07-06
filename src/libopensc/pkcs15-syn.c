@@ -33,44 +33,26 @@
 #include "asn1.h"
 #include "pkcs15.h"
 
-extern int sc_pkcs15emu_westcos_init_ex(sc_pkcs15_card_t *p15card, 
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_openpgp_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_infocamere_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_starcert_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_tcos_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_esteid_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_postecert_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_piv_init_ex(sc_pkcs15_card_t *p15card,
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_gemsafeGPK_init_ex(sc_pkcs15_card_t *p15card,
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_gemsafeV1_init_ex(sc_pkcs15_card_t *p15card,
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_actalis_init_ex(sc_pkcs15_card_t *p15card,
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_atrust_acos_init_ex(sc_pkcs15_card_t *p15card,
-					sc_pkcs15emu_opt_t *opts);
-extern int sc_pkcs15emu_tccardos_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_entersafe_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_pteid_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_oberthur_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_itacns_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_sc_hsm_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
-extern int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t *,
-					sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_westcos_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_openpgp_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_infocamere_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_starcert_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_tcos_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_esteid_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_postecert_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_piv_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_gemsafeGPK_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_gemsafeV1_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_actalis_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_atrust_acos_init_ex(sc_pkcs15_card_t *p15card, sc_pkcs15emu_opt_t *opts);
+extern int sc_pkcs15emu_tccardos_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_entersafe_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_pteid_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_oberthur_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_itacns_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_sc_hsm_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
+extern int sc_pkcs15emu_vsctpm_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
 
 static struct {
 	const char *		name;
@@ -93,8 +75,9 @@ static struct {
 	{ "entersafe",  sc_pkcs15emu_entersafe_init_ex  },
 	{ "pteid",	sc_pkcs15emu_pteid_init_ex	},
 	{ "oberthur",   sc_pkcs15emu_oberthur_init_ex	},
-	{ "sc-hsm",   sc_pkcs15emu_sc_hsm_init_ex	},
-	{ "dnie",       sc_pkcs15emu_dnie_init_ex   },
+	{ "sc-hsm",	sc_pkcs15emu_sc_hsm_init_ex	},
+	{ "dnie",       sc_pkcs15emu_dnie_init_ex	},
+	{ "vsctpm",     sc_pkcs15emu_vsctpm_init_ex	},
 	{ NULL, NULL }
 };
 
@@ -111,7 +94,7 @@ int sc_pkcs15_is_emulation_only(sc_card_t *card)
 {
 	switch (card->type) {
 		case SC_CARD_TYPE_MCRD_ESTEID_V10:
-		case SC_CARD_TYPE_MCRD_ESTEID_V11:		
+		case SC_CARD_TYPE_MCRD_ESTEID_V11:
 		case SC_CARD_TYPE_MCRD_ESTEID_V30:
 		case SC_CARD_TYPE_IAS_PTEID:
 		case SC_CARD_TYPE_GEMSAFEV1_PTEID:
@@ -155,7 +138,7 @@ sc_pkcs15_bind_synthetic(sc_pkcs15_card_t *p15card)
 		}
 	} else {
 		/* we have a conf file => let's use it */
-		int builtin_enabled; 
+		int builtin_enabled;
 		const scconf_list *list, *item;
 
 		builtin_enabled = scconf_get_bool(conf_block, "enable_builtin_emulation", 1);
@@ -257,7 +240,7 @@ static int parse_emu_block(sc_pkcs15_card_t *p15card, scconf_block *conf)
 		unsigned int major = 0, minor = 0, fix = 0;
 
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "Loading %s\n", module_name);
-		
+
 		/* try to open dynamic library */
 		handle = sc_dlopen(module_name);
 		if (!handle) {
@@ -401,7 +384,7 @@ int sc_pkcs15emu_add_ec_pubkey(sc_pkcs15_card_t *p15card,
 	const sc_pkcs15_object_t *obj, const sc_pkcs15_pubkey_info_t *in_key)
 {
 	sc_pkcs15_pubkey_info_t key = *in_key;
-	
+
 	if (key.access_flags == 0)
 		key.access_flags = SC_PKCS15_PRKEY_ACCESS_EXTRACTABLE;
 
