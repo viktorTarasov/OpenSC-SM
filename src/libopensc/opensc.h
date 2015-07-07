@@ -303,6 +303,8 @@ typedef struct sc_reader {
 	void *drv_data;
 	char *name;
 
+	char friendly_name[64];
+
 	unsigned long flags, capabilities;
 	unsigned int supported_protocols, active_protocol;
 

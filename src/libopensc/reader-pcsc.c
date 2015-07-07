@@ -685,6 +685,7 @@ static int pcsc_init(sc_context_t *ctx)
 	gpriv->SCardCancel = (SCardCancel_t)sc_dlsym(gpriv->dlhandle, "SCardCancel");
 	gpriv->SCardTransmit = (SCardTransmit_t)sc_dlsym(gpriv->dlhandle, "SCardTransmit");
 	gpriv->SCardListReaders = (SCardListReaders_t)sc_dlsym(gpriv->dlhandle, "SCardListReaders");
+	gpriv->SCardGetAttrib = (SCardGetAttrib_t)sc_dlsym(gpriv->dlhandle, "SCardGetAttrib");
 
 	if (gpriv->SCardConnect == NULL)
 		gpriv->SCardConnect = (SCardConnect_t)sc_dlsym(gpriv->dlhandle, "SCardConnectA");
@@ -696,7 +697,7 @@ static int pcsc_init(sc_context_t *ctx)
 		gpriv->SCardListReaders = (SCardListReaders_t)sc_dlsym(gpriv->dlhandle, "SCardListReadersA");
 
 	/* If we have SCardGetAttrib it is correct API */
-	if (sc_dlsym(gpriv->dlhandle, "SCardGetAttrib") != NULL) {
+	if (gpriv->SCardGetAttrib != NULL) {
 #ifdef __APPLE__
 		gpriv->SCardControl = (SCardControl_t)sc_dlsym(gpriv->dlhandle, "SCardControl132");
 #endif
@@ -817,7 +818,10 @@ err:
     return flags;
 }
 
-static void detect_reader_features(sc_reader_t *reader, SCARDHANDLE card_handle) {
+
+static void
+detect_reader_features(sc_reader_t *reader, SCARDHANDLE card_handle)
+{
 	sc_context_t *ctx = reader->ctx;
 	struct pcsc_global_private_data *gpriv = (struct pcsc_global_private_data *) ctx->reader_drv_data;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
@@ -828,10 +832,53 @@ static void detect_reader_features(sc_reader_t *reader, SCARDHANDLE card_handle)
 	const char *log_disabled = "but it's disabled in configuration file";
 	const char *broken_readers[] = {"HP USB Smart Card Keyboard"};
 
-	SC_FUNC_CALLED(ctx, SC_LOG_DEBUG_NORMAL);
+	LOG_FUNC_CALLED(ctx);
 
 	if (gpriv->SCardControl == NULL)
 		return;
+
+	if (gpriv->SCardGetAttrib)   {
+		DWORD size;
+
+		memset(reader->friendly_name, 0, sizeof(reader->friendly_name));
+#ifdef _WIN32
+		{
+			unsigned char unit[8];
+
+			memset(unit, 0, sizeof(unit));
+			size = sizeof(unit);
+			rv = gpriv->SCardGetAttrib(card_handle, SCARD_ATTR_DEVICE_UNIT, unit, &size);
+			if (rv == SCARD_S_SUCCESS)   {
+				long rc;
+				int num;
+				HKEY hKey;
+				char reg_path[0x100];
+
+				num = unit[0] + 0x100 * (unit[1] + 0x100 * unit[2]);
+				sc_log(ctx, "Reader device unit '%i'", num);
+
+				snprintf(reg_path, sizeof(reg_path), "SYSTEM\\CurrentControlSet\\Enum\\ROOT\\SMARTCARDREADER\\%04i", num);
+				sc_log(ctx, "REG path '%s'", reg_path);
+				rc = RegOpenKeyExA(HKEY_LOCAL_MACHINE, reg_path, 0, KEY_QUERY_VALUE, &hKey);
+				if (rc == ERROR_SUCCESS) {
+					size = sizeof(reader->friendly_name);
+					rc = RegQueryValueEx( hKey, "FriendlyName", NULL, NULL, (LPBYTE) reader->friendly_name, &size);
+					if (rc != ERROR_SUCCESS)   {
+						sc_log(ctx, "Failed to get VSC reader friendly name");
+						memset(reader->friendly_name, 0, sizeof(reader->friendly_name));
+					}
+					RegCloseKey(hKey);
+				}
+			}
+		}
+#endif
+		if (strlen(reader->friendly_name) == 0)   {
+			size = sizeof(reader->friendly_name);
+			rv = gpriv->SCardGetAttrib(card_handle, SCARD_ATTR_DEVICE_FRIENDLY_NAME_A, reader->friendly_name, &size);
+		}
+
+		sc_log(ctx, "Reader friendly name '%s'", reader->friendly_name);
+	}
 
 	rv = gpriv->SCardControl(card_handle, CM_IOCTL_GET_FEATURE_REQUEST, NULL, 0, feature_buf, sizeof(feature_buf), &feature_len);
 	if (rv != (LONG)SCARD_S_SUCCESS) {
@@ -979,8 +1026,7 @@ static int pcsc_detect_readers(sc_context_t *ctx)
 			rv = SCARD_E_INVALID_HANDLE;
 		}
 		else {
-			rv = gpriv->SCardListReaders(gpriv->pcsc_ctx, NULL, NULL,
-					      (LPDWORD) &reader_buf_size);
+			rv = gpriv->SCardListReaders(gpriv->pcsc_ctx, NULL, NULL, (LPDWORD) &reader_buf_size);
 			if (rv == SCARD_E_NO_SERVICE) {
 				gpriv->SCardReleaseContext(gpriv->pcsc_ctx);
 				gpriv->pcsc_ctx = -1;
