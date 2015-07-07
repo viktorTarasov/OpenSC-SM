@@ -6,7 +6,7 @@ EXTRA_DIST = Makefile.mak
 
 lib_LTLIBRARIES = libopensc.la
 noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
-	internal-winscard.h p15card-helper.h \
+	internal-winscard.h p15card-helper.h reader-pcsc.h \
 	opensc.h pkcs15.h \
 	cardctl.h asn1.h log.h \
 	errors.h types.h compression.h itacns.h iso7816.h \
