@@ -448,14 +448,19 @@ static int pcsc_connect(sc_reader_t *reader)
 	return SC_SUCCESS;
 }
 
-static int pcsc_disconnect(sc_reader_t * reader)
+static int pcsc_disconnect(struct sc_reader * reader)
 {
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
 
-	SC_FUNC_CALLED(reader->ctx, SC_LOG_DEBUG_NORMAL);
+	LOG_FUNC_CALLED(reader->ctx);
 
 	priv->gpriv->SCardDisconnect(priv->pcsc_card, priv->gpriv->disconnect_action);
 	reader->flags = 0;
+
+#if ENABLE_MINIDRIVER
+	pcsc_md_reset_card_data (reader);
+#endif
+
 	return SC_SUCCESS;
 }
 

@@ -81,7 +81,8 @@ struct pcsc_global_private_data {
 #ifdef ENABLE_MINIDRIVER
 struct pcsc_md_data   {
 	CARD_DATA       card_data;
-	HMODULE         md_hmodule;
+	HMODULE         hmd;
+	PFN_CARD_ACQUIRE_CONTEXT acquire_context;
 };
 #endif
 
@@ -127,7 +128,10 @@ struct pcsc_private_data {
 #define SCARD_ATTR_DEVICE_FRIENDLY_NAME_A SCARD_ATTR_VALUE(SCARD_CLASS_SYSTEM, 0x0003)
 #define SCARD_ATTR_DEVICE_SYSTEM_NAME_A SCARD_ATTR_VALUE(SCARD_CLASS_SYSTEM, 0x0004)
 
+#define VSC_MODULE_NAME "msclmd.dll"
+
 int pcsc_md_init_card_data (struct sc_reader *);
+void pcsc_md_reset_card_data (struct sc_reader *);
 
 #endif
 

@@ -36,7 +36,6 @@
 
 #ifdef ENABLE_MINIDRIVER
 
-
 /**
  * CSP management functions and cache context, needed by minidrivers'
  * CardAcquireContext functions
@@ -65,9 +64,13 @@ CSP_Free(LPVOID Address)
 int
 pcsc_md_init_card_data(struct sc_reader *reader)
 {
+	struct sc_context *ctx = reader->ctx;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
-	int rv;
+	HRESULT hRes = S_OK;
 
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&priv->md, 0, sizeof(priv->md));
 	priv->md.card_data.hScard = priv->pcsc_card;
 	priv->md.card_data.hSCardCtx = priv->gpriv->pcsc_ctx;
 
@@ -78,7 +81,45 @@ pcsc_md_init_card_data(struct sc_reader *reader)
 	priv->md.card_data.pfnCspReAlloc = (PFN_CSP_REALLOC)&CSP_ReAlloc;
 	priv->md.card_data.pfnCspFree    = (PFN_CSP_FREE)&CSP_Free;
 
-	return SC_SUCCESS;
+	priv->md.card_data.pwszCardName  = reader->friendly_name;
+
+	priv->md.hmd = LoadLibrary(VSC_MODULE_NAME);
+	if (priv->md.hmd == NULL) {
+		hRes = GetLastError();
+		sc_log(ctx, "Failed to load VSC module: error %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	priv->md.acquire_context = (PFN_CARD_ACQUIRE_CONTEXT)GetProcAddress(priv->md.hmd, "CardAcquireContext");
+	if (!priv->md.acquire_context)   {
+		sc_log(ctx, "GetProcAddress(CardAcquireContext) error");
+		goto err;
+	}
+
+	sc_log(reader->ctx, "Init MD card data: priv->md.hmd %p; acquire context func %p", priv->md.hmd, priv->md.acquire_context);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+err:
+	hRes = GetLastError();
+	sc_log(ctx, "Last error %lX", hRes);
+	pcsc_md_reset_card_data(reader);
+	LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+}
+
+
+void
+pcsc_md_reset_card_data(struct sc_reader *reader)
+{
+	struct sc_context *ctx = reader->ctx;
+	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.hmd)
+		FreeLibrary(priv->md.hmd);
+
+	memset(&priv->md, 0, sizeof(priv->md));
 }
 
 
