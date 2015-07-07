@@ -874,7 +874,7 @@ detect_reader_features(sc_reader_t *reader, SCARDHANDLE card_handle)
 #endif
 		if (strlen(reader->friendly_name) == 0)   {
 			size = sizeof(reader->friendly_name);
-			rv = gpriv->SCardGetAttrib(card_handle, SCARD_ATTR_DEVICE_FRIENDLY_NAME_A, reader->friendly_name, &size);
+			rv = gpriv->SCardGetAttrib(card_handle, SCARD_ATTR_DEVICE_FRIENDLY_NAME_A, (unsigned char *)reader->friendly_name, &size);
 		}
 
 		sc_log(ctx, "Reader friendly name '%s'", reader->friendly_name);

@@ -125,6 +125,9 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	strcpy(p15card->tokeninfo->manufacturer_id, MANU_ID);
 
+	if (!p15card->tokeninfo->label)
+		p15card->tokeninfo->label = strdup(card->reader->friendly_name);
+
 	rv = vsctpm_add_user_pin (p15card);
 	LOG_TEST_RET(ctx, rv, "Failed to add User PIN object");
 
