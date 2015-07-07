@@ -106,7 +106,7 @@ struct pcsc_private_data {
 	int locked;
 
 #ifdef ENABLE_MINIDRIVER
-	struct pcsc_md_data md_data;
+	struct pcsc_md_data md;
 #endif
 };
 
@@ -126,6 +126,8 @@ struct pcsc_private_data {
 #define SCARD_ATTR_VALUE(Class, Tag) ((((ULONG)(Class)) << 16) | ((ULONG)(Tag)))
 #define SCARD_ATTR_DEVICE_FRIENDLY_NAME_A SCARD_ATTR_VALUE(SCARD_CLASS_SYSTEM, 0x0003)
 #define SCARD_ATTR_DEVICE_SYSTEM_NAME_A SCARD_ATTR_VALUE(SCARD_CLASS_SYSTEM, 0x0004)
+
+int pcsc_md_init_card_data (struct sc_reader *);
 
 #endif
 

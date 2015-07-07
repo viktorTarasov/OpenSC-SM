@@ -28,7 +28,7 @@ libopensc_la_SOURCES = \
 	\
 	muscle.c muscle-filesystem.c \
 	\
-	ctbcs.c reader-ctapi.c reader-pcsc.c reader-openct.c \
+	ctbcs.c reader-ctapi.c reader-pcsc.c reader-openct.c pcsc-md.c \
 	\
 	card-setcos.c card-miocos.c card-flex.c card-gpk.c \
 	card-cardos.c card-tcos.c card-default.c \
