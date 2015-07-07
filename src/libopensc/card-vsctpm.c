@@ -190,7 +190,7 @@ vsctpm_get_md_file (struct sc_card *card, char *dname, char *fname)
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_md_file *ret = NULL;
-	int ii;
+	size_t ii;
 
 	if (!card || !fname)
 		return NULL;
@@ -241,7 +241,7 @@ vsctpm_get_md_entries(struct sc_card *card)
 	prv_data->md_files = NULL;
 	prv_data->md_files_num = 0;
 
-	while ((ptr - blob) < blob_len)   {
+	while ((unsigned)(ptr - blob) < blob_len)   {
 		struct vsctpm_md_file mdf;
 		unsigned char *tail = NULL;
 
@@ -389,7 +389,6 @@ vsctpm_select_aid(struct sc_card *card, struct sc_aid *aid, unsigned char *out, 
 static int
 vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 {
-	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_md_file *mdf = NULL;
 	unsigned char *blob = NULL;
@@ -514,33 +513,6 @@ vsctpm_list_files(struct sc_card *card, u8 *buf, size_t buflen)
 
 
 static int
-vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
-{
-        struct sc_context *ctx = card->ctx;
-        int rv = SC_ERROR_NOT_SUPPORTED;
-
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
-                        data->cmd, data->pin_type, data->pin_reference,
-                        data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
-
-        switch (data->cmd)   {
-        case SC_PIN_CMD_VERIFY:
-                rv = vsctpm_pin_verify(card, data, tries_left);
-                break;
-        case SC_PIN_CMD_CHANGE:
-        case SC_PIN_CMD_UNBLOCK:
-        case SC_PIN_CMD_GET_INFO:
-        default:
-                sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
-                rv = SC_ERROR_NOT_SUPPORTED;
-        }
-
-        LOG_FUNC_RETURN(ctx, rv);
-}
-
-
-static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
         struct sc_context *ctx = card->ctx;
@@ -570,6 +542,78 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
                 *tries_left = apdu.sw2 & 0x0F;
 
         rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+static int
+vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+        struct sc_context *ctx = card->ctx;
+        struct sc_apdu apdu;
+        unsigned reference = data->pin_reference;
+        unsigned char pin_data[0x100];
+        int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", reference, data->pin_type, data->pin1.len, data->pin2.len);
+
+        if (!data->pin1.data && data->pin1.len)
+                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
+
+        if (!data->pin2.data && data->pin2.len)
+                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
+
+        rv = vsctpm_pin_verify(card, data, tries_left);
+        sc_log(ctx, "pin_cmd(SC_PIN_CMD_CHANGE) pin_verify returned %i", rv);
+        LOG_TEST_RET(ctx, rv, "PIN verification error");
+
+        if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
+                LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
+
+        if (data->pin1.data)
+                memcpy(pin_data, data->pin1.data, data->pin1.len);
+        if (data->pin2.data)
+                memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
+
+        sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, reference);
+        apdu.data = pin_data;
+        apdu.datalen = data->pin1.len + data->pin2.len;
+        apdu.lc = apdu.datalen;
+
+        rv = sc_transmit_apdu(card, &apdu);
+        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+        LOG_TEST_RET(ctx, rv, "PIN cmd failed");
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+        struct sc_context *ctx = card->ctx;
+        int rv = SC_ERROR_NOT_SUPPORTED;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
+                        data->cmd, data->pin_type, data->pin_reference,
+                        data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
+
+        switch (data->cmd)   {
+        case SC_PIN_CMD_VERIFY:
+                rv = vsctpm_pin_verify(card, data, tries_left);
+                break;
+        case SC_PIN_CMD_CHANGE:
+                rv = vsctpm_pin_change(card, data, tries_left);
+                break;
+        case SC_PIN_CMD_UNBLOCK:
+        case SC_PIN_CMD_GET_INFO:
+        default:
+                sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
+                rv = SC_ERROR_NOT_SUPPORTED;
+        }
 
         LOG_FUNC_RETURN(ctx, rv);
 }
