@@ -55,33 +55,29 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 	struct sc_pkcs15_auth_info auth_info;
         struct sc_pkcs15_object   obj;
 	int rv, tries_left;
-	unsigned char sopin_reference = 0x04;
 
 	LOG_FUNC_CALLED(ctx);
 
         tries_left = -1;
+/*
         rv = sc_verify(card, SC_AC_CHV, VSCTPM_USER_PIN_REF, (unsigned char *)"", 0, &tries_left);
         if (rv && rv != SC_ERROR_PIN_CODE_INCORRECT)
 		LOG_TEST_RET(ctx, rv, "Invalid state 'User PIN' object");
-
+*/
         /* add PIN */
         memset(&auth_info, 0, sizeof(auth_info));
         memset(&obj,  0, sizeof(obj));
 
-        auth_info.auth_type = SC_PKCS15_PIN_AUTH_TYPE_PIN;
+        auth_info.auth_type	= SC_PKCS15_PIN_AUTH_TYPE_PIN;
         auth_info.auth_method   = SC_AC_CHV;
         auth_info.auth_id.len = 1;
         auth_info.auth_id.value[0] = 1;
         auth_info.attrs.pin.min_length          = 8;
-        auth_info.attrs.pin.max_length          = 8;
+        auth_info.attrs.pin.max_length          = 15;
         auth_info.attrs.pin.stored_length       = 8;
         auth_info.attrs.pin.type                = SC_PKCS15_PIN_TYPE_ASCII_NUMERIC;
         auth_info.attrs.pin.reference           = VSCTPM_USER_PIN_REF;
-        auth_info.attrs.pin.pad_char            = 0xFF;
-        auth_info.attrs.pin.flags               = SC_PKCS15_PIN_FLAG_CASE_SENSITIVE
-                                | SC_PKCS15_PIN_FLAG_INITIALIZED
-                                | SC_PKCS15_PIN_FLAG_NEEDS_PADDING
-                                | SC_PKCS15_PIN_FLAG_SO_PIN;
+        auth_info.attrs.pin.flags               = SC_PKCS15_PIN_FLAG_CASE_SENSITIVE | SC_PKCS15_PIN_FLAG_INITIALIZED | SC_PKCS15_PIN_FLAG_LOCAL;
         auth_info.tries_left            = tries_left;
 
         strncpy(obj.label, "User PIN", SC_PKCS15_MAX_LABEL_SIZE-1);
