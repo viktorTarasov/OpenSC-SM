@@ -72,7 +72,7 @@ vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 	md->card_data.hScard = priv->pcsc_card;
 	md->card_data.hSCardCtx = priv->gpriv->pcsc_ctx;
 
-	md->card_data.cbAtr = card->reader->atr.len;
+	md->card_data.cbAtr = (DWORD)card->reader->atr.len;
 	md->card_data.pbAtr = card->reader->atr.value;
 
 	md->card_data.pfnCspAlloc   = (PFN_CSP_ALLOC)&CSP_Alloc;
@@ -117,6 +117,33 @@ vsctpm_md_reset_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 		FreeLibrary(md->hmd);
 
 	memset(md, 0, sizeof(struct vsctpm_md_data));
+}
+
+
+int
+vsctpm_md_get_serial(struct sc_card *card, struct vsctpm_md_data *md, struct sc_serial_number *out)
+{
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz;
+	struct sc_serial_number serial;
+
+	if (!md->card_data.pfnCardGetProperty)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = md->card_data.pfnCardGetProperty(&md->card_data, CP_CARD_SERIAL_NO,
+			serial.value, sizeof(serial.value), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_SERIAL_NO) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	serial.len = sz;
+
+	sc_log(ctx, "MD serial '%s'", sc_dump_hex(serial.value, seria.len));
+	if (out)
+		*out = serial;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

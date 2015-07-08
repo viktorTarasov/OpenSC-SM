@@ -24,6 +24,7 @@ struct vsctpm_md_data   {
 
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *, struct vsctpm_md_data *);
+int vsctpm_md_get_serial(struct sc_card *, struct vsctpm_md_data *, struct sc_serial_number *);
 
 #endif  /* ENABLE_MINIDRIVER */
 #endif /* _VSCTPM_MD_H */

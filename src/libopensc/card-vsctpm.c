@@ -665,6 +665,9 @@ vsctpm_md_acquire_context(struct sc_card *card)
 	}
 
 	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
+
+	vsctpm_md_get_serial(card, &priv->md.card_data, NULL);
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
