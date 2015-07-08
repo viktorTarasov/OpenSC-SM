@@ -645,6 +645,9 @@ vsctpm_md_acquire_context(struct sc_card *card)
 
 	LOG_FUNC_CALLED(ctx);
 
+	if (!priv->md.acquire_context)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+
 	/* Tries all versions of CARD_DATA from current version down to version 4 */
 	for (ver = CARD_DATA_CURRENT_VERSION; ver > 3; ver--)   {
 		HRESULT hRes = S_OK;
@@ -669,10 +672,22 @@ vsctpm_md_acquire_context(struct sc_card *card)
 static int
 vsctpm_md_delete_context(struct sc_card *card)
 {
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.card_data.pfnCardDeleteContext)    {
+		HRESULT hRes = S_OK;
+
+		sc_log(ctx, "Delete MD comunication context");
+		hRes = priv->md.card_data.pfnCardDeleteContext(&priv->md.card_data);
+		if (hRes != SCARD_S_SUCCESS)   {
+			sc_log(ctx, "Failed to delete MD comunication context: hRes %lX", hRes);
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		}
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
