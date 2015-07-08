@@ -125,8 +125,8 @@ vsctpm_md_get_serial(struct sc_card *card, struct vsctpm_md_data *md, struct sc_
 {
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
-	DWORD sz;
 	struct sc_serial_number serial;
+	DWORD sz;
 
 	if (!md->card_data.pfnCardGetProperty)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -139,13 +139,46 @@ vsctpm_md_get_serial(struct sc_card *card, struct vsctpm_md_data *md, struct sc_
 	}
 	serial.len = sz;
 
-	sc_log(ctx, "MD serial '%s'", sc_dump_hex(serial.value, seria.len));
+	sc_log(ctx, "MD serial '%s'", sc_dump_hex(serial.value, serial.len));
 	if (out)
 		*out = serial;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+int
+vsctpm_md_get_guid(struct sc_card *card, struct vsctpm_md_data *md, unsigned char *out, size_t *out_len)
+{
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	unsigned char guid[0x80];
+	DWORD sz;
+
+	if (!md->card_data.pfnCardGetProperty)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = md->card_data.pfnCardGetProperty(&md->card_data, CP_CARD_GUID,
+			guid, sizeof(guid), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_GUID) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "MD serial '%s'", sc_dump_hex(guid, sz));
+
+	if (!out)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	if (!out_len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	if (*out_len < sz)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	memmove(out, guid, sz);
+	*out_len = sz;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 #endif /* ENABLE_MINIDRIVER */
 
