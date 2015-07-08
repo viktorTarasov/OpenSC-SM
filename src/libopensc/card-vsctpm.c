@@ -29,6 +29,8 @@
 #include "internal.h"
 #include "cardctl.h"
 
+#include "vsctpm-md.h"
+
 static struct sc_atr_table vsctpm_atrs[] = {
 	{"3b:8d:01:80:fb:a0:00:00:03:97:42:54:46:59:03:01:c8", NULL, NULL, SC_CARD_TYPE_VSCTPM_GENERIC, 0, NULL},
 	{NULL, NULL, NULL, 0, 0, NULL}
@@ -58,6 +60,10 @@ struct vsctpm_md_file {
 struct vsctpm_private_data {
 	struct vsctpm_md_file *md_files;
 	size_t md_files_num;
+
+#if ENABLE_MINIDRIVER
+	struct vsctpm_md_data md;
+#endif
 };
 
 static int vsctpm_select_aid(struct sc_card *, struct sc_aid *, unsigned char *, size_t *);
@@ -82,6 +88,7 @@ vsctpm_match_card(struct sc_card *card)
 static int
 vsctpm_init(struct sc_card * card)
 {
+	struct vsctpm_private_data *prv_data = NULL;
 	struct sc_context *ctx = card->ctx;
 	unsigned char resp[0x100];
 	size_t resp_len = sizeof(resp);
@@ -107,6 +114,14 @@ vsctpm_init(struct sc_card * card)
 
 	rv = vsctpm_get_serialnr(card, NULL);
 	LOG_TEST_RET(ctx, rv, "Cannot set serial number");
+
+#if ENABLE_MINIDRIVER
+	prv_data = (struct vsctpm_private_data *) card->drv_data;
+        rv = vsctpm_md_init_card_data (card, &prv_data->md);
+	LOG_TEST_RET(ctx, rv, "Failed to init MD card data");
+
+        sc_log (ctx, "pcsc_connect() MD atr '%s'", sc_dump_hex(prv_data->md.card_data.pbAtr, prv_data->md.card_data.cbAtr));
+#endif
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -183,6 +198,7 @@ vsctpm_parse_md_entry(unsigned char *data, struct vsctpm_md_file *mdf, unsigned 
 
 	return SC_SUCCESS;
 }
+
 
 struct vsctpm_md_file *
 vsctpm_get_md_file (struct sc_card *card, char *dname, char *fname)
@@ -619,6 +635,46 @@ vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 }
 
 
+#if ENABLE_MINIDRIVER
+static int
+vsctpm_md_acquire_context(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+vsctpm_md_delete_context(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+vsctpm_finish(struct sc_card *card)
+{
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+
+	LOG_FUNC_CALLED(ctx);
+
+        vsctpm_md_reset_card_data (card, &prv_data->md);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+#endif /* ENABLE_MINIDRIVER */
+
 static struct
 sc_card_driver *sc_get_driver(void)
 {
@@ -633,6 +689,11 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.card_ctl = vsctpm_card_ctl;
 	vsctpm_ops.list_files = vsctpm_list_files;
 	vsctpm_ops.pin_cmd = vsctpm_pin_cmd;
+#if ENABLE_MINIDRIVER
+	vsctpm_ops.finish = vsctpm_finish;
+	vsctpm_ops.md_acquire_context = vsctpm_md_acquire_context;
+	vsctpm_ops.md_delete_context = vsctpm_md_delete_context;
+#endif /* ENABLE_MINIDRIVER */
 	return &vsctpm_drv;
 }
 

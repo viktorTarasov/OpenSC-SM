@@ -6,7 +6,7 @@ EXTRA_DIST = Makefile.mak
 
 lib_LTLIBRARIES = libopensc.la
 noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
-	internal-winscard.h p15card-helper.h reader-pcsc.h \
+	internal-winscard.h p15card-helper.h reader-pcsc.h vsctpm-md.h \
 	opensc.h pkcs15.h \
 	cardctl.h asn1.h log.h \
 	errors.h types.h compression.h itacns.h iso7816.h \
@@ -28,7 +28,7 @@ libopensc_la_SOURCES = \
 	\
 	muscle.c muscle-filesystem.c \
 	\
-	ctbcs.c reader-ctapi.c reader-pcsc.c reader-openct.c pcsc-md.c \
+	ctbcs.c reader-ctapi.c reader-pcsc.c reader-openct.c \
 	\
 	card-setcos.c card-miocos.c card-flex.c card-gpk.c \
 	card-cardos.c card-tcos.c card-default.c \
@@ -42,7 +42,7 @@ libopensc_la_SOURCES = \
 	card-iasecc.c iasecc-sdo.c iasecc-sm.c card-sc-hsm.c \
 	card-dnie.c cwa14890.c cwa-dnie.c user-interface.c \
 	card-isoApplet.c card-masktech.c \
-	card-vsctpm.c \
+	vsctpm-md.c card-vsctpm.c \
 	\
 	pkcs15-openpgp.c pkcs15-infocamere.c pkcs15-starcert.c \
 	pkcs15-tcos.c pkcs15-esteid.c pkcs15-postecert.c pkcs15-gemsafeGPK.c \

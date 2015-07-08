@@ -272,9 +272,19 @@ int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
 		goto err;
 	}
 #endif
+
+	if (card->ops->md_acquire_context)   {
+		r = card->ops->md_acquire_context(card);
+		if (r)   {
+			sc_log(ctx, "Failed to acquire MD context");
+			goto err;
+		}
+	}
+
 	*card_out = card;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
 err:
 	if (connected)
 		reader->ops->disconnect(reader);
@@ -283,9 +293,11 @@ err:
 	LOG_FUNC_RETURN(ctx, r);
 }
 
-int sc_disconnect_card(sc_card_t *card)
+
+int
+sc_disconnect_card(struct sc_card *card)
 {
-	sc_context_t *ctx;
+	struct sc_context *ctx;
 
 	if (!card)
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -294,6 +306,12 @@ int sc_disconnect_card(sc_card_t *card)
 	LOG_FUNC_CALLED(ctx);
 
 	assert(card->lock_count == 0);
+	if (card->ops->md_delete_context)   {
+		int r = card->ops->md_delete_context(card);
+		if (r)
+			sc_log(ctx, "Failed to delete MD context");
+	}
+
 	if (card->ops->finish) {
 		int r = card->ops->finish(card);
 		if (r)

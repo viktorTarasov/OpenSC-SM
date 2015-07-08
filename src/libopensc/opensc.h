@@ -610,6 +610,9 @@ struct sc_card_operations {
 	int (*read_public_key)(struct sc_card *, unsigned,
 			struct sc_path *, unsigned, unsigned,
 			unsigned char **, size_t *);
+
+	int (*md_acquire_context)(struct sc_card *);
+	int (*md_delete_context)(struct sc_card *);
 };
 
 typedef struct sc_card_driver {

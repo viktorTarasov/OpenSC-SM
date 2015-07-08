@@ -26,15 +26,13 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef _WIN32
-#include <winsock2.h>
-#else
-#include <arpa/inet.h>
-#endif
-
-#include "reader-pcsc.h"
+#include "internal.h"
+#include "cardctl.h"
 
 #ifdef ENABLE_MINIDRIVER
+
+#include "vsctpm-md.h"
+#include "reader-pcsc.h"
 
 /**
  * CSP management functions and cache context, needed by minidrivers'
@@ -62,64 +60,63 @@ CSP_Free(LPVOID Address)
 
 
 int
-pcsc_md_init_card_data(struct sc_reader *reader)
+vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 {
-	struct sc_context *ctx = reader->ctx;
-	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+	struct sc_context *ctx = card->ctx;
+	struct pcsc_private_data *priv = GET_PRIV_DATA(card->reader);
 	HRESULT hRes = S_OK;
 
 	LOG_FUNC_CALLED(ctx);
 
-	memset(&priv->md, 0, sizeof(priv->md));
-	priv->md.card_data.hScard = priv->pcsc_card;
-	priv->md.card_data.hSCardCtx = priv->gpriv->pcsc_ctx;
+	memset(md, 0, sizeof(struct vsctpm_md_data));
+	md->card_data.hScard = priv->pcsc_card;
+	md->card_data.hSCardCtx = priv->gpriv->pcsc_ctx;
 
-	priv->md.card_data.cbAtr = reader->atr.value;
-	priv->md.card_data.pbAtr = reader->atr.len;
+	md->card_data.cbAtr = card->reader->atr.len;
+	md->card_data.pbAtr = card->reader->atr.value;
 
-	priv->md.card_data.pfnCspAlloc   = (PFN_CSP_ALLOC)&CSP_Alloc;
-	priv->md.card_data.pfnCspReAlloc = (PFN_CSP_REALLOC)&CSP_ReAlloc;
-	priv->md.card_data.pfnCspFree    = (PFN_CSP_FREE)&CSP_Free;
+	md->card_data.pfnCspAlloc   = (PFN_CSP_ALLOC)&CSP_Alloc;
+	md->card_data.pfnCspReAlloc = (PFN_CSP_REALLOC)&CSP_ReAlloc;
+	md->card_data.pfnCspFree    = (PFN_CSP_FREE)&CSP_Free;
 
-	priv->md.card_data.pwszCardName  = reader->friendly_name;
+	md->card_data.pwszCardName  = L"OpenTrust Virtual Smart Card";
 
-	priv->md.hmd = LoadLibrary(VSC_MODULE_NAME);
-	if (priv->md.hmd == NULL) {
+	md->hmd = LoadLibrary(VSC_MODULE_NAME);
+	if (md->hmd == NULL) {
 		hRes = GetLastError();
 		sc_log(ctx, "Failed to load VSC module: error %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	priv->md.acquire_context = (PFN_CARD_ACQUIRE_CONTEXT)GetProcAddress(priv->md.hmd, "CardAcquireContext");
-	if (!priv->md.acquire_context)   {
+	md->acquire_context = (PFN_CARD_ACQUIRE_CONTEXT)GetProcAddress(md->hmd, "CardAcquireContext");
+	if (!md->acquire_context)   {
 		sc_log(ctx, "GetProcAddress(CardAcquireContext) error");
 		goto err;
 	}
 
-	sc_log(reader->ctx, "Init MD card data: priv->md.hmd %p; acquire context func %p", priv->md.hmd, priv->md.acquire_context);
+	sc_log(ctx, "Init MD card data: md->hmd %p; acquire context func %p", md->hmd, md->acquire_context);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 
 err:
 	hRes = GetLastError();
 	sc_log(ctx, "Last error %lX", hRes);
-	pcsc_md_reset_card_data(reader);
+	vsctpm_md_reset_card_data(card, md);
+
 	LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 }
 
 
 void
-pcsc_md_reset_card_data(struct sc_reader *reader)
+vsctpm_md_reset_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 {
-	struct sc_context *ctx = reader->ctx;
-	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
-	int rv;
+	struct sc_context *ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
 
-	if (priv->md.hmd)
-		FreeLibrary(priv->md.hmd);
+	if (md->hmd)
+		FreeLibrary(md->hmd);
 
-	memset(&priv->md, 0, sizeof(priv->md));
+	memset(md, 0, sizeof(struct vsctpm_md_data));
 }
 
 

@@ -435,16 +435,6 @@ static int pcsc_connect(sc_reader_t *reader)
 	/* After connect reader is not locked yet */
 	priv->locked = 0;
 
-#if ENABLE_MINIDRIVER
-	r = pcsc_md_init_card_data (reader);
-	if (r != SC_SUCCESS)   {
-		sc_log(reader->ctx, "pcsc_connect() MD init data error", r);
-		return r;
-	}
-
-	sc_log(reader->ctx, "pcsc_connect() MD atr '%s'", sc_dump_hex(priv->md.card_data.cbAtr, priv->md.card_data.pbAtr));
-#endif
-
 	return SC_SUCCESS;
 }
 
@@ -456,10 +446,6 @@ static int pcsc_disconnect(struct sc_reader * reader)
 
 	priv->gpriv->SCardDisconnect(priv->pcsc_card, priv->gpriv->disconnect_action);
 	reader->flags = 0;
-
-#if ENABLE_MINIDRIVER
-	pcsc_md_reset_card_data (reader);
-#endif
 
 	return SC_SUCCESS;
 }
