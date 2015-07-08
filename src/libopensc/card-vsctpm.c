@@ -639,11 +639,29 @@ vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 static int
 vsctpm_md_acquire_context(struct sc_card *card)
 {
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-	int rv;
+	int rv, ver;
 
 	LOG_FUNC_CALLED(ctx);
 
+	/* Tries all versions of CARD_DATA from current version down to version 4 */
+	for (ver = CARD_DATA_CURRENT_VERSION; ver > 3; ver--)   {
+		HRESULT hRes = S_OK;
+
+		priv->md.card_data.dwVersion = ver;
+		hRes = priv->md.acquire_context(&priv->md.card_data, 0);
+		if (hRes == SCARD_S_SUCCESS)
+			break;
+		sc_log(ctx, "MD: cannot acquire context version %i: hRes %lX", ver, hRes);
+	}
+
+	if (ver == 3)   {
+		sc_log(ctx, "MD: failed to acquire MD communication context");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
