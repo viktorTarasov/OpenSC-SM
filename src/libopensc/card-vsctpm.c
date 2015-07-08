@@ -49,23 +49,6 @@ static struct sc_card_driver vsctpm_drv = {
 	NULL, 0, NULL
 };
 
-#define VSCTPM_MD_ENTRY_DNAME_SIZE 9
-#define VSCTPM_MD_ENTRY_FNAME_SIZE 11
-struct vsctpm_md_file {
-	char dname[VSCTPM_MD_ENTRY_DNAME_SIZE + 1];
-	char fname[VSCTPM_MD_ENTRY_FNAME_SIZE + 1];
-	unsigned file_id, tag;
-};
-
-struct vsctpm_private_data {
-	struct vsctpm_md_file *md_files;
-	size_t md_files_num;
-
-#if ENABLE_MINIDRIVER
-	struct vsctpm_md_data md;
-#endif
-};
-
 static int vsctpm_select_aid(struct sc_card *, struct sc_aid *, unsigned char *, size_t *);
 static int vsctpm_get_data(struct sc_card *, unsigned, unsigned, unsigned char **, size_t *);
 static int vsctpm_get_md_entries(struct sc_card *);
@@ -641,6 +624,11 @@ vsctpm_md_acquire_context(struct sc_card *card)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+
+	unsigned char guid[16];
+	size_t guid_len = sizeof(guid);
+
+	char guid_str[40];
 	int rv, ver;
 
 	LOG_FUNC_CALLED(ctx);
@@ -666,8 +654,12 @@ vsctpm_md_acquire_context(struct sc_card *card)
 
 	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
 
-	vsctpm_md_get_serial(card, &priv->md.card_data, NULL);
-	vsctpm_md_get_guid(card, &priv->md.card_data, NULL, NULL);
+	rv = vsctpm_md_get_guid(card, &guid[0], &guid_len);
+	LOG_TEST_RET(ctx, rv, "Cannot get MD GUID");
+	rv = sc_pkcs15_serialize_guid(guid, guid_len, 0, guid_str, sizeof(guid_str));
+	LOG_TEST_RET(ctx, rv, "Failed to serialize MD GUID");
+
+	sc_log(ctx, "MD: card GUID %s", guid_str);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

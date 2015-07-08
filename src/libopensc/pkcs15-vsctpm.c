@@ -27,6 +27,8 @@
 #include "pkcs15.h"
 #include "cardctl.h"
 
+#include "vsctpm-md.h"
+
 #define MANU_ID	"VSC TPM"
 #define VSCTPM_USER_PIN_REF 0x80
 
@@ -91,6 +93,28 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 }
 
 
+#if ENABLE_MINIDRIVER
+static int
+sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	unsigned char *buf = NULL;
+	size_t buf_len = 0;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
+        LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+
+	sc_log(ctx, "VSC cmapfile %s", sc_dump_hex(buf, buf_len));
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+#endif /* ENABLE_MINIDRIVER */
+
 
 static int
 sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
@@ -130,6 +154,9 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 
 	rv = vsctpm_add_user_pin (p15card);
 	LOG_TEST_RET(ctx, rv, "Failed to add User PIN object");
+
+	rv = sc_pkcs15emu_vsctpm_parse_cmapfile (p15card);
+	LOG_TEST_RET(ctx, rv, "Cannot parse CMAP file");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

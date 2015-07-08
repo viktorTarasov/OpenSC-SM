@@ -100,71 +100,46 @@ vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 err:
 	hRes = GetLastError();
 	sc_log(ctx, "Last error %lX", hRes);
-	vsctpm_md_reset_card_data(card, md);
+	vsctpm_md_reset_card_data(card);
 
 	LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 }
 
 
 void
-vsctpm_md_reset_card_data(struct sc_card *card, struct vsctpm_md_data *md)
+vsctpm_md_reset_card_data(struct sc_card *card)
 {
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 
 	LOG_FUNC_CALLED(ctx);
 
-	if (md->hmd)
-		FreeLibrary(md->hmd);
+	if (priv->md.hmd)
+		FreeLibrary(priv->md.hmd);
 
-	memset(md, 0, sizeof(struct vsctpm_md_data));
+	memset(&priv->md, 0, sizeof(priv->md));
 }
 
 
 int
-vsctpm_md_get_serial(struct sc_card *card, struct vsctpm_md_data *md, struct sc_serial_number *out)
+vsctpm_md_get_guid(struct sc_card *card, unsigned char *out, size_t *out_len)
 {
-	struct sc_context *ctx = card->ctx;
-	HRESULT hRes = S_OK;
-	struct sc_serial_number serial;
-	DWORD sz;
-
-	if (!md->card_data.pfnCardGetProperty)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
-	hRes = md->card_data.pfnCardGetProperty(&md->card_data, CP_CARD_SERIAL_NO,
-			serial.value, sizeof(serial.value), &sz, 0);
-	if (hRes != SCARD_S_SUCCESS)   {
-		sc_log(ctx, "CardGetProperty(CP_CARD_SERIAL_NO) failed: hRes %lX", hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-	serial.len = sz;
-
-	sc_log(ctx, "MD serial '%s'", sc_dump_hex(serial.value, serial.len));
-	if (out)
-		*out = serial;
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-
-
-int
-vsctpm_md_get_guid(struct sc_card *card, struct vsctpm_md_data *md, unsigned char *out, size_t *out_len)
-{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
 	unsigned char guid[0x80];
-	DWORD sz;
+	DWORD sz = 0;
 
-	if (!md->card_data.pfnCardGetProperty)
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardGetProperty)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	hRes = md->card_data.pfnCardGetProperty(&md->card_data, CP_CARD_GUID,
-			guid, sizeof(guid), &sz, 0);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_GUID, guid, sizeof(guid), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_GUID) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "MD serial '%s'", sc_dump_hex(guid, sz));
+	sc_log(ctx, "MD GUID (%p,%p) '%s'", out, out_len, sc_dump_hex(guid, sz));
 
 	if (!out)
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -175,6 +150,40 @@ vsctpm_md_get_guid(struct sc_card *card, struct vsctpm_md_data *md, unsigned cha
 		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
 
 	memmove(out, guid, sz);
+	*out_len = sz;
+
+	sc_log(ctx, "out MD GUID '%s'", sc_dump_hex(out, *out_len));
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
+		unsigned char **out, size_t *out_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz = -1;
+	unsigned char *ptr = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!out || !out_len || !file_name)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "called CardReadFile(%s,%s)", dir_name, file_name);
+
+	if (!priv->md.card_data.pfnCardReadFile)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = priv->md.card_data.pfnCardReadFile(&priv->md.card_data, dir_name, file_name, 0, &ptr, &sz);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardReadFile(%s,%s) failed: hRes %lX", dir_name, file_name, hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "hRes %lX: MD file (%s,%s) out  (%p,%i)", hRes, dir_name, file_name, ptr, sz);
+	sc_log(ctx, "MD file (%s,%s) '%s'", dir_name, file_name, sc_dump_hex(ptr, sz));
+
+	*out = ptr;
 	*out_len = sz;
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
