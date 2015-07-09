@@ -3,8 +3,7 @@ TOPDIR = ..\..
 !INCLUDE $(TOPDIR)\win32\Make.rules.mak
 
 TARGETS = opensc-tool.exe opensc-explorer.exe pkcs15-tool.exe pkcs15-crypt.exe \
-		pkcs11-tool.exe cardos-tool.exe eidenv.exe sc-hsm-tool.exe openpgp-tool.exe dnie-tool.exe \
-		$(PROGRAMS_OPENSSL)
+		pkcs11-tool.exe $(PROGRAMS_OPENSSL)
 
 $(TARGETS): versioninfo-tools.res util.obj
 

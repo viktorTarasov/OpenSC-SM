@@ -5,13 +5,13 @@ MAINTAINERCLEANFILES = $(srcdir)/Makefile.in
 EXTRA_DIST = Makefile.mak
 
 lib_LTLIBRARIES = libopensc.la
-noinst_HEADERS = cards.h ctbcs.h internal.h esteid.h muscle.h muscle-filesystem.h \
+noinst_HEADERS = cards.h ctbcs.h internal.h muscle.h muscle-filesystem.h \
 	internal-winscard.h p15card-helper.h reader-pcsc.h vsctpm-md.h \
 	opensc.h pkcs15.h \
 	cardctl.h asn1.h log.h \
-	errors.h types.h compression.h itacns.h iso7816.h \
-	authentic.h iasecc.h iasecc-sdo.h sm.h card-sc-hsm.h \
-	pace.h cwa14890.h user-interface.h cwa-dnie.h
+	errors.h types.h compression.h iso7816.h \
+	iasecc.h iasecc-sdo.h sm.h authentic.h \
+	pace.h user-interface.h
 
 AM_CPPFLAGS = -DOPENSC_CONF_PATH=\"$(sysconfdir)/opensc.conf\" \
 	-I$(top_srcdir)/src
@@ -30,26 +30,10 @@ libopensc_la_SOURCES = \
 	\
 	ctbcs.c reader-ctapi.c reader-pcsc.c reader-openct.c \
 	\
-	card-setcos.c card-miocos.c card-flex.c card-gpk.c \
-	card-cardos.c card-tcos.c card-default.c \
-	card-mcrd.c card-starcos.c card-openpgp.c card-jcop.c \
-	card-oberthur.c card-belpic.c card-atrust-acos.c \
-	card-entersafe.c card-epass2003.c \
-	card-incrypto34.c card-piv.c card-muscle.c card-acos5.c \
-	card-asepcos.c card-akis.c card-gemsafeV1.c card-rutoken.c \
-	card-rtecp.c card-westcos.c card-myeid.c card-ias.c \
-	card-itacns.c card-authentic.c \
-	card-iasecc.c iasecc-sdo.c iasecc-sm.c card-sc-hsm.c \
-	card-dnie.c cwa14890.c cwa-dnie.c user-interface.c \
-	card-isoApplet.c card-masktech.c \
+	card-default.c \
+	card-iasecc.c iasecc-sdo.c iasecc-sm.c \
 	vsctpm-md.c card-vsctpm.c \
 	\
-	pkcs15-openpgp.c pkcs15-infocamere.c pkcs15-starcert.c \
-	pkcs15-tcos.c pkcs15-esteid.c pkcs15-postecert.c pkcs15-gemsafeGPK.c \
-	pkcs15-actalis.c pkcs15-atrust-acos.c pkcs15-tccardos.c pkcs15-piv.c \
-	pkcs15-esinit.c pkcs15-westcos.c pkcs15-pteid.c pkcs15-oberthur.c \
-	pkcs15-itacns.c pkcs15-gemsafeV1.c pkcs15-sc-hsm.c \
-	pkcs15-dnie.c \
 	pkcs15-vsctpm.c \
 	compression.c p15card-helper.c sm.c \
 	libopensc.exports

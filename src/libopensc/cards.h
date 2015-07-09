@@ -216,6 +216,7 @@ enum {
 	SC_CARD_TYPE_VSCTPM_GENERIC
 };
 
+/*
 extern sc_card_driver_t *sc_get_default_driver(void);
 extern sc_card_driver_t *sc_get_cardos_driver(void);
 extern sc_card_driver_t *sc_get_cryptoflex_driver(void);
@@ -252,6 +253,10 @@ extern sc_card_driver_t *sc_get_epass2003_driver(void);
 extern sc_card_driver_t *sc_get_dnie_driver(void);
 extern sc_card_driver_t *sc_get_isoApplet_driver(void);
 extern sc_card_driver_t *sc_get_masktech_driver(void);
+*/
+
+extern sc_card_driver_t *sc_get_default_driver(void);
+extern sc_card_driver_t *sc_get_iasecc_driver(void);
 extern sc_card_driver_t *sc_get_vsctpm_driver(void);
 
 #ifdef __cplusplus

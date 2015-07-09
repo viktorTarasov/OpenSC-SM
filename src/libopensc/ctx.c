@@ -64,6 +64,7 @@ struct _sc_driver_entry {
 };
 
 static const struct _sc_driver_entry internal_card_drivers[] = {
+/*
 	{ "cardos",	(void *(*)(void)) sc_get_cardos_driver },
 	{ "flex",	(void *(*)(void)) sc_get_cryptoflex_driver },
 	{ "cyberflex",	(void *(*)(void)) sc_get_cyberflex_driver },
@@ -77,11 +78,15 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "tcos",	(void *(*)(void)) sc_get_tcos_driver },
 	{ "openpgp",	(void *(*)(void)) sc_get_openpgp_driver },
 	{ "jcop",	(void *(*)(void)) sc_get_jcop_driver },
+*/
 #ifdef ENABLE_OPENSSL
+/*
 	{ "oberthur",	(void *(*)(void)) sc_get_oberthur_driver },
 	{ "authentic",	(void *(*)(void)) sc_get_authentic_driver },
+*/
 	{ "iasecc",	(void *(*)(void)) sc_get_iasecc_driver },
 #endif
+/*
 	{ "belpic",	(void *(*)(void)) sc_get_belpic_driver },
 	{ "ias",		(void *(*)(void)) sc_get_ias_driver },
 	{ "incrypto34", (void *(*)(void)) sc_get_incrypto34_driver },
@@ -102,11 +107,13 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "dnie",       (void *(*)(void)) sc_get_dnie_driver },
 #endif
 	{ "masktech",	(void *(*)(void)) sc_get_masktech_driver },
+*/
 
 	{ "vsctpm",	(void *(*)(void)) sc_get_vsctpm_driver },
 
 /* Here should be placed drivers that need some APDU transactions to
  * recognise its cards. */
+/*
 	{ "mcrd",	(void *(*)(void)) sc_get_mcrd_driver },
 	{ "setcos",	(void *(*)(void)) sc_get_setcos_driver },
 	{ "muscle",	(void *(*)(void)) sc_get_muscle_driver },
@@ -114,6 +121,7 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "PIV-II",	(void *(*)(void)) sc_get_piv_driver },
 	{ "itacns",	(void *(*)(void)) sc_get_itacns_driver },
 	{ "isoApplet",	(void *(*)(void)) sc_get_isoApplet_driver },
+*/
 	/* The default driver should be last, as it handles all the
 	 * unrecognized cards. */
 	{ "default",	(void *(*)(void)) sc_get_default_driver },
