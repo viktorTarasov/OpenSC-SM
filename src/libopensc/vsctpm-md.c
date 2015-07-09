@@ -251,6 +251,55 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 }
 
 
+static int
+vsctpm_md_pkcs15_container_init(struct sc_card *card, struct vsctpm_publickeublob *pubkey_hd, struct vsctpm_pkcs15_container *p15cont)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz = -1;
+	unsigned char *modulus;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pubkey_hd || !p15cont)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (pubkey_hd->publickeystruc.bType != PUBLICKEYBLOB)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+	if (pubkey_hd->publickeystruc.aiKeyAlg != CALG_RSA_KEYX && pubkey_hd->publickeystruc.aiKeyAlg != CALG_RSA_SIGN)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+	if (pubkey_hd->rsapubkey.magic != 0x31415352)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+	memset(p15cont, 0, sizeof(p15cont));
+
+/*
+ * TODO ..........................;
+ */
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+vsctpm_md_pkcs15_container_get_cert(struct sc_card *card, struct vsctpm_pkcs15_container *p15cont)
+{
+	struct sc_context *ctx = card->ctx;
+	LOG_FUNC_CALLED(ctx);
+/*
+	if (!CryptAcquireContext(&hCSP, pwzContainerName, _csp == NULL ? MS_SCARD_PROV : _csp,
+					                                 PROV_RSA_FULL, CRYPT_SILENT))
+        HCRYPTPROV hCSP = NULL;
+	        HCRYPTKEY hKey = NULL;
+		        PCCERT_CONTEXT pCertContext = NULL;
+ */
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 int
 vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
 {
@@ -259,9 +308,12 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	HRESULT hRes = S_OK;
 	DWORD sz = -1;
 	CONTAINER_INFO cinfo;
+	struct vsctpm_publickeublob *pubkey_hdr = NULL;
+	struct vsctpm_pkcs15_container p15cont;
 	unsigned char *buf = NULL;
 	size_t buf_len = 0;
 	int rv, nn_cont;
+
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -283,17 +335,39 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	hRes = priv->md.card_data.pfnCardGetContainerInfo(&priv->md.card_data, idx, 0, &cinfo);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "pfhCardGetContainerInfo(%i) failed: hRes %lX", idx, hRes);
-		LOG_FUNC_RETURN(ctx, (hRes == SCARD_E_NO_KEY_CONTAINER ? SC_ERROR_OBJECT_NOT_FOUND : SC_ERROR_INTERNAL));
+		rv = (hRes == SCARD_E_NO_KEY_CONTAINER) ? SC_ERROR_OBJECT_NOT_FOUND : SC_ERROR_INTERNAL;
+		LOG_FUNC_RETURN(ctx, rv);
 	}
 	sc_log(ctx, "md-cont %i: sign %i, key-ex %i", idx, cinfo.cbSigPublicKey, cinfo.cbKeyExPublicKey);
 
-	if (vsctpm_cont)   {
-		memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
-
-		vsctpm_cont->idx = idx;
-		vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
-		vsctpm_cont->info = cinfo;
+	if (!vsctpm_cont)   {
+		vsctpm_md_free(card, buf);
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	}
+
+	if (cinfo.pbKeyExPublicKey && cinfo.pbSigPublicKey)   {
+		sc_log(ctx, "Two keys (Sign and KeyEx) in one container not yet supported");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+	if (cinfo.pbKeyExPublicKey && cinfo.cbKeyExPublicKey)
+		pubkey_hdr = (struct vsctpm_publickeublob *)cinfo.pbKeyExPublicKey;
+	else if (cinfo.pbSigPublicKey && cinfo.cbSigPublicKey)
+		pubkey_hdr = (struct vsctpm_publickeublob *)cinfo.pbSigPublicKey;
+	else
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
+
+	rv = vsctpm_md_pkcs15_container_init(card, pubkey_hdr, &p15cont);
+	LOG_TEST_RET(ctx, rv, "Failed to parse pubkeyblob");
+
+	rv = vsctpm_md_pkcs15_container_get_cert(card, &p15cont, vsctpm_cont->rec.wszGuid);
+	LOG_TEST_RET(ctx, rv, "Failes to get certificate for container");
+
+	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
+	vsctpm_cont->idx = idx;
+	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
+	vsctpm_cont->info = cinfo;
+	vsctpm_cont->p15cont = p15cont;
 
 	vsctpm_md_free(card, buf);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

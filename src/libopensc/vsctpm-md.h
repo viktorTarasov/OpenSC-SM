@@ -23,17 +23,28 @@ extern "C" {
 #include <windows.h>
 #include "cardmod.h"
 
+struct vsctpm_publickeublob {
+	PUBLICKEYSTRUC	publickeystruc;
+	RSAPUBKEY	rsapubkey;
+};
+
 struct vsctpm_md_data   {
 	CARD_DATA       card_data;
 	HMODULE         hmd;
 	PFN_CARD_ACQUIRE_CONTEXT acquire_context;
 };
 
-#define VSCTPM_CMAP_RECORD_MAX_IDX 16
+struct vsctpm_pkcs15_container {
+	struct sc_pkcs15_pubkey *pubkey;
+	struct sc_pkcs15_cert *cert;
+};
+
 struct vsctpm_md_container {
 	int idx;
 	CONTAINER_MAP_RECORD rec;
 	CONTAINER_INFO info;
+
+	struct vsctpm_pkcs15_container p15cont;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"

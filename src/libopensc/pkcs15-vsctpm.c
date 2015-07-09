@@ -138,15 +138,18 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 
 	LOG_FUNC_CALLED(ctx);
 
-	for (idx=0; idx < VSCTPM_CMAP_RECORD_MAX_IDX; idx++)   {
+/* TODO: get current containers number */
+	for (idx=0; idx < 12; idx++)   {
 		rv = vsctpm_md_get_container(card, idx, &mdc);
 		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 			continue;
 		LOG_TEST_RET(ctx, rv, "Get MD container error");
 		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i, blobs %i/%i", idx, mdc.rec.bFlags,
 				mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits, mdc.info.cbSigPublicKey, mdc.info.cbKeyExPublicKey);
+
 		if (mdc.info.cbKeyExPublicKey && mdc.info.pbKeyExPublicKey)
 			sc_log(ctx, "PubKeyEx %s", sc_dump_hex(mdc.info.pbKeyExPublicKey, mdc.info.cbKeyExPublicKey));
+		/* 06 02 0000 00A40000 52534131 00080000 01000100 9D248A42CBF71DD0BCAD2893F3F212E71CC162FC51CEE431 ... */
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
