@@ -29,14 +29,22 @@ struct vsctpm_md_data   {
 	PFN_CARD_ACQUIRE_CONTEXT acquire_context;
 };
 
-#define VSC_MODULE_NAME "msclmd.dll"
+#define VSCTPM_CMAP_RECORD_MAX_IDX 16
+struct vsctpm_md_container {
+	int idx;
+	CONTAINER_MAP_RECORD rec;
+	CONTAINER_INFO info;
+};
+
+#define VSCTPM_MODULE_NAME "msclmd.dll"
 
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *);
-int vsctpm_md_free(struct sc_card *, void *);
+void vsctpm_md_free(struct sc_card *, void *);
 int vsctpm_md_get_guid(struct sc_card *, unsigned char *, size_t *);
 int vsctpm_md_read_file(struct sc_card *, char *, char *, unsigned char **, size_t *);
 int vsctpm_md_enum_files(struct sc_card *, char *, char **, size_t *);
+int vsctpm_md_get_container(struct sc_card *, int, struct vsctpm_md_container *);
 
 #endif  /* ENABLE_MINIDRIVER */
 

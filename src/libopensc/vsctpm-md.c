@@ -81,7 +81,7 @@ vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 
 	md->card_data.pwszCardName  = L"OpenTrust Virtual Smart Card";
 
-	md->hmd = LoadLibrary(VSC_MODULE_NAME);
+	md->hmd = LoadLibrary(VSCTPM_MODULE_NAME);
 	if (md->hmd == NULL) {
 		hRes = GetLastError();
 		sc_log(ctx, "Failed to load VSC module: error %lX", hRes);
@@ -121,7 +121,7 @@ vsctpm_md_reset_card_data(struct sc_card *card)
 }
 
 
-int
+void
 vsctpm_md_free(struct sc_card *card, void *ptr)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -129,14 +129,13 @@ vsctpm_md_free(struct sc_card *card, void *ptr)
 
 	LOG_FUNC_CALLED(ctx);
 
-	if (!priv->md.card_data.pfnCspFree)   {
+	if (!ptr)
+		return;
+
+	if (!priv->md.card_data.pfnCspFree)
 		sc_log(ctx, "Invalid CARD_DATA: CSP-FREE not defined");
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-
-	priv->md.card_data.pfnCspFree(ptr);
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	else
+		priv->md.card_data.pfnCspFree(ptr);
 }
 
 
@@ -245,14 +244,56 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 		*out_len = sz;
 	}
 	else   {
-		int rv = vsctpm_md_free(card, buf);
-		LOG_FUNC_RETURN(ctx, rv);
+		vsctpm_md_free(card, buf);
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-#endif /* ENABLE_MINIDRIVER */
 
+int
+vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz = -1;
+	CONTAINER_INFO cinfo;
+	unsigned char *buf = NULL;
+	size_t buf_len = 0;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!priv->md.card_data.pfnCardGetContainerInfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = priv->md.card_data.pfnCardGetContainerInfo(&priv->md.card_data, idx, 0, &cinfo);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "pfhCardGetContainerInfo(%i) failed: hRes %lX", idx, hRes);
+		LOG_FUNC_RETURN(ctx, (hRes == SCARD_E_NO_KEY_CONTAINER ? SC_ERROR_OBJECT_NOT_FOUND : SC_ERROR_INTERNAL));
+	}
+	sc_log(ctx, "md-cont %i: sign %i, key-ex %i", idx, cinfo.cbSigPublicKey, cinfo.cbKeyExPublicKey);
+
+	if (!vsctpm_cont)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
+
+	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
+	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+
+	if (buf_len < (idx + 1) * sizeof(CONTAINER_MAP_RECORD))   {
+		vsctpm_md_free(card, buf);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
+	}
+
+	vsctpm_cont->idx = idx;
+	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
+	vsctpm_cont->info = cinfo;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+#endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
 

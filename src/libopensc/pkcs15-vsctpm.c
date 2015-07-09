@@ -101,8 +101,9 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
   0008
 */
 #if ENABLE_MINIDRIVER
+
 static int
-sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
+sc_pkcs15emu_vsctpm_read_cmapfile (struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
@@ -116,22 +117,61 @@ sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
 	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
         LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
 	sc_log(ctx, "VSC cmapfile %s", sc_dump_hex(buf, buf_len));
-	rv = vsctpm_md_free(card, buf);
-        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+
+	vsctpm_md_free(card, buf);
 	buf = NULL, buf_len = 0;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	unsigned char *buf = NULL;
+	size_t buf_len = 0;
+	struct vsctpm_md_container md_container;
+	int    rv, idx;
+
+	LOG_FUNC_CALLED(ctx);
+
+	for (idx=0; idx < VSCTPM_CMAP_RECORD_MAX_IDX; idx++)   {
+		rv = vsctpm_md_get_container(card, idx, &md_container);
+		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
+			continue;
+		LOG_TEST_RET(ctx, rv, "Get MD container error");
+		sc_log(ctx, "cmap-record %i: flags %X", idx, md_container.rec.bFlags);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_enum_files (struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	unsigned char *buf = NULL;
+	size_t buf_len = 0;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
 
 	rv = vsctpm_md_enum_files(card, szBASE_CSP_DIR, &buf, &buf_len);
         LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
-	sc_log(ctx, "VSC MD files %s", sc_dump_hex(buf, buf_len));
-	rv = vsctpm_md_free(card, buf);
-        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+
+	vsctpm_md_free(card, buf);
 	buf = NULL, buf_len = 0;
 
 	rv = vsctpm_md_enum_files(card, "", &buf, &buf_len);
         LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
-	sc_log(ctx, "VSC MD files %s", sc_dump_hex(buf, buf_len));
-	rv = vsctpm_md_free(card, buf);
-        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+
+	vsctpm_md_free(card, buf);
 	buf = NULL, buf_len = 0;
 
 /*
@@ -201,7 +241,10 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 	LOG_TEST_RET(ctx, rv, "Failed to add User PIN object");
 
 #if ENABLE_MINIDRIVER
-	rv = sc_pkcs15emu_vsctpm_parse_cmapfile (p15card);
+	rv = sc_pkcs15emu_vsctpm_enum_files (p15card);
+	LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
+
+	rv = sc_pkcs15emu_vsctpm_enum_containers (p15card);
 	LOG_TEST_RET(ctx, rv, "Cannot parse CMAP file");
 #endif
 
