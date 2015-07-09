@@ -390,7 +390,7 @@ struct sc_pkcs15_key_params {
 #define SC_MD_MAX_CONTAINER_NAME_LEN 39
 #define SC_MD_CONTAINER_MAP_VALID_CONTAINER	0x01
 #define SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER	0x02
-struct sc_md_cmap_record {
+struct sc_md_container {
 	unsigned char *guid;
 	size_t guid_len;
 	unsigned flags;
@@ -419,7 +419,9 @@ struct sc_md_cardcf {
 
 struct sc_md_data {
 	struct sc_md_cardcf cardcf;
-	void *prop_data;
+
+	struct sc_md_container *cmaps;
+	size_t cmaps_num;
 };
 
 struct sc_pkcs15_prkey_info {
@@ -439,7 +441,7 @@ struct sc_pkcs15_prkey_info {
 	struct sc_path path;
 
 	/* Used by minidriver and its on-card support */
-	struct sc_md_cmap_record cmap_record;
+	struct sc_md_container cmap_record;
 };
 typedef struct sc_pkcs15_prkey_info sc_pkcs15_prkey_info_t;
 

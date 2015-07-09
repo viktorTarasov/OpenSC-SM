@@ -197,8 +197,6 @@ vsctpm_get_md_file (struct sc_card *card, char *dname, char *fname)
 	for (ii = 0; ii < prv_data->md_files_num; ii++)   {
 		struct vsctpm_md_file *mdf = prv_data->md_files + ii;
 
-		sc_log(ctx, "%i: fname %s, file %X, tag %X", ii, mdf->fname, mdf->file_id, mdf->tag);
-
 		if (dname)
 			if (strncmp(dname, mdf->dname, VSCTPM_MD_ENTRY_DNAME_SIZE))
 				continue;
@@ -227,7 +225,6 @@ vsctpm_get_md_entries(struct sc_card *card)
 
 	rv = vsctpm_get_data(card, 0xA000, 0xDF1F, &blob, &blob_len);
 	LOG_TEST_RET(ctx, rv, "vsctpm_get_md_entries() cannot get MD entries blob");
-	sc_log(ctx, "MD entries blob %s", sc_dump_hex(blob, blob_len));
 
 	if (*blob != 0xDF || *(blob + 1) != 0x1F)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);

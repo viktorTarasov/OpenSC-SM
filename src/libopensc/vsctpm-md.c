@@ -122,6 +122,25 @@ vsctpm_md_reset_card_data(struct sc_card *card)
 
 
 int
+vsctpm_md_free(struct sc_card *card, void *ptr)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!priv->md.card_data.pfnCspFree)   {
+		sc_log(ctx, "Invalid CARD_DATA: CSP-FREE not defined");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	priv->md.card_data.pfnCspFree(ptr);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
 vsctpm_md_get_guid(struct sc_card *card, unsigned char *out, size_t *out_len)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -139,7 +158,6 @@ vsctpm_md_get_guid(struct sc_card *card, unsigned char *out, size_t *out_len)
 		sc_log(ctx, "CardGetProperty(CP_CARD_GUID) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "MD GUID (%p,%p) '%s'", out, out_len, sc_dump_hex(guid, sz));
 
 	if (!out)
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -168,9 +186,10 @@ vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
 	unsigned char *ptr = NULL;
 
 	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "called CardReadFile(%s,%s)", dir_name, file_name);
+
 	if (!out || !out_len || !file_name)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	sc_log(ctx, "called CardReadFile(%s,%s)", dir_name, file_name);
 
 	if (!priv->md.card_data.pfnCardReadFile)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -180,8 +199,39 @@ vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
 		sc_log(ctx, "CardReadFile(%s,%s) failed: hRes %lX", dir_name, file_name, hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "hRes %lX: MD file (%s,%s) out  (%p,%i)", hRes, dir_name, file_name, ptr, sz);
-	sc_log(ctx, "MD file (%s,%s) '%s'", dir_name, file_name, sc_dump_hex(ptr, sz));
+	sc_log(ctx, "MD file (%s,%s) (%i,'%s')", dir_name, file_name, sz, sc_dump_hex(ptr, sz));
+
+	*out = ptr;
+	*out_len = sz;
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *out_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz = -1;
+	unsigned char *ptr = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "called CardEnumFiles(%s)", dir_name);
+
+	if (!out || !out_len || !dir_name)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (!priv->md.card_data.pfnCardEnumFiles)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = priv->md.card_data.pfnCardEnumFiles(&priv->md.card_data, dir_name, &ptr, &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardEnumFiles(%s) failed: hRes %lX", dir_name, hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "%i MD files in '%s': '%s'", dir_name, sz, sc_dump_hex(ptr, sz));
 
 	*out = ptr;
 	*out_len = sz;

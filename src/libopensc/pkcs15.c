@@ -2669,7 +2669,6 @@ sc_pkcs15_serialize_guid(unsigned char *in, size_t in_size, unsigned flags,
 {
 	int ii, jj, offs = 0;
 
-	printf("%i: sc_pkcs15_serialize_guid(%p, %i) %X:%X\n", __LINE__, in, in_size, *in, *(in +1));
 	if (in_size < 16)
 		return SC_ERROR_BUFFER_TOO_SMALL;
 	if (out_size < 39)

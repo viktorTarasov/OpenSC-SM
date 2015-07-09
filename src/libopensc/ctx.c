@@ -103,6 +103,8 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 #endif
 	{ "masktech",	(void *(*)(void)) sc_get_masktech_driver },
 
+	{ "vsctpm",	(void *(*)(void)) sc_get_vsctpm_driver },
+
 /* Here should be placed drivers that need some APDU transactions to
  * recognise its cards. */
 	{ "mcrd",	(void *(*)(void)) sc_get_mcrd_driver },
@@ -112,7 +114,6 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "PIV-II",	(void *(*)(void)) sc_get_piv_driver },
 	{ "itacns",	(void *(*)(void)) sc_get_itacns_driver },
 	{ "isoApplet",	(void *(*)(void)) sc_get_isoApplet_driver },
-	{ "vsctpm",	(void *(*)(void)) sc_get_vsctpm_driver },
 	/* The default driver should be last, as it handles all the
 	 * unrecognized cards. */
 	{ "default",	(void *(*)(void)) sc_get_default_driver },

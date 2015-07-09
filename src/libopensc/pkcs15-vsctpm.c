@@ -93,6 +93,13 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 }
 
 
+/*
+  6C0065002D00320038006200390034003700390061002D0038006600350030002D0034003600380063002D0062003700620034002D006600300036003300660065003400630033003700330035000000
+  03
+  00
+  0000
+  0008
+*/
 #if ENABLE_MINIDRIVER
 static int
 sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
@@ -108,8 +115,39 @@ sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
 
 	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
         LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-
 	sc_log(ctx, "VSC cmapfile %s", sc_dump_hex(buf, buf_len));
+	rv = vsctpm_md_free(card, buf);
+        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+	buf = NULL, buf_len = 0;
+
+	rv = vsctpm_md_enum_files(card, szBASE_CSP_DIR, &buf, &buf_len);
+        LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
+	sc_log(ctx, "VSC MD files %s", sc_dump_hex(buf, buf_len));
+	rv = vsctpm_md_free(card, buf);
+        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+	buf = NULL, buf_len = 0;
+
+/*
+	if (p15card->md_data)   {
+		if (p15card->md_data->cmaps)
+			free(p15card->md_data->cmaps);
+		free(p15card->md_data);
+	}
+
+	mdd = p15card->md_data = calloc(1, sizeof(p15card->md_data));
+	if (!mdd)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	for (ptr = buf; (ptr-buf) < buf_len; )   {
+		struct sc_md_cmap_record *cmap = NULL;
+		mdd->cmaps = realloc(mdd->cmaps, (mdd->cmaps_num + 1) * (sizeof(sc_md_cmap_record)));
+		if (!mdd->cmaps)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		cmap = mdd->cmaps + mdd->cmaps_num;
+
+
+		mdd->cmaps_num  += 1;
+	}
+*/
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -155,8 +193,10 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 	rv = vsctpm_add_user_pin (p15card);
 	LOG_TEST_RET(ctx, rv, "Failed to add User PIN object");
 
+#if ENABLE_MINIDRIVER
 	rv = sc_pkcs15emu_vsctpm_parse_cmapfile (p15card);
 	LOG_TEST_RET(ctx, rv, "Cannot parse CMAP file");
+#endif
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

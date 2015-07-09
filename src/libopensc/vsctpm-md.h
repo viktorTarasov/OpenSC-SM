@@ -33,8 +33,10 @@ struct vsctpm_md_data   {
 
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *);
+int vsctpm_md_free(struct sc_card *, void *);
 int vsctpm_md_get_guid(struct sc_card *, unsigned char *, size_t *);
 int vsctpm_md_read_file(struct sc_card *, char *, char *, unsigned char **, size_t *);
+int vsctpm_md_enum_files(struct sc_card *, char *, char **, size_t *);
 
 #endif  /* ENABLE_MINIDRIVER */
 
