@@ -261,12 +261,21 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	CONTAINER_INFO cinfo;
 	unsigned char *buf = NULL;
 	size_t buf_len = 0;
-	int rv;
+	int rv, nn_cont;
 
 	LOG_FUNC_CALLED(ctx);
 
 	if (!priv->md.card_data.pfnCardGetContainerInfo)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
+	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+
+	nn_cont = buf_len / sizeof(CONTAINER_MAP_RECORD);
+	if ((idx + 1) > nn_cont)   {
+		vsctpm_md_free(card, buf);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
+	}
 
 	memset(&cinfo, 0, sizeof(cinfo));
 	cinfo.dwVersion = CONTAINER_INFO_CURRENT_VERSION;
@@ -278,22 +287,15 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	}
 	sc_log(ctx, "md-cont %i: sign %i, key-ex %i", idx, cinfo.cbSigPublicKey, cinfo.cbKeyExPublicKey);
 
-	if (!vsctpm_cont)
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
+	if (vsctpm_cont)   {
+		memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
 
-	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
-	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-
-	if (buf_len < (idx + 1) * sizeof(CONTAINER_MAP_RECORD))   {
-		vsctpm_md_free(card, buf);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
+		vsctpm_cont->idx = idx;
+		vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
+		vsctpm_cont->info = cinfo;
 	}
 
-	vsctpm_cont->idx = idx;
-	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
-	vsctpm_cont->info = cinfo;
-
+	vsctpm_md_free(card, buf);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
