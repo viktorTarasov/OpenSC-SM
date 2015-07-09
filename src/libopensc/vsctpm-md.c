@@ -268,6 +268,9 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	if (!priv->md.card_data.pfnCardGetContainerInfo)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
+	memset(&cinfo, 0, sizeof(cinfo));
+	cinfo.dwVersion = CONTAINER_INFO_CURRENT_VERSION;
+
 	hRes = priv->md.card_data.pfnCardGetContainerInfo(&priv->md.card_data, idx, 0, &cinfo);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "pfhCardGetContainerInfo(%i) failed: hRes %lX", idx, hRes);

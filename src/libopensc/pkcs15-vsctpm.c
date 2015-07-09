@@ -133,17 +133,18 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	unsigned char *buf = NULL;
 	size_t buf_len = 0;
-	struct vsctpm_md_container md_container;
+	struct vsctpm_md_container mdc;
 	int    rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
 
 	for (idx=0; idx < VSCTPM_CMAP_RECORD_MAX_IDX; idx++)   {
-		rv = vsctpm_md_get_container(card, idx, &md_container);
+		rv = vsctpm_md_get_container(card, idx, &mdc);
 		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 			continue;
 		LOG_TEST_RET(ctx, rv, "Get MD container error");
-		sc_log(ctx, "cmap-record %i: flags %X", idx, md_container.rec.bFlags);
+		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i, blobs %i/%i", idx, mdc.rec.bFlags,
+				mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits, mdc.info.cbSigPublicKey, mdc.info.cbKeyExPublicKey);
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
