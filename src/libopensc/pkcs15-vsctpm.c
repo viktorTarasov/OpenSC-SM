@@ -127,6 +127,13 @@ sc_pkcs15emu_vsctpm_parse_cmapfile (struct sc_pkcs15_card *p15card)
         LOG_TEST_RET(ctx, rv, "CSP free memory error");
 	buf = NULL, buf_len = 0;
 
+	rv = vsctpm_md_enum_files(card, "", &buf, &buf_len);
+        LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
+	sc_log(ctx, "VSC MD files %s", sc_dump_hex(buf, buf_len));
+	rv = vsctpm_md_free(card, buf);
+        LOG_TEST_RET(ctx, rv, "CSP free memory error");
+	buf = NULL, buf_len = 0;
+
 /*
 	if (p15card->md_data)   {
 		if (p15card->md_data->cmaps)

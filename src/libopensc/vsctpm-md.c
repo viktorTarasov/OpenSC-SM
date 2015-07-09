@@ -215,26 +215,39 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
 	DWORD sz = -1;
-	unsigned char *ptr = NULL;
+	unsigned char *buf = NULL, *ptr;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "called CardEnumFiles(%s)", dir_name);
 
-	if (!out || !out_len || !dir_name)
+	if (!dir_name)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	if (!priv->md.card_data.pfnCardEnumFiles)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	hRes = priv->md.card_data.pfnCardEnumFiles(&priv->md.card_data, dir_name, &ptr, &sz, 0);
+	sc_log(ctx, "call pfhCardEnumFiles(%s)", dir_name);
+	hRes = priv->md.card_data.pfnCardEnumFiles(&priv->md.card_data, dir_name, &buf, &sz, 0);
+	sc_log(ctx, "call pfhCardEnumFiles(%s) hRes %lX", dir_name, hRes);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardEnumFiles(%s) failed: hRes %lX", dir_name, hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "%i MD files in '%s': '%s'", dir_name, sz, sc_dump_hex(ptr, sz));
+	sc_log(ctx, "MD files in %li bytes: '%s': '%s'", sz, dir_name, sc_dump_hex(buf, sz));
 
-	*out = ptr;
-	*out_len = sz;
+	for(ptr=buf; strlen(ptr) && (ptr-buf) < sz; )   {
+		sc_log(ctx, "file in %s: %s", dir_name, ptr);
+		ptr += strlen(ptr) + 1;
+	}
+
+	if (out && out_len)   {
+		*out = buf;
+		*out_len = sz;
+	}
+	else   {
+		int rv = vsctpm_md_free(card, buf);
+		LOG_FUNC_RETURN(ctx, rv);
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
