@@ -91,13 +91,15 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
 		// Get the library name
-		rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_CSP, (LPTSTR)&szProvider, &chProvider);
+		// rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_CSP, (LPTSTR)&szProvider, &chProvider);
+		rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_KSP, (LPTSTR)&szProvider, &chProvider);
 		if (rv != SCARD_S_SUCCESS)    {
 			sc_log(ctx, "Failed SSCardGetCardTypeProviderName: error %lX", rv);
 			break;
 		}
 		sc_log(ctx, "provider: %i -- %s", ii, szProvider);
 
+/*
 		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
 			sc_log(ctx, "Acquired Crypto provider %lX", hCryptProv);
 
@@ -108,7 +110,7 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 		else   {
 			sc_log(ctx, "CryptAcquireContext() failed: error %X", GetLastError());
 		}
-
+*/
 		pCard = pCard + strlen(pCard) + 1;
 	}
 
