@@ -148,6 +148,9 @@ typedef LONG (PCSC_API *SCardGetAttrib_t)(SCARDHANDLE hCard, DWORD dwAttrId,
 typedef LONG (PCSC_API *SCardListCards_t)(SCARDCONTEXT hContext, LPCBYTE pbAtr, LPCGUID rgquidInterfaces,
 	DWORD cguidInterfaceCount, LPSTR mszCards, LPDWORD pcchCards);
 typedef LONG (PCSC_API *SCardFreeMemory_t)(SCARDCONTEXT hContext, LPCVOID pvMem);
+typedef LONG (PCSC_API *SCardGetCardTypeProviderName_t) (SCARDCONTEXT hContext, LPCSTR szCardName,
+	DWORD dwProviderId, LPSTR szProvider, LPDWORD pcchProvider);
+
 #endif
 
 /* Copied from pcsc-lite reader.h */

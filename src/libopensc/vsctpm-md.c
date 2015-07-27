@@ -64,10 +64,9 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_reader *reader =  card->reader;
-	LPTSTR pmszCards = NULL;
-	LPTSTR pCard;
-	LONG rv;
+	LPTSTR pmszCards = NULL, pCard;
 	DWORD cch = SCARD_AUTOALLOCATE;
+	LONG rv;
 	int ii;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
 	struct pcsc_global_private_data *gpriv = priv->gpriv;
@@ -84,11 +83,32 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 		sc_log(ctx, "Failed SCardListCards: error %lX", rv);
 		return;
 	}
-	sc_log(ctx, "SCardListCards returned %p(%li) bytes", pmszCards, cch);
-	sc_log(ctx, "Dump '%s'", sc_dump_hex(pmszCards, (cch > 400 ? 400 : cch)));
 
 	for (ii=0, pCard = pmszCards; '\0' != *pCard; ii++)   {
+		LPTSTR szProvider = NULL;
+		DWORD chProvider = SCARD_AUTOALLOCATE;
+		HCRYPTPROV hCryptProv;
+
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
+		// Get the library name
+		rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_CSP, (LPTSTR)&szProvider, &chProvider);
+		if (rv != SCARD_S_SUCCESS)    {
+			sc_log(ctx, "Failed SSCardGetCardTypeProviderName: error %lX", rv);
+			break;
+		}
+		sc_log(ctx, "provider: %i -- %s", ii, szProvider);
+
+		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
+			sc_log(ctx, "Acquired Crypto provider %lX", hCryptProv);
+
+			if (!CryptReleaseContext(hCryptProv,0))   {
+				sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptAcquireContext() failed: error %X", GetLastError());
+		}
+
 		pCard = pCard + strlen(pCard) + 1;
 	}
 
