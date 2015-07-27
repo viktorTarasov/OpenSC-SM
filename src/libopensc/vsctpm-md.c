@@ -63,7 +63,6 @@ static int
 vsctpm_md_pkcs15_test(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
-	struct pcsc_global_private_data *gpriv = (struct pcsc_global_private_data *) ctx->reader_drv_data;
 	struct sc_reader *reader =  card->reader;
 	LPTSTR pmszCards = NULL;
 	LPTSTR pCard;
@@ -71,25 +70,26 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	DWORD cch = SCARD_AUTOALLOCATE;
 	int ii;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+	struct pcsc_global_private_data *gpriv = priv->gpriv;
 
-	sc_log(ctx, "MD PKCS15 test started");
+	sc_log(ctx, "MD PKCS15 test started, cch %li, pcsc_ctx %p", cch, gpriv->pcsc_ctx);
 	if (!priv->gpriv->SCardListCards)  {
 		sc_log(ctx, "No 'SCardListCards' handle");
 		return;
 	}
 
 	// Retrieve the list of cards.
-	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, NULL, NULL, NULL, (LPTSTR)&pmszCards, &cch);
+	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, reader->atr.value, NULL, NULL, (LPTSTR)&pmszCards, &cch);
 	if ( rv != SCARD_S_SUCCESS )   {
 		sc_log(ctx, "Failed SCardListCards: error %lX", rv);
 		return;
 	}
 	sc_log(ctx, "SCardListCards returned %p(%li) bytes", pmszCards, cch);
-	sc_log(ctx, "Dump '%s'", sc_dump_hex(pmszCards, cch));
+	sc_log(ctx, "Dump '%s'", sc_dump_hex(pmszCards, (cch > 400 ? 400 : cch)));
 
 	for (ii=0, pCard = pmszCards; '\0' != *pCard; ii++)   {
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
-		pCard = pCard + wcslen(pCard) + 1;
+		pCard = pCard + strlen(pCard) + 1;
 	}
 
 	if (gpriv->SCardFreeMemory)
