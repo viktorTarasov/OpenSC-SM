@@ -141,8 +141,14 @@ typedef LONG (PCSC_API *SCardTransmit_t)(SCARDHANDLE hCard, LPCSCARD_IO_REQUEST 
 	LPBYTE pbRecvBuffer, LPDWORD pcbRecvLength);
 typedef LONG (PCSC_API *SCardListReaders_t)(SCARDCONTEXT hContext, LPCSTR mszGroups,
 	LPSTR mszReaders, LPDWORD pcchReaders);
-typedef LONG (PCSC_API *SCardGetAttrib_t)(SCARDHANDLE hCard, DWORD dwAttrId,\
+typedef LONG (PCSC_API *SCardGetAttrib_t)(SCARDHANDLE hCard, DWORD dwAttrId,
 	LPBYTE pbAttr, LPDWORD pcbAttrLen);
+
+#if defined(_WIN32)
+typedef LONG (PCSC_API *SCardListCards_t)(SCARDCONTEXT hContext, LPCBYTE pbAtr, LPCGUID rgquidInterfaces,
+	DWORD cguidInterfaceCount, LPSTR mszCards, LPDWORD pcchCards);
+typedef LONG (PCSC_API *SCardFreeMemory_t)(SCARDCONTEXT hContext, LPCVOID pvMem);
+#endif
 
 /* Copied from pcsc-lite reader.h */
 

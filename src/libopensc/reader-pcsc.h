@@ -50,6 +50,10 @@ struct pcsc_global_private_data {
 	SCardTransmit_t SCardTransmit;
 	SCardListReaders_t SCardListReaders;
 	SCardGetAttrib_t SCardGetAttrib;
+#if defined(_WIN32)
+	SCardListCards_t SCardListCards;
+	SCardFreeMemory_t SCardFreeMemory;
+#endif
 };
 
 struct pcsc_private_data {

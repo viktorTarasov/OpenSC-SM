@@ -59,6 +59,48 @@ CSP_Free(LPVOID Address)
 }
 
 
+static int
+vsctpm_md_pkcs15_test(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	struct pcsc_global_private_data *gpriv = (struct pcsc_global_private_data *) ctx->reader_drv_data;
+	struct sc_reader *reader =  card->reader;
+	LPTSTR pmszCards = NULL;
+	LPTSTR pCard;
+	LONG rv;
+	DWORD cch = SCARD_AUTOALLOCATE;
+	int ii;
+	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+
+	sc_log(ctx, "MD PKCS15 test started");
+	if (!priv->gpriv->SCardListCards)  {
+		sc_log(ctx, "No 'SCardListCards' handle");
+		return;
+	}
+
+	// Retrieve the list of cards.
+	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, NULL, NULL, NULL, (LPTSTR)&pmszCards, &cch);
+	if ( rv != SCARD_S_SUCCESS )   {
+		sc_log(ctx, "Failed SCardListCards: error %lX", rv);
+		return;
+	}
+	sc_log(ctx, "SCardListCards returned %p(%li) bytes", pmszCards, cch);
+	sc_log(ctx, "Dump '%s'", sc_dump_hex(pmszCards, cch));
+
+	for (ii=0, pCard = pmszCards; '\0' != *pCard; ii++)   {
+		sc_log(ctx, "cards: %i -- %s", ii, pCard);
+		pCard = pCard + wcslen(pCard) + 1;
+	}
+
+	if (gpriv->SCardFreeMemory)
+		rv = gpriv->SCardFreeMemory(gpriv->pcsc_ctx, pmszCards);
+	else
+		sc_log(ctx, "No 'SCardFreeMemory' handle");
+
+	sc_log(ctx, "MD PKCS15 test finished");
+	return SC_SUCCESS;
+}
+
 int
 vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 {
@@ -274,6 +316,9 @@ vsctpm_md_pkcs15_container_init(struct sc_card *card, struct vsctpm_publickeublo
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
 	memset(p15cont, 0, sizeof(p15cont));
+
+
+	vsctpm_md_pkcs15_test(card);
 
 /*
  * TODO ..........................;

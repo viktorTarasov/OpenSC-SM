@@ -627,6 +627,12 @@ static int pcsc_init(sc_context_t *ctx)
 	gpriv->SCardListReaders = (SCardListReaders_t)sc_dlsym(gpriv->dlhandle, "SCardListReaders");
 	gpriv->SCardGetAttrib = (SCardGetAttrib_t)sc_dlsym(gpriv->dlhandle, "SCardGetAttrib");
 
+#if defined(_WIN32)
+	gpriv->SCardListCards = (SCardListCards_t)sc_dlsym(gpriv->dlhandle, "SCardListCards");
+	if (gpriv->SCardListCards == NULL)
+		gpriv->SCardListCards = (SCardListCards_t)sc_dlsym(gpriv->dlhandle, "SCardListCardsA");
+	gpriv->SCardFreeMemory = (SCardFreeMemory_t)sc_dlsym(gpriv->dlhandle, "SCardFreeMemory");
+#endif
 	if (gpriv->SCardConnect == NULL)
 		gpriv->SCardConnect = (SCardConnect_t)sc_dlsym(gpriv->dlhandle, "SCardConnectA");
 	if (gpriv->SCardStatus == NULL)
