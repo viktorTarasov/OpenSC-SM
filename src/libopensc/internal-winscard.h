@@ -150,7 +150,8 @@ typedef LONG (PCSC_API *SCardListCards_t)(SCARDCONTEXT hContext, LPCBYTE pbAtr, 
 typedef LONG (PCSC_API *SCardFreeMemory_t)(SCARDCONTEXT hContext, LPCVOID pvMem);
 typedef LONG (PCSC_API *SCardGetCardTypeProviderName_t) (SCARDCONTEXT hContext, LPCSTR szCardName,
 	DWORD dwProviderId, LPSTR szProvider, LPDWORD pcchProvider);
-
+typedef BOOL (PCSC_API *CertEnumSystemStoreLocationCallback_t)(LPCWSTR pvszStoreLocations,
+	DWORD dwFlags, void *pvReserved, void *pvArg);
 #endif
 
 /* Copied from pcsc-lite reader.h */

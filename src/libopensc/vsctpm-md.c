@@ -59,6 +59,25 @@ CSP_Free(LPVOID Address)
 }
 
 
+BOOL WINAPI
+Callback_CertEnumSystemStoreLocation(LPCWSTR pvszStoreLocations, DWORD dwFlags, void *pvReserved, void *pvArg)
+{
+	struct sc_card *card = (struct sc_card *)pvArg;
+	struct sc_context *ctx = card->ctx;
+	size_t count;
+	char name[255];
+
+	count = wcstombs(name, pvszStoreLocations, sizeof(name));
+	sc_log(ctx, "Converted %i bytes", count);
+
+	if (count)   {
+		sc_log(ctx, "Provider: %s", name);
+	}
+
+	return TRUE;
+}
+
+
 static int
 vsctpm_md_pkcs15_test(struct sc_card *card)
 {
@@ -91,13 +110,21 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
 		// Get the library name
-		// rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_CSP, (LPTSTR)&szProvider, &chProvider);
+		chProvider = SCARD_AUTOALLOCATE;
 		rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_KSP, (LPTSTR)&szProvider, &chProvider);
 		if (rv != SCARD_S_SUCCESS)    {
 			sc_log(ctx, "Failed SSCardGetCardTypeProviderName: error %lX", rv);
 			break;
 		}
-		sc_log(ctx, "provider: %i -- %s", ii, szProvider);
+		sc_log(ctx, "KSP provider: %i -- %s", ii, szProvider);
+
+		chProvider = SCARD_AUTOALLOCATE;
+		rv = gpriv->SCardGetCardTypeProviderName(gpriv->pcsc_ctx, pCard, SCARD_PROVIDER_CSP, (LPTSTR)&szProvider, &chProvider);
+		if (rv != SCARD_S_SUCCESS)    {
+			sc_log(ctx, "Failed SSCardGetCardTypeProviderName: error %lX", rv);
+			break;
+		}
+		sc_log(ctx, "CSP provider: %i -- %s", ii, szProvider);
 
 /*
 		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
@@ -118,6 +145,13 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 		rv = gpriv->SCardFreeMemory(gpriv->pcsc_ctx, pmszCards);
 	else
 		sc_log(ctx, "No 'SCardFreeMemory' handle");
+
+	if(CertEnumSystemStoreLocation(0, card, Callback_CertEnumSystemStoreLocation))   {
+		sc_log(ctx, "CertEnumSystemStoreLocation() failed");
+	}
+	else   {
+		sc_log(ctx, "CertEnumSystemStoreLocation() success");
+	}
 
 	sc_log(ctx, "MD PKCS15 test finished");
 	return SC_SUCCESS;

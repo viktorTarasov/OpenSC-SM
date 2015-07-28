@@ -1630,7 +1630,7 @@ md_set_cmapfile(PCARD_DATA pCardData, struct md_file *file)
 			loghex(pCardData, 7, (PBYTE) (p+ii), sizeof(CONTAINER_MAP_RECORD));
 		}
 	}
-	
+
 	dwret = md_fs_add_msroot(pCardData, &(file->next));
 	if (dwret != SCARD_S_SUCCESS)
 		return dwret;

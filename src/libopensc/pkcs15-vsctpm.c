@@ -137,7 +137,7 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_x.value, &mdc.cert_x.len);
 			LOG_TEST_RET(ctx, rv, "Cannot read exchange certificate");
 
-			sc_log(ctx, "PubKeyEx %s", sc_dump_hex(mdc.cert_x.value, mdc.cert_x.len));
+			sc_log(ctx, "Cert Exchange %s", sc_dump_hex(mdc.cert_x.value, mdc.cert_x.len));
 		}
 
 		if (mdc.info.cbSigPublicKey && mdc.info.pbSigPublicKey)   {
@@ -149,9 +149,8 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_s.value, &mdc.cert_s.len);
 			LOG_TEST_RET(ctx, rv, "Cannot read sign certificate");
 
-			sc_log(ctx, "PubKeySign %s", sc_dump_hex(mdc.cert_s.value, mdc.cert_s.len));
+			sc_log(ctx, "Cert Sign %s", sc_dump_hex(mdc.cert_s.value, mdc.cert_s.len));
 		}
-
 
 		/* 06 02 0000 00A40000 52534131 00080000 01000100 9D248A42CBF71DD0BCAD2893F3F212E71CC162FC51CEE431 ... */
 	}
