@@ -64,6 +64,17 @@ int vsctpm_md_get_container(struct sc_card *, int, struct vsctpm_md_container *)
 int vsctpm_md_cmap_size(struct sc_card *);
 int vsctpm_md_cmap_reload(struct sc_card *);
 
+typedef struct _ENUM_ARG {
+	BOOL fAll;
+	BOOL fVerbose;
+	DWORD dwFlags;
+	const void  *pvStoreLocationPara;
+	HKEY hKeyBase;
+
+	struct sc_card *card;
+	char *title;
+} ENUM_ARG, *PENUM_ARG;
+
 #endif  /* ENABLE_MINIDRIVER */
 
 #define VSCTPM_MD_ENTRY_DNAME_SIZE 9

@@ -62,17 +62,66 @@ CSP_Free(LPVOID Address)
 BOOL WINAPI
 Callback_CertEnumSystemStoreLocation(LPCWSTR pvszStoreLocations, DWORD dwFlags, void *pvReserved, void *pvArg)
 {
-	struct sc_card *card = (struct sc_card *)pvArg;
+	ENUM_ARG *enumArg = (ENUM_ARG *)pvArg;
+	struct sc_card *card = enumArg->card;
 	struct sc_context *ctx = card->ctx;
 	size_t count;
 	char name[255];
 
-	count = wcstombs(name, pvszStoreLocations, sizeof(name));
-	sc_log(ctx, "Converted %i bytes", count);
+	if (wcstombs(name, pvszStoreLocations, sizeof(name)))
+		sc_log(ctx, "%s: %s", enumArg->title, name);
 
-	if (count)   {
-		sc_log(ctx, "Provider: %s", name);
-	}
+	return TRUE;
+}
+
+
+/*
+static BOOL
+GetSystemName( const void *pvSystemStore, DWORD dwFlags, PENUM_ARG pEnumArg, LPCWSTR *ppwszSystemName)
+{
+//-------------------------------------------------------------------
+// Declare local variables.
+
+        *ppwszSystemName = NULL;
+
+        if (pEnumArg->hKeyBase && 0 == (dwFlags & CERT_SYSTEM_STORE_RELOCATE_FLAG))   {
+                printf("Failed => RELOCATE_FLAG not set in callback. \n");
+                return FALSE;
+        }
+        else  {
+                if (dwFlags & CERT_SYSTEM_STORE_RELOCATE_FLAG)   {
+                        PCERT_SYSTEM_STORE_RELOCATE_PARA pRelocatePara;
+                        if (!pEnumArg->hKeyBase) {
+                                MyHandleError("Failed => RELOCATE_FLAG is set in callback");
+                        }
+                        pRelocatePara = (PCERT_SYSTEM_STORE_RELOCATE_PARA) pvSystemStore;
+                        if (pRelocatePara->hKeyBase != pEnumArg->hKeyBase)   {
+                                MyHandleError("Wrong hKeyBase passed to callback");
+                        }
+
+                        *ppwszSystemName = pRelocatePara->pwszSystemStore;
+                }
+                else   {
+                        *ppwszSystemName = (LPCWSTR) pvSystemStore;
+                }
+        }
+
+        return TRUE;
+}
+*/
+
+BOOL WINAPI
+Callback_CertEnumSystemStore(const void *pvSystemStore, DWORD dwFlags,
+		PCERT_SYSTEM_STORE_INFO pStoreInfo, void *pvReserved, void *pvArg)
+{
+	ENUM_ARG *enumArg = (ENUM_ARG *)pvArg;
+	struct sc_card *card = enumArg->card;
+	struct sc_context *ctx = card->ctx;
+	LPCWSTR pwszSystemStore = (LPCWSTR) pvSystemStore;
+	char name[255];
+
+	if (wcstombs(name, pwszSystemStore, sizeof(name)))
+		sc_log(ctx, "%s: %s", enumArg->title, name);
 
 	return TRUE;
 }
@@ -89,6 +138,7 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	int ii;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
 	struct pcsc_global_private_data *gpriv = priv->gpriv;
+	ENUM_ARG enumArg;
 
 	sc_log(ctx, "MD PKCS15 test started, cch %li, pcsc_ctx %p", cch, gpriv->pcsc_ctx);
 	if (!priv->gpriv->SCardListCards)  {
@@ -146,12 +196,25 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	else
 		sc_log(ctx, "No 'SCardFreeMemory' handle");
 
-	if(CertEnumSystemStoreLocation(0, card, Callback_CertEnumSystemStoreLocation))   {
-		sc_log(ctx, "CertEnumSystemStoreLocation() failed");
-	}
-	else   {
+	enumArg.card = card;
+	enumArg.title = "Store Location";
+
+	if(CertEnumSystemStoreLocation(0, &enumArg, Callback_CertEnumSystemStoreLocation))
+		sc_log(ctx, "CertEnumSystemStoreLocation() failed  , error %X", GetLastError());
+	else
 		sc_log(ctx, "CertEnumSystemStoreLocation() success");
-	}
+
+	enumArg.title = "Store Current User";
+	if(CertEnumSystemStore(CERT_SYSTEM_STORE_CURRENT_USER, NULL, &enumArg, Callback_CertEnumSystemStore))
+		sc_log(ctx, "CertEnumSystemStore() failed  , error %X", GetLastError());
+	else
+		sc_log(ctx, "CertEnumSystemStore() success");
+
+	enumArg.title = "Store Local Machine";
+	if(CertEnumSystemStore(CERT_SYSTEM_STORE_LOCAL_MACHINE, NULL, &enumArg, Callback_CertEnumSystemStore))
+		sc_log(ctx, "CertEnumSystemStore() failed  , error %X", GetLastError());
+	else
+		sc_log(ctx, "CertEnumSystemStore() success");
 
 	sc_log(ctx, "MD PKCS15 test finished");
 	return SC_SUCCESS;
