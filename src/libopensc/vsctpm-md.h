@@ -32,6 +32,9 @@ struct vsctpm_md_data   {
 	CARD_DATA       card_data;
 	HMODULE         hmd;
 	PFN_CARD_ACQUIRE_CONTEXT acquire_context;
+
+	struct sc_lv_data cmap_data;
+
 };
 
 struct vsctpm_pkcs15_container {
@@ -45,6 +48,8 @@ struct vsctpm_md_container {
 	CONTAINER_INFO info;
 
 	struct vsctpm_pkcs15_container p15cont;
+
+	struct sc_lv_data cert_s, cert_x;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
@@ -56,6 +61,8 @@ int vsctpm_md_get_guid(struct sc_card *, unsigned char *, size_t *);
 int vsctpm_md_read_file(struct sc_card *, char *, char *, unsigned char **, size_t *);
 int vsctpm_md_enum_files(struct sc_card *, char *, char **, size_t *);
 int vsctpm_md_get_container(struct sc_card *, int, struct vsctpm_md_container *);
+int vsctpm_md_cmap_size(struct sc_card *);
+int vsctpm_md_cmap_reload(struct sc_card *);
 
 #endif  /* ENABLE_MINIDRIVER */
 

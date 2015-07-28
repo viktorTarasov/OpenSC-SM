@@ -103,29 +103,6 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 #if ENABLE_MINIDRIVER
 
 static int
-sc_pkcs15emu_vsctpm_read_cmapfile (struct sc_pkcs15_card *p15card)
-{
-	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_card *card = p15card->card;
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	unsigned char *buf = NULL;
-	size_t buf_len = 0;
-	int    rv;
-
-	LOG_FUNC_CALLED(ctx);
-
-	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
-        LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-	sc_log(ctx, "VSC cmapfile %s", sc_dump_hex(buf, buf_len));
-
-	vsctpm_md_free(card, buf);
-	buf = NULL, buf_len = 0;
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-
-
-static int
 sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
@@ -134,21 +111,48 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 	unsigned char *buf = NULL;
 	size_t buf_len = 0;
 	struct vsctpm_md_container mdc;
-	int    rv, idx;
+	int    rv, idx, nn_cont;
 
 	LOG_FUNC_CALLED(ctx);
 
-/* TODO: get current containers number */
-	for (idx=0; idx < 12; idx++)   {
-		rv = vsctpm_md_get_container(card, idx, &mdc);
+	rv = vsctpm_md_cmap_size(card);
+	LOG_TEST_RET(ctx, rv, "CMAP cannot get size");
+	nn_cont = rv;
+	sc_log(ctx, "CMAP length %i", nn_cont);
+
+	for (idx=0; idx < nn_cont; idx++)   {
+		rv = vsctpm_md_cmap_get_container(card, idx, &mdc);
 		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 			continue;
 		LOG_TEST_RET(ctx, rv, "Get MD container error");
 		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i, blobs %i/%i", idx, mdc.rec.bFlags,
 				mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits, mdc.info.cbSigPublicKey, mdc.info.cbKeyExPublicKey);
 
-		if (mdc.info.cbKeyExPublicKey && mdc.info.pbKeyExPublicKey)
+		if (mdc.info.cbKeyExPublicKey && mdc.info.pbKeyExPublicKey)   {
+			char k_name[6];
+
 			sc_log(ctx, "PubKeyEx %s", sc_dump_hex(mdc.info.pbKeyExPublicKey, mdc.info.cbKeyExPublicKey));
+
+			snprintf((char *)k_name, sizeof(k_name), "kxc%02i", idx);
+			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_x.value, &mdc.cert_x.len);
+			LOG_TEST_RET(ctx, rv, "Cannot read exchange certificate");
+
+			sc_log(ctx, "PubKeyEx %s", sc_dump_hex(mdc.cert_x.value, mdc.cert_x.len));
+		}
+
+		if (mdc.info.cbSigPublicKey && mdc.info.pbSigPublicKey)   {
+			char k_name[6];
+
+			sc_log(ctx, "PubSig %s", sc_dump_hex(mdc.info.pbSigPublicKey, mdc.info.cbSigPublicKey));
+
+			snprintf((char *)k_name, sizeof(k_name), "ksc%02i", idx);
+			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_s.value, &mdc.cert_s.len);
+			LOG_TEST_RET(ctx, rv, "Cannot read sign certificate");
+
+			sc_log(ctx, "PubKeySign %s", sc_dump_hex(mdc.cert_s.value, mdc.cert_s.len));
+		}
+
+
 		/* 06 02 0000 00A40000 52534131 00080000 01000100 9D248A42CBF71DD0BCAD2893F3F212E71CC162FC51CEE431 ... */
 	}
 

@@ -178,6 +178,9 @@ vsctpm_md_reset_card_data(struct sc_card *card)
 
 	LOG_FUNC_CALLED(ctx);
 
+	if (priv->md.cmap_data.value)
+		vsctpm_md_free(card, priv->md.cmap_data.value);
+
 	if (priv->md.hmd)
 		FreeLibrary(priv->md.hmd);
 
@@ -368,7 +371,7 @@ vsctpm_md_pkcs15_container_get_cert(struct sc_card *card, struct vsctpm_pkcs15_c
 
 
 int
-vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
+vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
@@ -377,22 +380,22 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	CONTAINER_INFO cinfo;
 	struct vsctpm_publickeublob *pubkey_hdr = NULL;
 	struct vsctpm_pkcs15_container p15cont;
-	unsigned char *buf = NULL;
-	size_t buf_len = 0;
 	int rv, nn_cont;
-
 
 	LOG_FUNC_CALLED(ctx);
 
 	if (!priv->md.card_data.pfnCardGetContainerInfo)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &buf, &buf_len);
-	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+	if (priv->md.cmap_data.value == NULL)   {
+		rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
+		LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+	}
 
-	nn_cont = buf_len / sizeof(CONTAINER_MAP_RECORD);
+	nn_cont = priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD);
 	if ((idx + 1) > nn_cont)   {
-		vsctpm_md_free(card, buf);
+		vsctpm_md_free(card, priv->md.cmap_data.value);
+		priv->md.cmap_data.value = NULL;
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
 	}
 
@@ -408,7 +411,8 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 	sc_log(ctx, "md-cont %i: sign %i, key-ex %i", idx, cinfo.cbSigPublicKey, cinfo.cbKeyExPublicKey);
 
 	if (!vsctpm_cont)   {
-		vsctpm_md_free(card, buf);
+		vsctpm_md_free(card, priv->md.cmap_data.value);
+		priv->md.cmap_data.value = NULL;
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	}
 
@@ -432,13 +436,53 @@ vsctpm_md_get_container(struct sc_card *card, int idx, struct vsctpm_md_containe
 
 	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
 	vsctpm_cont->idx = idx;
-	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)buf + idx);
+	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)priv->md.cmap_data.value + idx);
 	vsctpm_cont->info = cinfo;
 	vsctpm_cont->p15cont = p15cont;
 
-	vsctpm_md_free(card, buf);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
+
+
+int
+vsctpm_md_cmap_size(struct sc_card *card)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.cmap_data.value == NULL)   {
+		rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
+		LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+	}
+
+	return (priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD));
+}
+
+
+int
+vsctpm_md_cmap_reload(struct sc_card *card)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.cmap_data.value)   {
+		vsctpm_md_free(card, priv->md.cmap_data.value);
+		priv->md.cmap_data.value = NULL;
+		priv->md.cmap_data.len = 0;
+	}
+
+	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
+	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
 
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
