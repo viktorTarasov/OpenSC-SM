@@ -45,11 +45,10 @@ struct vsctpm_pkcs15_container {
 struct vsctpm_md_container {
 	int idx;
 	CONTAINER_MAP_RECORD rec;
-	CONTAINER_INFO info;
 
-	struct vsctpm_pkcs15_container p15cont;
+	unsigned char id[17];
 
-	struct sc_lv_data cert_s, cert_x;
+	CERT_CONTEXT *signCertContext, *exCertContext;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
@@ -63,6 +62,7 @@ int vsctpm_md_enum_files(struct sc_card *, char *, char **, size_t *);
 int vsctpm_md_get_container(struct sc_card *, int, struct vsctpm_md_container *);
 int vsctpm_md_cmap_size(struct sc_card *);
 int vsctpm_md_cmap_reload(struct sc_card *);
+int vsctpm_md_cmap_init_container(struct sc_card *, int, struct vsctpm_md_container *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;

@@ -23,6 +23,10 @@
 #include <string.h>
 #include <stdio.h>
 
+#ifdef ENABLE_OPENSSL
+#include <openssl/pem.h>
+#endif
+
 #include "internal.h"
 #include "pkcs15.h"
 #include "cardctl.h"
@@ -93,14 +97,121 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 }
 
 
-/*
-  6C0065002D00320038006200390034003700390061002D0038006600350030002D0034003600380063002D0062003700620034002D006600300036003300660065003400630033003700330035000000
-  03
-  00
-  0000
-  0008
-*/
 #if ENABLE_MINIDRIVER
+static int
+sc_pkcs15emu_vsctpm_free_container (struct sc_context *ctx, struct vsctpm_md_container *mdc)
+{
+	LOG_FUNC_CALLED(ctx);
+	if(!mdc)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	sc_log(ctx, "signCertContext %p", mdc->signCertContext);
+	if (mdc->signCertContext)
+		CertFreeCertificateContext(mdc->signCertContext);
+	mdc->signCertContext = NULL;
+
+	sc_log(ctx, "exCertContext %p", mdc->exCertContext);
+	if (mdc->exCertContext)
+		CertFreeCertificateContext(mdc->exCertContext);
+	mdc->exCertContext = NULL;
+
+	memset(mdc, 0, sizeof(struct vsctpm_md_container));
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+static int
+sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx, struct sc_pkcs15_id *id)
+{
+	struct sc_pkcs15_pubkey *pubkey = NULL;
+	struct sc_pkcs15_der der;
+
+	if (!cert_ctx || !id)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	der.value = cert_ctx->pbCertEncoded;
+	der.len = cert_ctx->cbCertEncoded;
+
+	rv = sc_pkcs15_pubkey_from_cert(ctx, &der, &pubkey);
+	LOG_TEST_RET(ctx, rv, "Cannot get public key from certificate");
+
+#ifdef ENABLE_OPENSSL
+	SHA1(pubkey->u.rsa.modulus.data, pubkey->u.rsa.modulus.len, id->value);
+	id->len = SHA_DIGEST_LENGTH;
+#elif
+#error "Get Object ID not implemented"
+#endif
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+struct sc_pkcs15emu_vsctpm_container_add_cert  (struct sc_pkcs15_card *p15card, CERT_CONTEXT *cert_ctx)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_pkcs15_prkey_info kinfo;
+	struct sc_pkcs15_object kobj;
+	struct sc_pkcs15_der der;
+	struct sc_pkcs15_pubkey *pubkey = NULL;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!cert_ctx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	memset(&kinfo, 0, sizeof(kinfo));
+	memset(&kobj, 0, sizeof(kobj));
+
+        if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
+		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
+	}
+
+	rv = sc_pkcs15emu_vsctpm_id_from_cert_context(ctx, cert_ctx, &kinfo.id);
+	LOG_TEST_RET(ctx, rv, "Cannot get ID from cert context");
+
+	rv = sc_pkcs15emu_add_x509_cert(p15card, &cobj, &cinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 certificate object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, CERT_CONTEXT *cert_ctx)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_pkcs15_cert_info cinfo;
+	struct sc_pkcs15_object cobj;
+	struct sc_pkcs15_der der;
+	struct sc_pkcs15_pubkey *pubkey = NULL;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!cert_ctx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	memset(&cinfo, 0, sizeof(cinfo));
+	memset(&cobj, 0, sizeof(cobj));
+
+	if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cobj.label, sizeof(cobj.label) - 1))   {
+		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
+	}
+	cobj.flags |= SC_PKCS15_CO_FLAG_MODIFIABLE;
+
+	rv = sc_pkcs15emu_vsctpm_id_from_cert_context(ctx, cert_ctx, &cinfo.id);
+	LOG_TEST_RET(ctx, rv, "Cannot get ID from cert context");
+
+	rv = sc_pkcs15emu_add_x509_cert(p15card, &cobj, &cinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 certificate object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
 
 static int
 sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
@@ -121,42 +232,29 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 	sc_log(ctx, "CMAP length %i", nn_cont);
 
 	for (idx=0; idx < nn_cont; idx++)   {
-		rv = vsctpm_md_cmap_get_container(card, idx, &mdc);
+		rv = vsctpm_md_cmap_init_container(card, idx, &mdc);
 		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 			continue;
 		LOG_TEST_RET(ctx, rv, "Get MD container error");
-		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i, blobs %i/%i", idx, mdc.rec.bFlags,
-				mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits, mdc.info.cbSigPublicKey, mdc.info.cbKeyExPublicKey);
+		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i", idx, mdc.rec.bFlags, mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits);
 
-		if (mdc.info.cbKeyExPublicKey && mdc.info.pbKeyExPublicKey)   {
-			char k_name[6];
-
-			sc_log(ctx, "PubKeyEx %s", sc_dump_hex(mdc.info.pbKeyExPublicKey, mdc.info.cbKeyExPublicKey));
-
-			snprintf((char *)k_name, sizeof(k_name), "kxc%02i", idx);
-			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_x.value, &mdc.cert_x.len);
-			LOG_TEST_RET(ctx, rv, "Cannot read exchange certificate");
-
-			sc_log(ctx, "Cert Exchange %s", sc_dump_hex(mdc.cert_x.value, mdc.cert_x.len));
+		if (mdc.signCertContext)   {
+			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.signCertContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
 		}
 
-		if (mdc.info.cbSigPublicKey && mdc.info.pbSigPublicKey)   {
-			char k_name[6];
-
-			sc_log(ctx, "PubSig %s", sc_dump_hex(mdc.info.pbSigPublicKey, mdc.info.cbSigPublicKey));
-
-			snprintf((char *)k_name, sizeof(k_name), "ksc%02i", idx);
-			rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, k_name, &mdc.cert_s.value, &mdc.cert_s.len);
-			LOG_TEST_RET(ctx, rv, "Cannot read sign certificate");
-
-			sc_log(ctx, "Cert Sign %s", sc_dump_hex(mdc.cert_s.value, mdc.cert_s.len));
+		if (mdc.exCertContext)   {
+			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.exCertContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
 		}
 
-		/* 06 02 0000 00A40000 52534131 00080000 01000100 9D248A42CBF71DD0BCAD2893F3F212E71CC162FC51CEE431 ... */
+		sc_pkcs15emu_vsctpm_free_container(ctx, &mdc);
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
+
+
 
 
 static int
@@ -255,6 +353,8 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 
 	rv = sc_pkcs15emu_vsctpm_enum_containers (p15card);
 	LOG_TEST_RET(ctx, rv, "Cannot parse CMAP file");
+
+
 #endif
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

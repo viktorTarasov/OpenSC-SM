@@ -65,7 +65,6 @@ Callback_CertEnumSystemStoreLocation(LPCWSTR pvszStoreLocations, DWORD dwFlags, 
 	ENUM_ARG *enumArg = (ENUM_ARG *)pvArg;
 	struct sc_card *card = enumArg->card;
 	struct sc_context *ctx = card->ctx;
-	size_t count;
 	char name[255];
 
 	if (wcstombs(name, pvszStoreLocations, sizeof(name)))
@@ -128,7 +127,7 @@ Callback_CertEnumSystemStore(const void *pvSystemStore, DWORD dwFlags,
 
 
 static int
-vsctpm_md_pkcs15_test(struct sc_card *card)
+vsctpm_md_test_list_cards(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_reader *reader =  card->reader;
@@ -138,25 +137,23 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	int ii;
 	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
 	struct pcsc_global_private_data *gpriv = priv->gpriv;
-	ENUM_ARG enumArg;
 
-	sc_log(ctx, "MD PKCS15 test started, cch %li, pcsc_ctx %p", cch, gpriv->pcsc_ctx);
+	sc_log(ctx, "MD PKCS15 test 'list cards' started");
 	if (!priv->gpriv->SCardListCards)  {
 		sc_log(ctx, "No 'SCardListCards' handle");
-		return;
+		return SC_SUCCESS;
 	}
 
 	// Retrieve the list of cards.
 	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, reader->atr.value, NULL, NULL, (LPTSTR)&pmszCards, &cch);
 	if ( rv != SCARD_S_SUCCESS )   {
 		sc_log(ctx, "Failed SCardListCards: error %lX", rv);
-		return;
+		return SC_SUCCESS;
 	}
 
 	for (ii=0, pCard = pmszCards; '\0' != *pCard; ii++)   {
 		LPTSTR szProvider = NULL;
 		DWORD chProvider = SCARD_AUTOALLOCATE;
-		HCRYPTPROV hCryptProv;
 
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
 		// Get the library name
@@ -196,6 +193,22 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	else
 		sc_log(ctx, "No 'SCardFreeMemory' handle");
 
+	sc_log(ctx, "MD test 'list cards' finished");
+	return SC_SUCCESS;
+}
+
+
+static int
+vsctpm_md_test_list_providers(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_reader *reader =  card->reader;
+	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+	struct pcsc_global_private_data *gpriv = priv->gpriv;
+	ENUM_ARG enumArg;
+
+	sc_log(ctx, "MD test 'list providers' started");
+
 	enumArg.card = card;
 	enumArg.title = "Store Location";
 
@@ -216,9 +229,86 @@ vsctpm_md_pkcs15_test(struct sc_card *card)
 	else
 		sc_log(ctx, "CertEnumSystemStore() success");
 
-	sc_log(ctx, "MD PKCS15 test finished");
+	sc_log(ctx, "MD test 'list providers' finished");
 	return SC_SUCCESS;
 }
+
+
+static int
+vsctpm_md_test(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_reader *reader =  card->reader;
+	struct pcsc_private_data *priv = GET_PRIV_DATA(reader);
+	struct pcsc_global_private_data *gpriv = priv->gpriv;
+	HCERTSTORE hCertStore;
+	int rv;
+
+	sc_log(ctx, "MD test started, pcsc_ctx %p", gpriv->pcsc_ctx);
+
+	rv = vsctpm_md_test_list_cards(card);
+	LOG_TEST_RET(ctx, rv, "'List cards' test failed");
+
+	rv = vsctpm_md_test_list_providers(card);
+	LOG_TEST_RET(ctx, rv, "'List providers' test failed");
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+	if (!hCertStore)   {
+		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
+	}
+	else   {
+		PCCERT_CONTEXT pCertContext = NULL;
+		unsigned char buf[12000];
+		size_t len;
+
+		sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
+		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
+			char pszNameString[256];
+
+			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
+				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				continue;
+			}
+			sc_log(ctx, "Certificate for '%s', pCertContext %p", pszNameString, pCertContext);
+			sc_log(ctx, "type 0x%X, data(%i) %p", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded, pCertContext->pbCertEncoded);
+			sc_log(ctx, "cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+			sc_log(ctx, "cert serial '%s'", sc_dump_hex(pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData));
+
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_IDENTIFIER_PROP_ID, buf, &len))
+				sc_log(ctx, "KeyID (%i) %s", len, sc_dump_hex(buf, len));
+
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
+				CRYPT_KEY_PROV_INFO *keyInfo;
+				char name[255];
+
+				sc_log(ctx, "KeyInfo (%i) %s", len, sc_dump_hex(buf, len));
+				keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
+
+				sc_log(ctx, "KeyInfo (%i), key spec 0x%X, provType 0x%X, flags 0x%X, number of params %i", len,
+						keyInfo->dwKeySpec, keyInfo->dwProvType, keyInfo->dwFlags, keyInfo->cProvParam);
+				if (wcstombs(name, keyInfo->pwszContainerName, sizeof(name)))
+					sc_log(ctx, "pwszContainerName: %s", name);
+				if (wcstombs(name, keyInfo->pwszProvName, sizeof(name)))
+					sc_log(ctx, "pwszProvName: %s", name);
+			}
+			else   {
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+			}
+		}
+
+		if (!CertCloseStore(hCertStore, 0))
+			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
+		else
+			sc_log(ctx, "CertCloseStore() cert store closed");
+	}
+
+	sc_log(ctx, "MD test finished");
+	return SC_SUCCESS;
+}
+
 
 int
 vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
@@ -414,7 +504,7 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-
+/*
 static int
 vsctpm_md_pkcs15_container_init(struct sc_card *card, struct vsctpm_publickeublob *pubkey_hd, struct vsctpm_pkcs15_container *p15cont)
 {
@@ -439,42 +529,126 @@ vsctpm_md_pkcs15_container_init(struct sc_card *card, struct vsctpm_publickeublo
 
 	memset(p15cont, 0, sizeof(p15cont));
 
+	vsctpm_md_test(card);
 
-	vsctpm_md_pkcs15_test(card);
-
-/*
  * TODO ..........................;
- */
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
-
+*/
 
 static int
-vsctpm_md_pkcs15_container_get_cert(struct sc_card *card, struct vsctpm_pkcs15_container *p15cont)
+vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container *vsctpm_cont)
 {
 	struct sc_context *ctx = card->ctx;
+	HCERTSTORE hCertStore;
+
 	LOG_FUNC_CALLED(ctx);
-/*
-	if (!CryptAcquireContext(&hCSP, pwzContainerName, _csp == NULL ? MS_SCARD_PROV : _csp,
-					                                 PROV_RSA_FULL, CRYPT_SILENT))
-        HCRYPTPROV hCSP = NULL;
-	        HCRYPTKEY hKey = NULL;
-		        PCCERT_CONTEXT pCertContext = NULL;
- */
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+	if (!hCertStore)   {
+		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
+	}
+	else   {
+		PCCERT_CONTEXT pCertContext = NULL;
+		unsigned char buf[12000];
+		size_t len;
+
+		sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
+		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
+			char pszNameString[256];
+
+			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
+				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				continue;
+			}
+			sc_log(ctx, "Found certificate '%s'", pszNameString);
+
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
+				CRYPT_KEY_PROV_INFO *keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
+				if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
+					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
+						sc_log(ctx, "Sign certificate matched");
+						sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						vsctpm_cont->signCertContext = CertDuplicateCertificateContext(pCertContext);
+					}
+					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
+						sc_log(ctx, "KeyExchange certificate matched");
+						sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						vsctpm_cont->exCertContext = CertDuplicateCertificateContext(pCertContext);
+					}
+				}
+			}
+			else   {
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+				continue;
+			}
+		}
+
+		if (!CertCloseStore(hCertStore, 0))
+			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
+		else
+			sc_log(ctx, "CertCloseStore() cert store closed");
+	}
+
+	sc_log(ctx, "MD PKCS15 test finished");
+	return SC_SUCCESS;
+
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
 int
-vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
+vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!priv->md.card_data.pfnCardGetContainerInfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	rv = vsctpm_md_cmap_size(card);
+	LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+	if ((idx + 1) > rv)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
+
+	if (!vsctpm_cont)   {
+		vsctpm_md_free(card, priv->md.cmap_data.value);
+		priv->md.cmap_data.value = NULL;
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
+	vsctpm_cont->idx = idx;
+	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)priv->md.cmap_data.value + idx);
+
+	rv = vsctpm_md_cmap_get_cert_context(card, vsctpm_cont);
+	LOG_TEST_RET(ctx, rv, "Failes to get certificate for container");
+
+	vsctpm_md_test(card);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+/*
+int
+__vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
 	DWORD sz = -1;
 	CONTAINER_INFO cinfo;
+	CONTAINER_MAP_RECORD *cmap_record = NULL;
+	char cmap_guid[256];
 	struct vsctpm_publickeublob *pubkey_hdr = NULL;
 	struct vsctpm_pkcs15_container p15cont;
 	int rv, nn_cont;
@@ -495,6 +669,11 @@ vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_con
 		priv->md.cmap_data.value = NULL;
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
 	}
+
+	cmap_record = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value);
+	sc_log(ctx, "SignKey size %i, ExKey size %i", (cmap_record + idx)->wSigKeySizeBits, (cmap_record + idx)->wKeyExchangeKeySizeBits);
+	if (wcstombs(cmap_guid, (cmap_record + idx)->wszGuid, sizeof(cmap_guid)))
+		sc_log(ctx, "Container: %s", cmap_guid);
 
 	memset(&cinfo, 0, sizeof(cinfo));
 	cinfo.dwVersion = CONTAINER_INFO_CURRENT_VERSION;
@@ -528,7 +707,7 @@ vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_con
 	rv = vsctpm_md_pkcs15_container_init(card, pubkey_hdr, &p15cont);
 	LOG_TEST_RET(ctx, rv, "Failed to parse pubkeyblob");
 
-	rv = vsctpm_md_pkcs15_container_get_cert(card, &p15cont, vsctpm_cont->rec.wszGuid);
+	rv = vsctpm_md_pkcs15_container_get_cert(card, &p15cont, vsctpm_cont);
 	LOG_TEST_RET(ctx, rv, "Failes to get certificate for container");
 
 	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
@@ -539,7 +718,7 @@ vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_con
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
-
+*/
 
 int
 vsctpm_md_cmap_size(struct sc_card *card)
