@@ -572,11 +572,19 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
 						sc_log(ctx, "Sign certificate matched");
 						sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						if (vsctpm_cont->signRequestContext)   {
+							 CertFreeCertificateContext(vsctpm_cont->signRequestContext);
+							 vsctpm_cont->signRequestContext = NULL;
+						}
 						vsctpm_cont->signCertContext = CertDuplicateCertificateContext(pCertContext);
 					}
 					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
 						sc_log(ctx, "KeyExchange certificate matched");
 						sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						if (vsctpm_cont->exRequestContext)   {
+							 CertFreeCertificateContext(vsctpm_cont->exRequestContext);
+							 vsctpm_cont->exRequestContext = NULL;
+						}
 						vsctpm_cont->exCertContext = CertDuplicateCertificateContext(pCertContext);
 					}
 				}
@@ -631,13 +639,17 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 				if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
 					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
 						sc_log(ctx, "Sign request matched");
-						sc_log(ctx, "Sign request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
-						vsctpm_cont->signRequestContext = CertDuplicateCertificateContext(pCertContext);
+						if (!vsctpm_cont->signCertContext)   {
+							sc_log(ctx, "Sign request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+							vsctpm_cont->signRequestContext = CertDuplicateCertificateContext(pCertContext);
+						}
 					}
 					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
 						sc_log(ctx, "KeyExchange request matched");
-						sc_log(ctx, "KeyExchange request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
-						vsctpm_cont->exRequestContext = CertDuplicateCertificateContext(pCertContext);
+						if (!vsctpm_cont->exCertContext)   {
+							sc_log(ctx, "KeyExchange request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+							vsctpm_cont->exRequestContext = CertDuplicateCertificateContext(pCertContext);
+						}
 					}
 				}
 			}

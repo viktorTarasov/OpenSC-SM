@@ -639,13 +639,16 @@ __pkcs15_create_pubkey_object(struct pkcs15_fw_data *fw_data,
 	}
 
 	/* Public key object */
+	sc_log(context, "##### create PKCS#15 object");
 	rv = __pkcs15_create_object(fw_data, (struct pkcs15_any_object **) &object,
 			pubkey, &pkcs15_pubkey_ops, sizeof(struct pkcs15_pubkey_object));
+	sc_log(context, "##### created PKCS#15 object rv %i", rv);
 	if (rv >= 0) {
 		object->pub_info = (struct sc_pkcs15_pubkey_info *) pubkey->data;
 		object->pub_data = p15_key;
 		if (p15_key && object->pub_info->modulus_length == 0 && p15_key->algorithm == SC_ALGORITHM_RSA)
 			object->pub_info->modulus_length = 8 * p15_key->u.rsa.modulus.len;
+		sc_log(context, "##### created PKCS#15 object object(%p)->pub_data(%p)", object, object->pub_data);
 	}
 
 	if (pubkey_object != NULL)
@@ -765,7 +768,7 @@ __pkcs15_prkey_bind_related(struct pkcs15_fw_data *fw_data, struct pkcs15_prkey_
 
 			pubkey = (struct pkcs15_pubkey_object *) obj;
 			if (sc_pkcs15_compare_id(&pubkey->pub_info->id, id)) {
-				sc_log(context, "Associating object %d as public key", i);
+				sc_log(context, "Associating object %d as public key; pubkey(%p)->pub_data %p", i, pubkey, pubkey->pub_data);
 				pk->prv_pubkey = pubkey;
 				sc_pkcs15_dup_pubkey(context, pubkey->pub_data, &pk->pub_data);
 				if (pk->prv_info->modulus_length == 0)

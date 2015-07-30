@@ -51,7 +51,6 @@ struct vsctpm_md_container {
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
-#define
 
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *);
