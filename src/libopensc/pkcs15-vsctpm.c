@@ -117,6 +117,16 @@ sc_pkcs15emu_vsctpm_free_container (struct sc_context *ctx, struct vsctpm_md_con
 		CertFreeCertificateContext(mdc->exCertContext);
 	mdc->exCertContext = NULL;
 
+	sc_log(ctx, "signRequestContext %p", mdc->signRequestContext);
+	if (mdc->signRequestContext)
+		CertFreeCertificateContext(mdc->signRequestContext);
+	mdc->signRequestContext = NULL;
+
+	sc_log(ctx, "exRequestContext %p", mdc->exRequestContext);
+	if (mdc->exRequestContext)
+		CertFreeCertificateContext(mdc->exRequestContext);
+	mdc->signRequestContext = NULL;
+
 	memset(mdc, 0, sizeof(struct vsctpm_md_container));
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

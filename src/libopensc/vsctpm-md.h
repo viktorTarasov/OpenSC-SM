@@ -46,12 +46,12 @@ struct vsctpm_md_container {
 	int idx;
 	CONTAINER_MAP_RECORD rec;
 
-	unsigned char id[17];
-
 	CERT_CONTEXT *signCertContext, *exCertContext;
+	CERT_CONTEXT *signRequestContext, *exRequestContext;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
+#define
 
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *);

@@ -593,9 +593,65 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 			sc_log(ctx, "CertCloseStore() cert store closed");
 	}
 
-	sc_log(ctx, "MD PKCS15 test finished");
-	return SC_SUCCESS;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
+
+static int
+vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_container *vsctpm_cont)
+{
+	struct sc_context *ctx = card->ctx;
+	HCERTSTORE hCertStore;
+
+	LOG_FUNC_CALLED(ctx);
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"REQUEST");
+	if (!hCertStore)   {
+		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
+	}
+	else   {
+		PCCERT_CONTEXT pCertContext = NULL;
+		unsigned char buf[12000];
+		size_t len;
+
+		sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
+		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
+			char pszNameString[256];
+
+			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
+				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				continue;
+			}
+			sc_log(ctx, "Found certificate '%s'", pszNameString);
+
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
+				CRYPT_KEY_PROV_INFO *keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
+				if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
+					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
+						sc_log(ctx, "Sign request matched");
+						sc_log(ctx, "Sign request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						vsctpm_cont->signRequestContext = CertDuplicateCertificateContext(pCertContext);
+					}
+					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
+						sc_log(ctx, "KeyExchange request matched");
+						sc_log(ctx, "KeyExchange request dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						vsctpm_cont->exRequestContext = CertDuplicateCertificateContext(pCertContext);
+					}
+				}
+			}
+			else   {
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+				continue;
+			}
+		}
+
+		if (!CertCloseStore(hCertStore, 0))
+			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
+		else
+			sc_log(ctx, "CertCloseStore() cert store closed");
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -630,7 +686,14 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)priv->md.cmap_data.value + idx);
 
 	rv = vsctpm_md_cmap_get_cert_context(card, vsctpm_cont);
-	LOG_TEST_RET(ctx, rv, "Failes to get certificate for container");
+	LOG_TEST_RET(ctx, rv, "Failed to get certificate for container");
+
+	rv = vsctpm_md_cmap_get_request_context(card, vsctpm_cont);
+	LOG_TEST_RET(ctx, rv, "Failed to get request for container");
+
+	sc_log(ctx, "Container contextx %p %p %p %p",
+			vsctpm_cont->signCertContext, vsctpm_cont->exCertContext,
+			vsctpm_cont->signRequestContext, vsctpm_cont->exRequestContext);
 
 	vsctpm_md_test(card);
 
