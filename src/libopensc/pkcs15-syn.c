@@ -411,7 +411,7 @@ int sc_pkcs15emu_add_data_object(sc_pkcs15_card_t *p15card,
 int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 	const sc_pkcs15_object_t *in_obj, const void *data)
 {
-	sc_pkcs15_object_t *obj;
+	struct sc_pkcs15_object *obj;
 	unsigned int	df_type;
 	size_t		data_len;
 
@@ -443,8 +443,7 @@ int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 		data_len = sizeof(struct sc_pkcs15_data_info);
 		break;
 	default:
-		sc_debug(p15card->card->ctx, SC_LOG_DEBUG_NORMAL,
-			"Unknown PKCS15 object type %d\n", type);
+		sc_log(p15card->card->ctx, "Unknown PKCS15 object type %d", type);
 		free(obj);
 		return SC_ERROR_INVALID_ARGUMENTS;
 	}

@@ -35,6 +35,7 @@
 
 #define MANU_ID	"VSC TPM"
 #define VSCTPM_USER_PIN_REF 0x80
+#define VSCTPM_PKCS15_USER_AUTH_ID 1
 
 int sc_pkcs15emu_vsctpm_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
 
@@ -76,20 +77,21 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 
         auth_info.auth_type	= SC_PKCS15_PIN_AUTH_TYPE_PIN;
         auth_info.auth_method   = SC_AC_CHV;
-        auth_info.auth_id.len = 1;
-        auth_info.auth_id.value[0] = 1;
+        auth_info.auth_id.len =		1;
+        auth_info.auth_id.value[0] =	VSCTPM_PKCS15_USER_AUTH_ID;
         auth_info.attrs.pin.min_length          = 8;
         auth_info.attrs.pin.max_length          = 15;
-        auth_info.attrs.pin.stored_length       = 8;
+        auth_info.attrs.pin.stored_length	= 8;
         auth_info.attrs.pin.type                = SC_PKCS15_PIN_TYPE_ASCII_NUMERIC;
         auth_info.attrs.pin.reference           = VSCTPM_USER_PIN_REF;
         auth_info.attrs.pin.flags               = SC_PKCS15_PIN_FLAG_CASE_SENSITIVE | SC_PKCS15_PIN_FLAG_INITIALIZED | SC_PKCS15_PIN_FLAG_LOCAL;
-        auth_info.tries_left            = tries_left;
+        auth_info.tries_left			= tries_left;
 
-        strncpy(obj.label, "User PIN", SC_PKCS15_MAX_LABEL_SIZE-1);
+        strncpy(obj.label, "User PIN", SC_PKCS15_MAX_LABEL_SIZE - 1);
         obj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE | SC_PKCS15_CO_FLAG_PRIVATE;
 
-        sc_log(ctx, "Add PIN object '%s', auth_id:%s,reference:%i", obj.label, sc_pkcs15_print_id(&auth_info.auth_id), auth_info.attrs.pin.reference);
+        sc_log(ctx, "Add PIN object '%s', auth_id:%s, reference:%i", obj.label,
+			sc_pkcs15_print_id(&auth_info.auth_id), auth_info.attrs.pin.reference);
         rv = sc_pkcs15emu_add_pin_obj(p15card, &obj, &auth_info);
         LOG_TEST_RET(ctx, rv, "VSC TPM init failed: cannot add User PIN object");
 
@@ -119,11 +121,13 @@ sc_pkcs15emu_vsctpm_free_container (struct sc_context *ctx, struct vsctpm_md_con
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
 static int
 sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx, struct sc_pkcs15_id *id)
 {
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	struct sc_pkcs15_der der;
+	int rv;
 
 	if (!cert_ctx || !id)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
@@ -140,12 +144,59 @@ sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *c
 #elif
 #error "Get Object ID not implemented"
 #endif
+	sc_pkcs15_free_pubkey(pubkey);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
 static int
-struct sc_pkcs15emu_vsctpm_container_add_cert  (struct sc_pkcs15_card *p15card, CERT_CONTEXT *cert_ctx)
+sc_pkcs15emu_vsctpm_key_info_from_cert_context(struct sc_context *ctx,
+		CERT_CONTEXT *cert_ctx, struct sc_pkcs15_prkey_info *kinfo)
+{
+	struct sc_pkcs15_cert cert;
+	struct sc_pkcs15_der blob;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!cert_ctx || !kinfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	sc_log(ctx, "Private key info blob (%p, %i)", cert_ctx->pbCertEncoded, cert_ctx->cbCertEncoded);
+	blob.value = cert_ctx->pbCertEncoded;
+	blob.len = cert_ctx->cbCertEncoded;
+
+	rv = sc_pkcs15emu_vsctpm_id_from_cert_context(ctx, cert_ctx, &kinfo->id);
+	LOG_TEST_RET(ctx, rv, "Cannot get ID from cert context");
+	sc_log(ctx, "### private key info from context rv %i", rv);
+
+	rv = sc_pkcs15_parse_x509_cert(ctx, &blob, &cert);
+	LOG_TEST_RET(ctx, rv, "Cannot get certificate from cert. context");
+	sc_log(ctx, "### private key info from context rv %i", rv);
+
+	if (kinfo->subject.value)
+		free(kinfo->subject.value);
+	kinfo->subject.value = malloc(cert.subject_len);
+	if (!kinfo->subject.value)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memcpy(kinfo->subject.value, cert.subject, cert.subject_len);
+	kinfo->subject.len = cert.subject_len;
+	sc_log(ctx, "### private key info from context kinfo->subject.len %i", kinfo->subject.len);
+
+	kinfo->modulus_length = (cert.key->u.rsa.modulus.len & ~0x07) << 3;
+	kinfo->native = 1;
+	sc_log(ctx, "### private key info from context kinfo->modulus_length %i", kinfo->modulus_length);
+
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_SIGN | SC_PKCS15_PRKEY_USAGE_SIGNRECOVER;
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT | SC_PKCS15_PRKEY_USAGE_UNWRAP;
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
+
+	sc_pkcs15_free_certificate_data(&cert);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigned idx, CERT_CONTEXT *cert_ctx)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
@@ -163,16 +214,24 @@ struct sc_pkcs15emu_vsctpm_container_add_cert  (struct sc_pkcs15_card *p15card, 
 	memset(&kinfo, 0, sizeof(kinfo));
 	memset(&kobj, 0, sizeof(kobj));
 
+	sc_log(ctx, "Private key index '0x%X'", idx);
         if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
 		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}
+	sc_log(ctx, "Private key label '%s'", kobj.label);
 
-	rv = sc_pkcs15emu_vsctpm_id_from_cert_context(ctx, cert_ctx, &kinfo.id);
-	LOG_TEST_RET(ctx, rv, "Cannot get ID from cert context");
+	kinfo.key_reference = idx;
 
-	rv = sc_pkcs15emu_add_x509_cert(p15card, &cobj, &cinfo);
-	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 certificate object");
+	rv = sc_pkcs15emu_vsctpm_key_info_from_cert_context(ctx, cert_ctx, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Cannot get key info from cert context");
+
+	kobj.flags = SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE;
+	kobj.auth_id.len = 1;
+	kobj.auth_id.value[0] = VSCTPM_PKCS15_USER_AUTH_ID;
+
+	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &kobj, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 private key object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -205,6 +264,15 @@ sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, CERT_CON
 
 	rv = sc_pkcs15emu_vsctpm_id_from_cert_context(ctx, cert_ctx, &cinfo.id);
 	LOG_TEST_RET(ctx, rv, "Cannot get ID from cert context");
+
+	der.value = cert_ctx->pbCertEncoded;
+	der.len = cert_ctx->cbCertEncoded;
+
+	rv = sc_der_copy(&cobj.content, &der);
+	LOG_TEST_RET(ctx, rv, "Failed to copy DER data");
+
+	rv = sc_der_copy(&cinfo.value, &der);
+	LOG_TEST_RET(ctx, rv, "Failed to copy DER data");
 
 	rv = sc_pkcs15emu_add_x509_cert(p15card, &cobj, &cinfo);
 	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 certificate object");
@@ -241,10 +309,16 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 		if (mdc.signCertContext)   {
 			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.signCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
+
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_SIGNATURE << 4) , mdc.signCertContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
 		}
 
 		if (mdc.exCertContext)   {
 			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.exCertContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
+
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_KEYEXCHANGE << 4), mdc.exCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
 		}
 

@@ -35,8 +35,8 @@
 #include "asn1.h"
 #include "pkcs15.h"
 
-static int
-parse_x509_cert(sc_context_t *ctx, struct sc_pkcs15_der *der, struct sc_pkcs15_cert *cert)
+int
+sc_pkcs15_parse_x509_cert(struct sc_context *ctx, struct sc_pkcs15_der *der, struct sc_pkcs15_cert *cert)
 {
 	int r;
 	struct sc_algorithm_id sig_alg;
@@ -152,7 +152,7 @@ sc_pkcs15_pubkey_from_cert(struct sc_context *ctx,
 	if (cert == NULL)
 		return SC_ERROR_OUT_OF_MEMORY;
 
-	rv = parse_x509_cert(ctx, cert_blob, cert);
+	rv = sc_pkcs15_parse_x509_cert(ctx, cert_blob, cert);
 
 	*out = cert->key;
 	cert->key = NULL;
@@ -192,7 +192,7 @@ sc_pkcs15_read_certificate(struct sc_pkcs15_card *p15card, const struct sc_pkcs1
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 	}
 	memset(cert, 0, sizeof(struct sc_pkcs15_cert));
-	if (parse_x509_cert(ctx, &der, cert)) {
+	if (sc_pkcs15_parse_x509_cert(ctx, &der, cert)) {
 		free(der.value);
 		sc_pkcs15_free_certificate(cert);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ASN1_OBJECT);
@@ -340,7 +340,7 @@ sc_pkcs15_encode_cdf_entry(sc_context_t *ctx, const struct sc_pkcs15_object *obj
 
 
 void
-sc_pkcs15_free_certificate(struct sc_pkcs15_cert *cert)
+sc_pkcs15_free_certificate_data(struct sc_pkcs15_cert *cert)
 {
 	assert(cert != NULL);
 
@@ -351,6 +351,15 @@ sc_pkcs15_free_certificate(struct sc_pkcs15_cert *cert)
 	free(cert->serial);
 	free(cert->data.value);
 	free(cert->crl);
+}
+
+
+void
+sc_pkcs15_free_certificate(struct sc_pkcs15_cert *cert)
+{
+	assert(cert != NULL);
+
+	sc_pkcs15_free_certificate_data(cert);
 	free(cert);
 }
 

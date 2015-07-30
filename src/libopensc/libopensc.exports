@@ -192,6 +192,7 @@ sc_pkcs15_fix_ec_parameters
 sc_pkcs15_format_id
 sc_pkcs15_free_cert_info
 sc_pkcs15_free_certificate
+sc_pkcs15_free_certificate_data
 sc_pkcs15_free_data_info
 sc_pkcs15_free_data_object
 sc_pkcs15_free_key_params
@@ -219,6 +220,7 @@ sc_pkcs15_print_id
 sc_pkcs15_prkey_attrs_from_cert
 sc_pkcs15_read_cached_file
 sc_pkcs15_read_certificate
+sc_pkcs15_parse_x509_cert
 sc_pkcs15_read_data_object
 sc_pkcs15_read_file
 sc_pkcs15_read_pubkey

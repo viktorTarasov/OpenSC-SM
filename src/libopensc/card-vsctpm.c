@@ -621,12 +621,7 @@ vsctpm_md_acquire_context(struct sc_card *card)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-
-	unsigned char guid[16];
-	size_t guid_len = sizeof(guid);
-
-	char guid_str[40];
-	int rv, ver;
+	int ver;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -651,13 +646,21 @@ vsctpm_md_acquire_context(struct sc_card *card)
 
 	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
 
+/*
+   {
+	unsigned char guid[16];
+	size_t guid_len = sizeof(guid);
+	char guid_str[40];
+	int rv;
+
 	rv = vsctpm_md_get_guid(card, &guid[0], &guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot get MD GUID");
 	rv = sc_pkcs15_serialize_guid(guid, guid_len, 0, guid_str, sizeof(guid_str));
 	LOG_TEST_RET(ctx, rv, "Failed to serialize MD GUID");
 
 	sc_log(ctx, "MD: card GUID %s", guid_str);
-
+   }
+*/
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
