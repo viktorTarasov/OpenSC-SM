@@ -40,6 +40,13 @@ static struct sc_aid Virtual_Identity_AID = {
 	{0xa0,0x00,0x00,0x03,0x97,0x42,0x54,0x46,0x59}, 9
 };
 
+#define VSCTPM_CARD_DEFAULT_FLAGS ( SC_ALGORITHM_ONBOARD_KEY_GEN \
+					| SC_ALGORITHM_RSA_PAD_ISO9796  \
+					| SC_ALGORITHM_RSA_PAD_PKCS1    \
+					| SC_ALGORITHM_RSA_HASH_NONE    \
+					| SC_ALGORITHM_RSA_HASH_SHA1    \
+					| SC_ALGORITHM_RSA_HASH_SHA256)
+
 static struct sc_card_operations *iso_ops;
 static struct sc_card_operations vsctpm_ops;
 static struct sc_card_driver vsctpm_drv = {
@@ -75,6 +82,7 @@ vsctpm_init(struct sc_card * card)
 	struct sc_context *ctx = card->ctx;
 	unsigned char resp[0x100];
 	size_t resp_len = sizeof(resp);
+	unsigned int flags;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -83,6 +91,10 @@ vsctpm_init(struct sc_card * card)
 	card->caps = SC_CARD_CAP_RNG;
 	card->caps |= SC_CARD_CAP_APDU_EXT;
 	card->caps |= SC_CARD_CAP_USE_FCI_AC;
+
+	flags = VSCTPM_CARD_DEFAULT_FLAGS;
+	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
+	_sc_card_add_rsa_alg(card, 2048, flags, 0x10001);
 
 	card->drv_data = calloc(1, sizeof(struct vsctpm_private_data));
 	if (!card->drv_data)
