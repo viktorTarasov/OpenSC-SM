@@ -93,6 +93,16 @@ struct vsctpm_private_data {
 #endif
 };
 
+#define VSCTPM_ALGORITHM_RSA_PKCS 0x57
+
+#define VSCTPM_CRT_TAG_AT       0xA4
+#define VSCTPM_CRT_TAG_CT       0xB8
+#define VSCTPM_CRT_TAG_CCT      0xB4
+#define VSCTPM_CRT_TAG_DST      0xB6
+#define VSCTPM_CRT_TAG_HT       0xAA
+#define VSCTPM_CRT_TAG_KAT      0xA6
+
+
 #ifdef __cplusplus
 }
 #endif

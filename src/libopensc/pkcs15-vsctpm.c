@@ -427,34 +427,42 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i", idx, mdc.rec.bFlags, mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits);
 
 		if (mdc.signCertContext)   {
+			unsigned ref = (idx + 1);
+
 			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.signCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
 
-			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_SIGNATURE << 4) , mdc.signCertContext);
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.signCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
 		}
 
 		if (mdc.exCertContext)   {
+			unsigned ref = (idx + 1) | 0x80;
+
 			rv = sc_pkcs15emu_vsctpm_container_add_cert(p15card, mdc.exCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
 
-			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_KEYEXCHANGE << 4), mdc.exCertContext);
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.exCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
 		}
 
 		if (mdc.signRequestContext)   {
-			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_SIGNATURE << 4) , mdc.signRequestContext);
+			unsigned ref = (idx + 1);
+
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.signRequestContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
 
-			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, idx | (AT_SIGNATURE << 4) , mdc.signRequestContext);
+			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, ref, mdc.signRequestContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
 		}
 
 		if (mdc.exRequestContext)   {
-			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, idx | (AT_KEYEXCHANGE << 4), mdc.exRequestContext);
+			unsigned ref = (idx + 1) | 0x80;
+
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.exRequestContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange request error");
 
-			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, idx | (AT_KEYEXCHANGE << 4), mdc.exRequestContext);
+			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, ref, mdc.exRequestContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange request error");
 		}
 

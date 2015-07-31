@@ -714,6 +714,42 @@ vsctpm_finish(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+static int
+vsctpm_set_security_env(struct sc_card *card,
+                const struct sc_security_env *env, int se_num)
+{
+        struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
+        struct sc_apdu apdu;
+        unsigned char vsctpm_crt_at[] = {
+                0x84, 0x01, env->key_ref[0],
+                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS
+        };
+	int rv;
+
+	sc_log(ctx, "set security env, operation: Ox%X", env->operation);
+
+        switch (env->operation)  {
+        case SC_SEC_OPERATION_AUTHENTICATE:
+                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
+                apdu.data = vsctpm_crt_at;
+                apdu.datalen = sizeof(vsctpm_crt_at);
+                apdu.lc = sizeof(vsctpm_crt_at);
+                break;
+        default:
+                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
+
+        rv = sc_transmit_apdu(card, &apdu);
+        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+        LOG_TEST_RET(ctx, rv, "MSE restore error");
+
+        LOG_FUNC_RETURN(ctx, 0);
+
+}
+
 #endif /* ENABLE_MINIDRIVER */
 
 static struct
@@ -730,6 +766,8 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.card_ctl = vsctpm_card_ctl;
 	vsctpm_ops.list_files = vsctpm_list_files;
 	vsctpm_ops.pin_cmd = vsctpm_pin_cmd;
+	vsctpm_ops.set_security_env = vsctpm_set_security_env;
+
 #if ENABLE_MINIDRIVER
 	vsctpm_ops.finish = vsctpm_finish;
 	vsctpm_ops.md_acquire_context = vsctpm_md_acquire_context;
