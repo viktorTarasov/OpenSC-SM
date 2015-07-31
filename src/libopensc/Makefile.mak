@@ -18,7 +18,7 @@ OBJECTS			= \
 	vsctpm-md.obj card-vsctpm.obj \
 	\
 	pkcs15-vsctpm.obj \
-	compression.obj p15card-helper.obj sm.obj \
+	p15card-helper.obj sm.obj \
 	$(TOPDIR)\win32\versioninfo.res
 
 all: $(TOPDIR)\win32\versioninfo.res $(TARGET)

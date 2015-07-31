@@ -9,7 +9,7 @@ noinst_HEADERS = cards.h ctbcs.h internal.h muscle.h muscle-filesystem.h \
 	internal-winscard.h p15card-helper.h reader-pcsc.h vsctpm-md.h \
 	opensc.h pkcs15.h \
 	cardctl.h asn1.h log.h \
-	errors.h types.h compression.h iso7816.h \
+	errors.h types.h iso7816.h \
 	iasecc.h iasecc-sdo.h sm.h authentic.h \
 	pace.h user-interface.h
 
@@ -35,7 +35,7 @@ libopensc_la_SOURCES = \
 	vsctpm-md.c card-vsctpm.c \
 	\
 	pkcs15-vsctpm.c \
-	compression.c p15card-helper.c sm.c \
+	p15card-helper.c sm.c \
 	libopensc.exports
 if WIN32
 libopensc_la_SOURCES += $(top_builddir)/win32/versioninfo.rc
