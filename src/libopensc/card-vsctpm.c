@@ -833,26 +833,21 @@ vsctpm_compute_signature(struct sc_card *card,
                 const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
         struct sc_context *ctx = card->ctx;
-        struct vsctpm_private_data *prv = (struct vsctpm_private_data *) card->drv_data;
-        struct sc_security_env *env = &prv->security_env;
+	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
 	int rv;
 
         LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "op:%x, inlen %i, outlen %i", env->operation, in_len, out_len);
+        sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
         if (!card || !in || !out)
                 LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
 
-        if (env->operation == SC_SEC_OPERATION_SIGN)
-                rv = sc_compute_signature(card, in, in_len, out,  out_len);
-        else if (env->operation == SC_SEC_OPERATION_AUTHENTICATE)
-                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-	else
-                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
+        rv = iso_drv->ops->compute_signature(card, in, in_len, out,  out_len);
 	LOG_TEST_RET(ctx, rv, "Compute signature failed");
 
 	out_len = rv;
+	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
 	sc_mem_reverse(out, out_len);
+	sc_log(ctx, "reverted signature value: %s", sc_dump_hex(out, out_len));
 
         LOG_FUNC_RETURN(ctx, out_len);
 }
