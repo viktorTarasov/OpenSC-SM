@@ -750,6 +750,115 @@ vsctpm_set_security_env(struct sc_card *card,
 
 }
 
+#if 0
+static int
+vsctpm_compute_signature_dst(struct sc_card *card,
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *prv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_apdu apdu;
+	unsigned char sbuf[SC_MAX_APDU_BUFFER_SIZE], rbuf[SC_MAX_APDU_BUFFER_SIZE];
+	unsigned char algo;
+	int rv;
+	size_t offs;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "in-length:%i, key-size:%i", in_len, (prv->last_ko != NULL ? prv->last_ko->size : 0));
+	if (env->operation != SC_SEC_OPERATION_SIGN)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "It's not SC_SEC_OPERATION_SIGN");
+	else if (env->algorithm_flags & SC_ALGORITHM_RSA_RAW)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "RAW sign mechanism not supported");
+	else if (prv->last_ko && in_len > (prv->last_ko->size - 11))
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "too much of the input data");
+
+	if (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA1)
+		algo = 0x0A;	/* ALG_RSA_SHA_PKCS1 */
+	else if (env->algorithm_flags & SC_ALGORITHM_RSA_HASH_SHA256)
+		algo = 0x28;	/* ALG_RSA_SHA_256_PKCS1 */
+	else
+		algo = 0x8A;	/* ALG_RSA_PKCS1 */
+
+	offs = 0;
+	sbuf[offs++] = 0x80;
+	sbuf[offs++] = 0x81;
+	sbuf[offs++] = in_len;
+	memcpy(sbuf + offs, in, in_len);
+	offs += in_len;
+
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x9E, algo);
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.datalen = offs;
+	apdu.data = sbuf;
+	apdu.lc = offs;
+	apdu.le = out_len > 256 ? 256 : out_len;
+	apdu.resp = rbuf;
+	apdu.resplen = out_len;
+
+        rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PSO DST failed");
+
+	if (apdu.resplen > out_len)   {
+		sc_log(ctx, "Compute signature failed: invalide response length %i\n", apdu.resplen);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_CARD_CMD_FAILED);
+	}
+
+	sc_mem_reverse(apdu.resp, apdu.resplen);
+
+	memcpy(out, apdu.resp, apdu.resplen);
+	LOG_FUNC_RETURN(ctx, apdu.resplen);
+}
+
+
+static int
+vsctpm_compute_signature_at(struct sc_card *card,
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *prv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_security_env *env = &prv->security_env;
+
+	LOG_FUNC_CALLED(ctx);
+	if (env->operation != SC_SEC_OPERATION_AUTHENTICATE)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "It's not SC_SEC_OPERATION_AUTHENTICATE");
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+}
+#endif
+
+static int
+vsctpm_compute_signature(struct sc_card *card,
+                const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+        struct sc_context *ctx = card->ctx;
+        struct vsctpm_private_data *prv = (struct vsctpm_private_data *) card->drv_data;
+        struct sc_security_env *env = &prv->security_env;
+	int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "op:%x, inlen %i, outlen %i", env->operation, in_len, out_len);
+        if (!card || !in || !out)
+                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
+
+        if (env->operation == SC_SEC_OPERATION_SIGN)
+                rv = sc_compute_signature(card, in, in_len, out,  out_len);
+        else if (env->operation == SC_SEC_OPERATION_AUTHENTICATE)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	else
+                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	LOG_TEST_RET(ctx, rv, "Compute signature failed");
+
+	out_len = rv;
+	sc_mem_reverse(out, out_len);
+
+        LOG_FUNC_RETURN(ctx, out_len);
+}
+
+
+
 #endif /* ENABLE_MINIDRIVER */
 
 static struct
@@ -767,6 +876,7 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.list_files = vsctpm_list_files;
 	vsctpm_ops.pin_cmd = vsctpm_pin_cmd;
 	vsctpm_ops.set_security_env = vsctpm_set_security_env;
+	vsctpm_ops.compute_signature = vsctpm_compute_signature;
 
 #if ENABLE_MINIDRIVER
 	vsctpm_ops.finish = vsctpm_finish;
