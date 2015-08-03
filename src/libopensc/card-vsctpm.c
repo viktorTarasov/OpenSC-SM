@@ -731,7 +731,7 @@ vsctpm_set_security_env(struct sc_card *card,
 	sc_log(ctx, "set security env, operation: Ox%X", env->operation);
 
         switch (env->operation)  {
-        case SC_SEC_OPERATION_AUTHENTICATE:
+        case SC_SEC_OPERATION_SIGN:
                 sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
                 apdu.data = vsctpm_crt_at;
                 apdu.datalen = sizeof(vsctpm_crt_at);
