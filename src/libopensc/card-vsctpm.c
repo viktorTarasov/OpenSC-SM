@@ -88,8 +88,10 @@ vsctpm_init(struct sc_card * card)
 	LOG_FUNC_CALLED(ctx);
 
 	card->cla = 0x00;
+
 	card->caps = SC_CARD_CAP_RNG;
 	card->caps |= SC_CARD_CAP_USE_FCI_AC;
+	card->caps |= SC_CARD_CAP_APDU_EXT;
 
 	flags = VSCTPM_CARD_DEFAULT_FLAGS;
 	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
@@ -881,14 +883,14 @@ vsctpm_decipher(struct sc_card *card,
 	/* INS: 0x2A  PERFORM SECURITY OPERATION
 	 * P1:  0x80  Resp: Plain value
 	 * P2:  0x86  Cmd: Padding indicator byte followed by cryptogram */
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0x2A, 0x80, 0x86);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_EXT, 0x2A, 0x80, 0x86);
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.data = in;
+	apdu.datalen = in_len;
+	apdu.lc = in_len;
 	apdu.resp    = out;
 	apdu.resplen = out_len;
-	apdu.le      = out_len;
-	apdu.data = in;
-	apdu.lc = in_len;
-	apdu.datalen = in_len;
-	apdu.flags |= SC_APDU_FLAGS_CHAINING;
+	apdu.le = 256;
 
 	card->max_send_size = 0xF0;
 	rv = sc_transmit_apdu(card, &apdu);
