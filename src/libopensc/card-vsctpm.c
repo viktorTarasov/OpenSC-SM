@@ -89,7 +89,6 @@ vsctpm_init(struct sc_card * card)
 
 	card->cla = 0x00;
 	card->caps = SC_CARD_CAP_RNG;
-	card->caps |= SC_CARD_CAP_APDU_EXT;
 	card->caps |= SC_CARD_CAP_USE_FCI_AC;
 
 	flags = VSCTPM_CARD_DEFAULT_FLAGS;
@@ -112,10 +111,10 @@ vsctpm_init(struct sc_card * card)
 
 #if ENABLE_MINIDRIVER
 	prv_data = (struct vsctpm_private_data *) card->drv_data;
-        rv = vsctpm_md_init_card_data (card, &prv_data->md);
+	rv = vsctpm_md_init_card_data (card, &prv_data->md);
 	LOG_TEST_RET(ctx, rv, "Failed to init MD card data");
 
-        sc_log (ctx, "pcsc_connect() MD atr '%s'", sc_dump_hex(prv_data->md.card_data.pbAtr, prv_data->md.card_data.cbAtr));
+	sc_log (ctx, "pcsc_connect() MD atr '%s'", sc_dump_hex(prv_data->md.card_data.pbAtr, prv_data->md.card_data.cbAtr));
 #endif
 
 	LOG_FUNC_RETURN(ctx, rv);
@@ -523,107 +522,107 @@ vsctpm_list_files(struct sc_card *card, u8 *buf, size_t buflen)
 static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
-        struct sc_context *ctx = card->ctx;
-        struct sc_apdu apdu;
-        int rv;
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	int rv;
 
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
 
-        if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
-                sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
-        }
-        else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
-                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
-                apdu.data = pin_cmd->pin1.data;
-                apdu.datalen = pin_cmd->pin1.len;
-                apdu.lc = pin_cmd->pin1.len;
-        }
-        else   {
-                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-        }
+	if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
+	}
+	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
+		apdu.data = pin_cmd->pin1.data;
+		apdu.datalen = pin_cmd->pin1.len;
+		apdu.lc = pin_cmd->pin1.len;
+	}
+	else   {
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	}
 
-        rv = sc_transmit_apdu(card, &apdu);
-        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 
-        if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
-                *tries_left = apdu.sw2 & 0x0F;
+	if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
+		*tries_left = apdu.sw2 & 0x0F;
 
-        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 
-        LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 static int
 vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
-        struct sc_context *ctx = card->ctx;
-        struct sc_apdu apdu;
-        unsigned reference = data->pin_reference;
-        unsigned char pin_data[0x100];
-        int rv;
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	unsigned reference = data->pin_reference;
+	unsigned char pin_data[0x100];
+	int rv;
 
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", reference, data->pin_type, data->pin1.len, data->pin2.len);
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", reference, data->pin_type, data->pin1.len, data->pin2.len);
 
-        if (!data->pin1.data && data->pin1.len)
-                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
+	if (!data->pin1.data && data->pin1.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
 
-        if (!data->pin2.data && data->pin2.len)
-                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
+	if (!data->pin2.data && data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
 
-        rv = vsctpm_pin_verify(card, data, tries_left);
-        sc_log(ctx, "pin_cmd(SC_PIN_CMD_CHANGE) pin_verify returned %i", rv);
-        LOG_TEST_RET(ctx, rv, "PIN verification error");
+	rv = vsctpm_pin_verify(card, data, tries_left);
+	sc_log(ctx, "pin_cmd(SC_PIN_CMD_CHANGE) pin_verify returned %i", rv);
+	LOG_TEST_RET(ctx, rv, "PIN verification error");
 
-        if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
-                LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
+	if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
+		LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
 
-        if (data->pin1.data)
-                memcpy(pin_data, data->pin1.data, data->pin1.len);
-        if (data->pin2.data)
-                memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
+	if (data->pin1.data)
+		memcpy(pin_data, data->pin1.data, data->pin1.len);
+	if (data->pin2.data)
+		memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
 
-        sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, reference);
-        apdu.data = pin_data;
-        apdu.datalen = data->pin1.len + data->pin2.len;
-        apdu.lc = apdu.datalen;
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, reference);
+	apdu.data = pin_data;
+	apdu.datalen = data->pin1.len + data->pin2.len;
+	apdu.lc = apdu.datalen;
 
-        rv = sc_transmit_apdu(card, &apdu);
-        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
-        LOG_TEST_RET(ctx, rv, "PIN cmd failed");
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "PIN cmd failed");
 
-        LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
 static int
 vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
-        struct sc_context *ctx = card->ctx;
-        int rv = SC_ERROR_NOT_SUPPORTED;
+	struct sc_context *ctx = card->ctx;
+	int rv = SC_ERROR_NOT_SUPPORTED;
 
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
-                        data->cmd, data->pin_type, data->pin_reference,
-                        data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
+			data->cmd, data->pin_type, data->pin_reference,
+			data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
 
-        switch (data->cmd)   {
-        case SC_PIN_CMD_VERIFY:
-                rv = vsctpm_pin_verify(card, data, tries_left);
-                break;
-        case SC_PIN_CMD_CHANGE:
-                rv = vsctpm_pin_change(card, data, tries_left);
-                break;
-        case SC_PIN_CMD_UNBLOCK:
-        case SC_PIN_CMD_GET_INFO:
-        default:
-                sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
-                rv = SC_ERROR_NOT_SUPPORTED;
-        }
+	switch (data->cmd)   {
+	case SC_PIN_CMD_VERIFY:
+		rv = vsctpm_pin_verify(card, data, tries_left);
+		break;
+	case SC_PIN_CMD_CHANGE:
+		rv = vsctpm_pin_change(card, data, tries_left);
+		break;
+	case SC_PIN_CMD_UNBLOCK:
+	case SC_PIN_CMD_GET_INFO:
+	default:
+		sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
+		rv = SC_ERROR_NOT_SUPPORTED;
+	}
 
-        LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -709,7 +708,7 @@ vsctpm_finish(struct sc_card *card)
 
 	LOG_FUNC_CALLED(ctx);
 
-        vsctpm_md_reset_card_data (card, &prv_data->md);
+	vsctpm_md_reset_card_data (card, &prv_data->md);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -717,46 +716,46 @@ vsctpm_finish(struct sc_card *card)
 
 static int
 vsctpm_set_security_env(struct sc_card *card,
-                const struct sc_security_env *env, int se_num)
+		const struct sc_security_env *env, int se_num)
 {
-        struct sc_context *ctx = card->ctx;
+	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
-        struct sc_apdu apdu;
-        unsigned char vsctpm_crt_at[] = {
-                0x84, 0x01, env->key_ref[0],
-                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS1
-        };
-        unsigned char vsctpm_crt_dec[] = {
-                0x84, 0x01, env->key_ref[0],
-                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2
-        };
+	struct sc_apdu apdu;
+	unsigned char vsctpm_crt_at[] = {
+		0x84, 0x01, env->key_ref[0],
+		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS1
+	};
+	unsigned char vsctpm_crt_dec[] = {
+		0x84, 0x01, env->key_ref[0],
+		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2
+	};
 	int rv;
 
 	sc_log(ctx, "set security env, operation: Ox%X", env->operation);
 
-        switch (env->operation)  {
-        case SC_SEC_OPERATION_SIGN:
-                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
-                apdu.data = vsctpm_crt_at;
-                apdu.datalen = sizeof(vsctpm_crt_at);
-                apdu.lc = sizeof(vsctpm_crt_at);
-                break;
-        case SC_SEC_OPERATION_DECIPHER:
-                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
-                apdu.data = vsctpm_crt_dec;
-                apdu.datalen = sizeof(vsctpm_crt_dec);
-                apdu.lc = sizeof(vsctpm_crt_dec);
-                break;
-        default:
-                LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	switch (env->operation)  {
+	case SC_SEC_OPERATION_SIGN:
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
+		apdu.data = vsctpm_crt_at;
+		apdu.datalen = sizeof(vsctpm_crt_at);
+		apdu.lc = sizeof(vsctpm_crt_at);
+		break;
+	case SC_SEC_OPERATION_DECIPHER:
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
+		apdu.data = vsctpm_crt_dec;
+		apdu.datalen = sizeof(vsctpm_crt_dec);
+		apdu.lc = sizeof(vsctpm_crt_dec);
+		break;
+	default:
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
 
-        rv = sc_transmit_apdu(card, &apdu);
-        LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-        rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
-        LOG_TEST_RET(ctx, rv, "MSE restore error");
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "MSE restore error");
 
-        LOG_FUNC_RETURN(ctx, 0);
+	LOG_FUNC_RETURN(ctx, 0);
 
 }
 
@@ -805,7 +804,7 @@ vsctpm_compute_signature_dst(struct sc_card *card,
 	apdu.resp = rbuf;
 	apdu.resplen = out_len;
 
-        rv = sc_transmit_apdu(card, &apdu);
+	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "PSO DST failed");
@@ -840,47 +839,68 @@ vsctpm_compute_signature_at(struct sc_card *card,
 
 static int
 vsctpm_compute_signature(struct sc_card *card,
-                const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
-        struct sc_context *ctx = card->ctx;
+	struct sc_context *ctx = card->ctx;
 	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
 	int rv;
 
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
-        if (!card || !in || !out)
-                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
+	if (!card || !in || !out)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
 
-        rv = iso_drv->ops->compute_signature(card, in, in_len, out,  out_len);
+	rv = iso_drv->ops->compute_signature(card, in, in_len, out,  out_len);
 	LOG_TEST_RET(ctx, rv, "Compute signature failed");
 
 	out_len = rv;
 	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
 
-        LOG_FUNC_RETURN(ctx, out_len);
+	LOG_FUNC_RETURN(ctx, out_len);
 }
 
 
 static int
 vsctpm_decipher(struct sc_card *card,
-                const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
-        struct sc_context *ctx = card->ctx;
+	struct sc_context *ctx = card->ctx;
 	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
+	struct sc_apdu apdu;
+	size_t save_max_send_size = card->max_send_size;
+	unsigned char *sbuf = NULL;
 	int rv;
 
-        LOG_FUNC_CALLED(ctx);
-        sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
-        if (!card || !in || !out)
-                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
+	if (!card || !in || !out)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
 
-        rv = iso_drv->ops->decipher(card, in, in_len, out, out_len);
-	LOG_TEST_RET(ctx, rv, "Decipher failed");
+	sc_log(ctx, "value to decipher: %s", sc_dump_hex(in, in_len));
 
-	out_len = rv;
-	sc_log(ctx, "deciphered value: %s", sc_dump_hex(out, out_len));
+	/* INS: 0x2A  PERFORM SECURITY OPERATION
+	 * P1:  0x80  Resp: Plain value
+	 * P2:  0x86  Cmd: Padding indicator byte followed by cryptogram */
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0x2A, 0x80, 0x86);
+	apdu.resp    = out;
+	apdu.resplen = out_len;
+	apdu.le      = out_len;
+	apdu.data = in;
+	apdu.lc = in_len;
+	apdu.datalen = in_len;
+	apdu.flags |= SC_APDU_FLAGS_CHAINING;
 
-        LOG_FUNC_RETURN(ctx, out_len);
+	card->max_send_size = 0xF0;
+	rv = sc_transmit_apdu(card, &apdu);
+	card->max_send_size = save_max_send_size;
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+
+	sc_log(ctx, "deciphered value: %s", sc_dump_hex(apdu.resp, apdu.resplen));
+
+	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00)
+		LOG_FUNC_RETURN(ctx, apdu.resplen);
+
+	LOG_FUNC_RETURN(card->ctx, sc_check_sw(card, apdu.sw1, apdu.sw2));
 }
 
 
