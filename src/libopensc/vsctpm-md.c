@@ -835,6 +835,66 @@ vsctpm_md_cmap_reload(struct sc_card *card)
 }
 
 
+int
+vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	PBYTE pbBinChallenge = NULL;
+	DWORD cBinChallenge = 0;
+	unsigned char *ptr = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardGetChallenge)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "Now Get card Challenge (%p)", priv->md.card_data.pfnCardGetChallenge);
+	hRes = priv->md.card_data.pfnCardGetChallenge(&priv->md.card_data, &pbBinChallenge, &cBinChallenge);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetChallenge(%p,%i) failed: hRes %lX", rnd, len, hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Generated challenge(%i) %s", cBinChallenge, sc_dump_hex(pbBinChallenge, cBinChallenge));
+	if (!rnd)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	if (len < cBinChallenge)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+	len = cBinChallenge;
+
+	memcpy(rnd, pbBinChallenge, len);
+
+	LOG_FUNC_RETURN(ctx, len);
+}
+
+
+int
+vsctpm_md_user_pin_unblock(struct sc_card *card,
+		unsigned char *puk, size_t puk_len,
+		unsigned char *pin, size_t pin_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!puk || !puk_len || !pin || !pin_len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	hRes = priv->md.card_data.pfnCardUnblockPin(&priv->md.card_data, wszCARD_USER_USER,
+			puk, puk_len, pin, pin_len,
+			VSCTPM_USER_PIN_RETRY_COUNT, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardUnblockPin(%p,%i %p,%i) failed: hRes %lX", puk, puk_len, pin, pin_len, hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "User PIN unblocked");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
 

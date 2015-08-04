@@ -555,6 +555,7 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+
 static int
 vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
@@ -600,6 +601,35 @@ vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries
 
 
 static int
+vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	unsigned char pin_data[0x100], challenge[8];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Reset PIN(ref:%i,type:0x%X,lengths:%i/%i)", data->pin_reference, data->pin_type, data->pin1.len, data->pin2.len);
+
+	if (!data->pin1.data || !data->pin1.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
+	sc_log(ctx, "PIN data 01 %s", sc_dump_hex(data->pin1.data, data->pin1.len));
+
+	if (!data->pin2.data || !data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
+	sc_log(ctx, "PIN data 02 %s", sc_dump_hex(data->pin2.data, data->pin2.len));
+
+	memset(challenge, 0, sizeof(challenge));
+	rv = vsctpm_md_get_challenge(card, challenge, sizeof(challenge));
+	LOG_TEST_RET(ctx, rv, "MD get challenge failed");
+	sc_log(ctx, "MD challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
@@ -618,6 +648,7 @@ vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 		rv = vsctpm_pin_change(card, data, tries_left);
 		break;
 	case SC_PIN_CMD_UNBLOCK:
+		rv = vsctpm_pin_reset(card, data, tries_left);
 	case SC_PIN_CMD_GET_INFO:
 	default:
 		sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
@@ -658,7 +689,10 @@ vsctpm_md_acquire_context(struct sc_card *card)
 	}
 
 	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
-
+	sc_log(ctx, "MD: card-data pfnCardGetChallenge %p",		priv->md.card_data.pfnCardGetChallenge);
+	sc_log(ctx, "MD: card-data pfnCardAuthenticateChallenge %p",	priv->md.card_data.pfnCardAuthenticateChallenge);
+	sc_log(ctx, "MD: card-data pfnCardUnblockPin %p",		priv->md.card_data.pfnCardUnblockPin);
+	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticator %p",	priv->md.card_data.pfnCardChangeAuthenticator);
 /*
    {
 	unsigned char guid[16];
@@ -710,7 +744,7 @@ vsctpm_finish(struct sc_card *card)
 
 	LOG_FUNC_CALLED(ctx);
 
-	vsctpm_md_reset_card_data (card, &prv_data->md);
+	vsctpm_md_reset_card_data (card);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -899,6 +933,22 @@ vsctpm_decipher(struct sc_card *card,
 }
 
 
+static int
+vsctpm_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
+{
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = vsctpm_md_get_challenge(card, rnd, len);
+	LOG_TEST_RET(ctx, rv, "GetChallenge() failed");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 #endif /* ENABLE_MINIDRIVER */
 
 static struct
@@ -921,6 +971,7 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.compute_signature = vsctpm_compute_signature;
 	vsctpm_ops.decipher = vsctpm_decipher;
 	vsctpm_ops.finish = vsctpm_finish;
+	vsctpm_ops.get_challenge = vsctpm_get_challenge;
 	vsctpm_ops.md_acquire_context = vsctpm_md_acquire_context;
 	vsctpm_ops.md_delete_context = vsctpm_md_delete_context;
 #endif /* ENABLE_MINIDRIVER */

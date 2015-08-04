@@ -3843,13 +3843,12 @@ DWORD WINAPI CardChangeAuthenticatorEx(__in PCARD_DATA pCardData,
 	if(pcAttemptsRemaining)
 		(*pcAttemptsRemaining) = (DWORD) -1;
 
-	rv = md_dialog_perform_pin_operation(pCardData, (dwFlags & PIN_CHANGE_FLAG_UNBLOCK ? SC_PIN_CMD_UNBLOCK:SC_PIN_CMD_CHANGE), 
+	rv = md_dialog_perform_pin_operation(pCardData, (dwFlags & PIN_CHANGE_FLAG_UNBLOCK ? SC_PIN_CMD_UNBLOCK:SC_PIN_CMD_CHANGE),
 		vs->p15card, pin_obj, (const u8 *) pbAuthenticatingPinData, cbAuthenticatingPinData, pbTargetData, cbTargetData, DisplayPinpadUI);
-	
+
 	if (rv)   {
-		logprintf(pCardData, 2, "Failed to %s %s PIN: '%s' (%i)\n",
-																(dwFlags & PIN_CHANGE_FLAG_CHANGEPIN?"change":"unblock"),
-																(dwTargetPinId==ROLE_ADMIN?"admin":"user"), sc_strerror(rv), rv);
+		logprintf(pCardData, 2, "Failed to %s %s PIN: '%s' (%i)\n", (dwFlags & PIN_CHANGE_FLAG_CHANGEPIN ? "change" : "unblock"),
+				(dwTargetPinId==ROLE_ADMIN?"admin":"user"), sc_strerror(rv), rv);
 		auth_info = (struct sc_pkcs15_auth_info *)pin_obj->data;
 		if (rv == SC_ERROR_AUTH_METHOD_BLOCKED) {
 			if(pcAttemptsRemaining)
@@ -4243,12 +4242,13 @@ DWORD WINAPI CardSetProperty(__in   PCARD_DATA pCardData,
 		logprintf(pCardData, 3, "Saved parent window (%p)\n", vs->hwndParent);
 		return SCARD_S_SUCCESS;
 	}
-	
+
 	if (wcscmp(CP_PIN_CONTEXT_STRING, wszProperty) == 0) {
 		vs->wszPinContext = (PWSTR) pbData;
 		logprintf(pCardData, 3, "Saved PIN context string: %S\n", (PWSTR) pbData);
 		return SCARD_S_SUCCESS;
 	}
+
 	logprintf(pCardData, 3, "INVALID PARAMETER\n");
 	return SCARD_E_INVALID_PARAMETER;
 }
