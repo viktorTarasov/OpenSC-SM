@@ -846,8 +846,6 @@ vsctpm_compute_signature(struct sc_card *card,
 
 	out_len = rv;
 	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
-	sc_mem_reverse(out, out_len);
-	sc_log(ctx, "reverted signature value: %s", sc_dump_hex(out, out_len));
 
         LOG_FUNC_RETURN(ctx, out_len);
 }
@@ -870,10 +868,10 @@ sc_card_driver *sc_get_driver(void)
 	vsctpm_ops.card_ctl = vsctpm_card_ctl;
 	vsctpm_ops.list_files = vsctpm_list_files;
 	vsctpm_ops.pin_cmd = vsctpm_pin_cmd;
-	vsctpm_ops.set_security_env = vsctpm_set_security_env;
-	vsctpm_ops.compute_signature = vsctpm_compute_signature;
 
 #if ENABLE_MINIDRIVER
+	vsctpm_ops.set_security_env = vsctpm_set_security_env;
+	vsctpm_ops.compute_signature = vsctpm_compute_signature;
 	vsctpm_ops.finish = vsctpm_finish;
 	vsctpm_ops.md_acquire_context = vsctpm_md_acquire_context;
 	vsctpm_ops.md_delete_context = vsctpm_md_delete_context;
