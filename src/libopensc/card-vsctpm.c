@@ -724,7 +724,11 @@ vsctpm_set_security_env(struct sc_card *card,
         struct sc_apdu apdu;
         unsigned char vsctpm_crt_at[] = {
                 0x84, 0x01, env->key_ref[0],
-                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS
+                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS1
+        };
+        unsigned char vsctpm_crt_dec[] = {
+                0x84, 0x01, env->key_ref[0],
+                0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2
         };
 	int rv;
 
@@ -736,6 +740,12 @@ vsctpm_set_security_env(struct sc_card *card,
                 apdu.data = vsctpm_crt_at;
                 apdu.datalen = sizeof(vsctpm_crt_at);
                 apdu.lc = sizeof(vsctpm_crt_at);
+                break;
+        case SC_SEC_OPERATION_DECIPHER:
+                sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
+                apdu.data = vsctpm_crt_dec;
+                apdu.datalen = sizeof(vsctpm_crt_dec);
+                apdu.lc = sizeof(vsctpm_crt_dec);
                 break;
         default:
                 LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -851,6 +861,28 @@ vsctpm_compute_signature(struct sc_card *card,
 }
 
 
+static int
+vsctpm_decipher(struct sc_card *card,
+                const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+        struct sc_context *ctx = card->ctx;
+	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
+	int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
+        if (!card || !in || !out)
+                LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
+
+        rv = iso_drv->ops->decipher(card, in, in_len, out, out_len);
+	LOG_TEST_RET(ctx, rv, "Decipher failed");
+
+	out_len = rv;
+	sc_log(ctx, "deciphered value: %s", sc_dump_hex(out, out_len));
+
+        LOG_FUNC_RETURN(ctx, out_len);
+}
+
 
 #endif /* ENABLE_MINIDRIVER */
 
@@ -872,6 +904,7 @@ sc_card_driver *sc_get_driver(void)
 #if ENABLE_MINIDRIVER
 	vsctpm_ops.set_security_env = vsctpm_set_security_env;
 	vsctpm_ops.compute_signature = vsctpm_compute_signature;
+	vsctpm_ops.decipher = vsctpm_decipher;
 	vsctpm_ops.finish = vsctpm_finish;
 	vsctpm_ops.md_acquire_context = vsctpm_md_acquire_context;
 	vsctpm_ops.md_delete_context = vsctpm_md_delete_context;
