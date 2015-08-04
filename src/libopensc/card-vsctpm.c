@@ -91,7 +91,7 @@ vsctpm_init(struct sc_card * card)
 
 	card->caps = SC_CARD_CAP_RNG;
 	card->caps |= SC_CARD_CAP_USE_FCI_AC;
-	card->caps |= SC_CARD_CAP_APDU_EXT;
+	// card->caps |= SC_CARD_CAP_APDU_EXT;
 
 	flags = VSCTPM_CARD_DEFAULT_FLAGS;
 	_sc_card_add_rsa_alg(card, 1024, flags, 0x10001);
@@ -878,12 +878,7 @@ vsctpm_decipher(struct sc_card *card,
 	if (!card || !in || !out)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
 
-	sc_log(ctx, "value to decipher: %s", sc_dump_hex(in, in_len));
-
-	/* INS: 0x2A  PERFORM SECURITY OPERATION
-	 * P1:  0x80  Resp: Plain value
-	 * P2:  0x86  Cmd: Padding indicator byte followed by cryptogram */
-	sc_format_apdu(card, &apdu, SC_APDU_CASE_4_EXT, 0x2A, 0x80, 0x86);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0x2A, 0x80, 0x86);
 	apdu.flags |= SC_APDU_FLAGS_CHAINING;
 	apdu.data = in;
 	apdu.datalen = in_len;
@@ -896,8 +891,6 @@ vsctpm_decipher(struct sc_card *card,
 	rv = sc_transmit_apdu(card, &apdu);
 	card->max_send_size = save_max_send_size;
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-
-	sc_log(ctx, "deciphered value: %s", sc_dump_hex(apdu.resp, apdu.resplen));
 
 	if (apdu.sw1 == 0x90 && apdu.sw2 == 0x00)
 		LOG_FUNC_RETURN(ctx, apdu.resplen);

@@ -553,7 +553,6 @@ sc_transmit(sc_card_t *card, sc_apdu_t *apdu)
 
 int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 {
-	struct sc_context *ctx = card->ctx;
 	int r = SC_SUCCESS;
 
 	if (card == NULL || apdu == NULL)
@@ -575,7 +574,6 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 		return r;
 	}
 
-	sc_log(ctx, "Data to transmit: %s", sc_dump_hex(apdu->data, apdu->datalen));
 	if ((apdu->flags & SC_APDU_FLAGS_CHAINING) != 0) {
 		/* divide et impera: transmit APDU in chunks with Lc <= max_send_size
 		 * bytes using command chaining */
@@ -583,7 +581,6 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 		const u8  *buf = apdu->data;
 		size_t    max_send_size = card->max_send_size > 0 ? card->max_send_size : 255;
 
-		sc_log(ctx, "Length/MaxSendSize: %i/%i", len, max_send_size);
 		while (len != 0) {
 			size_t    plen;
 			sc_apdu_t tapdu;
@@ -612,7 +609,6 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 			}
 			tapdu.data    = buf;
 			tapdu.datalen = tapdu.lc = plen;
-			sc_log(ctx, "PLength: %i", plen);
 
 			r = sc_check_apdu(card, &tapdu);
 			if (r != SC_SUCCESS) {
@@ -620,7 +616,6 @@ int sc_transmit_apdu(sc_card_t *card, sc_apdu_t *apdu)
 				break;
 			}
 
-			sc_log(ctx, "TData to transmit: %s", sc_dump_hex(tapdu.data, tapdu.datalen));
 			r = sc_transmit(card, &tapdu);
 			if (r != SC_SUCCESS)
 				break;
