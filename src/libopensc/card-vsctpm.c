@@ -604,7 +604,6 @@ static int
 vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
-	struct sc_apdu apdu;
 	unsigned char pin_data[0x100], challenge[8];
 	int rv;
 
@@ -624,7 +623,13 @@ vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 	LOG_TEST_RET(ctx, rv, "MD get challenge failed");
 	sc_log(ctx, "MD challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	rv = vsctpm_md_cbc_encrypt(card, data->pin1.data, data->pin1.len, challenge, sizeof(challenge));
+	LOG_TEST_RET(ctx, rv, "MD CBC encrypt failed");
+	sc_log(ctx, "MD challenge encrypted: %s", sc_dump_hex(challenge, sizeof(challenge)));
+
+	rv = vsctpm_md_user_pin_unblock(card, challenge, sizeof(challenge), data->pin2.data, data->pin2.len);
+	LOG_TEST_RET(ctx, rv, "MD PIN unblock failed");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 

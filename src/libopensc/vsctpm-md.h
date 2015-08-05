@@ -64,6 +64,7 @@ int vsctpm_md_cmap_reload(struct sc_card *);
 int vsctpm_md_cmap_init_container(struct sc_card *, int, struct vsctpm_md_container *);
 int vsctpm_md_get_challenge(struct sc_card *, unsigned char *, size_t);
 int vsctpm_md_user_pin_unblock(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_cbc_encrypt(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -75,6 +76,12 @@ typedef struct _ENUM_ARG {
 	struct sc_card *card;
 	char *title;
 } ENUM_ARG, *PENUM_ARG;
+
+struct vsctpm_deskey_blob {
+	BLOBHEADER hdr;
+	DWORD keySize;
+	BYTE key[24];
+};
 
 #endif  /* ENABLE_MINIDRIVER */
 

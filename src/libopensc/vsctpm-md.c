@@ -870,6 +870,57 @@ vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 
 
 int
+vsctpm_md_cbc_encrypt(struct sc_card *card,
+		unsigned char *key, size_t key_len,
+		unsigned char *data, size_t data_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_deskey_blob deskey_blob;
+	HCRYPTPROV hProv = NULL;
+	HCRYPTKEY hKey = NULL;
+	DWORD dwMode = CRYPT_MODE_CBC;
+	DWORD sz = data_len;
+	int rv = SC_ERROR_INTERNAL;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!key || key_len < sizeof(deskey_blob.key))
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	// Prepare encrypt
+	memset(&deskey_blob, 0, sizeof(deskey_blob));
+	deskey_blob.hdr.bType = PLAINTEXTKEYBLOB;
+	deskey_blob.hdr.bVersion = CUR_BLOB_VERSION;
+	deskey_blob.hdr.aiKeyAlg = CALG_3DES;
+	deskey_blob.keySize = sizeof(deskey_blob.key);
+	memcpy(deskey_blob.key, key, deskey_blob.keySize);
+
+	if(!CryptAcquireContext(&hProv, NULL, L"Microsoft Base Cryptographic Provider v1.0", PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))   {
+		sc_log(ctx, "Error while calling CryptAcquireContext: 0x%08x", GetLastError());
+		goto end;
+	}
+
+	if(!CryptSetKeyParam(hKey, KP_MODE, (LPBYTE)&dwMode, 0))   {
+		sc_log(ctx, "Error while calling CryptSetKeyParam: 0x%08x", GetLastError());
+		goto end;
+	}
+
+	if(!CryptEncrypt(hKey, 0, TRUE, 0, data, &sz, data_len))  {
+		sc_log(ctx, "Error while calling CryptEncrypt: 0x%08x", GetLastError());
+		goto end;
+	}
+
+	rv = SC_SUCCESS;
+end:
+	if (hKey)
+		CryptDestroyKey(hKey);
+	if (hProv)
+		CryptReleaseContext(hProv, 0);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
 vsctpm_md_user_pin_unblock(struct sc_card *card,
 		unsigned char *puk, size_t puk_len,
 		unsigned char *pin, size_t pin_len)
