@@ -347,6 +347,18 @@ int sc_pkcs15emu_add_pin_obj(sc_pkcs15_card_t *p15card,
 	return sc_pkcs15emu_object_add(p15card, SC_PKCS15_TYPE_AUTH_PIN, obj, &pin);
 }
 
+int sc_pkcs15emu_add_auth_key_obj(sc_pkcs15_card_t *p15card,
+	const sc_pkcs15_object_t *obj, const struct sc_pkcs15_auth_info *info)
+{
+	struct sc_pkcs15_auth_info auth_info = *info;
+
+	auth_info.auth_type = SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY;
+	if(!auth_info.auth_method)
+		auth_info.auth_method = SC_AC_AUT;
+
+	return sc_pkcs15emu_object_add(p15card, SC_PKCS15_TYPE_AUTH_AUTHKEY, obj, &auth_info);
+}
+
 int sc_pkcs15emu_add_rsa_prkey(sc_pkcs15_card_t *p15card,
 	const sc_pkcs15_object_t *obj, const sc_pkcs15_prkey_info_t *in_key)
 {
@@ -408,6 +420,12 @@ int sc_pkcs15emu_add_data_object(sc_pkcs15_card_t *p15card,
 	return sc_pkcs15emu_object_add(p15card, SC_PKCS15_TYPE_DATA_OBJECT, obj, data);
 }
 
+int sc_pkcs15emu_add_skey(sc_pkcs15_card_t *p15card,
+	const sc_pkcs15_object_t *obj, const sc_pkcs15_skey_info_t *skey)
+{
+	return sc_pkcs15emu_object_add(p15card, SC_PKCS15_TYPE_SKEY_3DES, obj, skey);
+}
+
 int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 	const sc_pkcs15_object_t *in_obj, const void *data)
 {
@@ -441,6 +459,10 @@ int sc_pkcs15emu_object_add(sc_pkcs15_card_t *p15card, unsigned int type,
 	case SC_PKCS15_TYPE_DATA_OBJECT:
 		df_type = SC_PKCS15_DODF;
 		data_len = sizeof(struct sc_pkcs15_data_info);
+		break;
+	case SC_PKCS15_TYPE_SKEY:
+		df_type = SC_PKCS15_SKDF;
+		data_len = sizeof(struct sc_pkcs15_skey_info);
 		break;
 	default:
 		sc_log(p15card->card->ctx, "Unknown PKCS15 object type %d", type);

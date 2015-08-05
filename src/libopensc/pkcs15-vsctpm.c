@@ -35,8 +35,15 @@
 
 #define MANU_ID	"VSC TPM"
 #define VSCTPM_USER_PIN_REF 0x80
-#define VSCTPM_PKCS15_USER_AUTH_ID 1
+#define VSCTPM_PKCS15_PIN_AUTH_ID 1
+#define VSCTPM_PKCS15_PUK_AUTH_ID 2
+#define VSCTPM_PKCS15_ADMIN_AUTH_ID 0x10
 
+unsigned char vsctpm_admin_skey_value[24] = {
+	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08,
+	0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08
+};
 int sc_pkcs15emu_vsctpm_init_ex(sc_pkcs15_card_t *, sc_pkcs15emu_opt_t *);
 
 static int
@@ -61,16 +68,23 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_auth_info auth_info;
         struct sc_pkcs15_object   obj;
-	int rv, tries_left;
+	int rv, tries_left = -1;
+	PIN_INFO md_pin_info;
+	size_t md_pin_info_size = sizeof(md_pin_info);
 
 	LOG_FUNC_CALLED(ctx);
 
         tries_left = -1;
-/*
-        rv = sc_verify(card, SC_AC_CHV, VSCTPM_USER_PIN_REF, (unsigned char *)"", 0, &tries_left);
-        if (rv && rv != SC_ERROR_PIN_CODE_INCORRECT)
-		LOG_TEST_RET(ctx, rv, "Invalid state 'User PIN' object");
-*/
+
+	rv = vsctpm_md_get_pin_info(card, ROLE_USER, &md_pin_info);
+        LOG_TEST_RET(ctx, rv, "Failed to get User PIN info");
+	sc_log(ctx, "User PIN type %X, purpose %X", md_pin_info.PinType, md_pin_info.PinPurpose);
+
+	if (md_pin_info.PinType != AlphaNumericPinType)    {
+		sc_log(ctx, "User PIN is expected to be AlphaNumeric");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	}
+
         /* add PIN */
         memset(&auth_info, 0, sizeof(auth_info));
         memset(&obj,  0, sizeof(obj));
@@ -78,7 +92,7 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
         auth_info.auth_type	= SC_PKCS15_PIN_AUTH_TYPE_PIN;
         auth_info.auth_method   = SC_AC_CHV;
         auth_info.auth_id.len =		1;
-        auth_info.auth_id.value[0] =	VSCTPM_PKCS15_USER_AUTH_ID;
+        auth_info.auth_id.value[0] =	VSCTPM_PKCS15_PIN_AUTH_ID;
         auth_info.attrs.pin.min_length          = 8;
         auth_info.attrs.pin.max_length          = 15;
         auth_info.attrs.pin.stored_length	= 8;
@@ -89,11 +103,97 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 
         strncpy(obj.label, "User PIN", SC_PKCS15_MAX_LABEL_SIZE - 1);
         obj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE | SC_PKCS15_CO_FLAG_PRIVATE;
+	obj.auth_id.len = 1;
+        obj.auth_id.value[0] = VSCTPM_PKCS15_PUK_AUTH_ID;
 
-        sc_log(ctx, "Add PIN object '%s', auth_id:%s, reference:%i", obj.label,
-			sc_pkcs15_print_id(&auth_info.auth_id), auth_info.attrs.pin.reference);
+        sc_log(ctx, "Add PIN object '%s', id:%s, reference:%i, auth-id:%s", obj.label,
+			sc_pkcs15_print_id(&auth_info.auth_id), auth_info.attrs.pin.reference, sc_pkcs15_print_id(&obj.auth_id));
         rv = sc_pkcs15emu_add_pin_obj(p15card, &obj, &auth_info);
         LOG_TEST_RET(ctx, rv, "VSC TPM init failed: cannot add User PIN object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+vsctpm_add_user_puk (struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct sc_pkcs15_auth_info auth_info;
+        struct sc_pkcs15_object   obj;
+	int rv, tries_left;
+	PIN_INFO md_pin_info;
+	size_t md_pin_info_size = sizeof(md_pin_info);
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = vsctpm_md_get_pin_info(card, ROLE_ADMIN, &md_pin_info);
+        LOG_TEST_RET(ctx, rv, "Failed to get User PIN info");
+	sc_log(ctx, "Admin PIN type %X, purpose %X", md_pin_info.PinType, md_pin_info.PinPurpose);
+
+	if (md_pin_info.PinType != ChallengeResponsePinType)   {
+		sc_log(ctx, "Admin PIN is expected to be ChallengeResponsePinType");
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	}
+
+        tries_left = -1;
+        memset(&auth_info, 0, sizeof(auth_info));
+        memset(&obj,  0, sizeof(obj));
+
+        auth_info.auth_type	= SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY;
+        auth_info.auth_method   = SC_AC_AUT;
+        auth_info.auth_id.len =		1;
+        auth_info.auth_id.value[0] =	VSCTPM_PKCS15_PUK_AUTH_ID;
+        auth_info.attrs.authkey.derived			= 0;
+        auth_info.attrs.authkey.skey_id.len		= 1;
+        auth_info.attrs.authkey.skey_id.value[0]	= VSCTPM_PKCS15_ADMIN_AUTH_ID;
+        auth_info.attrs.authkey.flags = SC_PKCS15_PIN_FLAG_SO_PIN | SC_PKCS15_PIN_FLAG_UNBLOCKING_PIN | SC_PKCS15_PIN_FLAG_CASE_SENSITIVE | SC_PKCS15_PIN_FLAG_INITIALIZED | SC_PKCS15_PIN_FLAG_LOCAL;
+
+        strncpy(obj.label, "User PUK", SC_PKCS15_MAX_LABEL_SIZE - 1);
+        obj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE | SC_PKCS15_CO_FLAG_PRIVATE;
+
+        sc_log(ctx, "Add SoPIN object '%s', auth_id:%s", obj.label, sc_pkcs15_print_id(&auth_info.auth_id));
+        rv = sc_pkcs15emu_add_auth_key_obj(p15card, &obj, &auth_info);
+        LOG_TEST_RET(ctx, rv, "VSC TPM init failed: cannot add User PUK object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+vsctpm_add_admin_skey(struct sc_pkcs15_card *p15card)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_pkcs15_skey_info kinfo;
+	struct sc_pkcs15_object kobj;
+	size_t key_size = sizeof(vsctpm_admin_skey_value);
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	memset(&kinfo, 0, sizeof(kinfo));
+	memset(&kobj, 0, sizeof(kobj));
+
+	kinfo.id.len = 1;
+	kinfo.id.value[0] = VSCTPM_PKCS15_ADMIN_AUTH_ID;
+	kinfo.key_type = CKM_DES3_CBC;
+	kinfo.value_len = key_size;
+	kinfo.key_reference = 0x01;
+
+	kinfo.data.value = malloc(key_size);
+	if (!kinfo.data.value)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memcpy(kinfo.data.value, vsctpm_admin_skey_value, key_size);
+	kinfo.data.len = key_size;
+
+        strncpy(kobj.label, "Admin SKey", SC_PKCS15_MAX_LABEL_SIZE - 1);
+	kobj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE | SC_PKCS15_CO_FLAG_PRIVATE;
+
+	rv = sc_pkcs15emu_add_skey(p15card, &kobj, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add admin PKCS#15 skey object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -274,7 +374,6 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_pkcs15_prkey_info kinfo;
 	struct sc_pkcs15_object kobj;
-	struct sc_pkcs15_der der;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	int    rv;
 
@@ -299,7 +398,7 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 
 	kobj.flags = SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE;
 	kobj.auth_id.len = 1;
-	kobj.auth_id.value[0] = VSCTPM_PKCS15_USER_AUTH_ID;
+	kobj.auth_id.value[0] = VSCTPM_PKCS15_PIN_AUTH_ID;
 
 	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &kobj, &kinfo);
 	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 private key object");
@@ -473,8 +572,6 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 }
 
 
-
-
 static int
 sc_pkcs15emu_vsctpm_enum_files (struct sc_pkcs15_card *p15card)
 {
@@ -564,6 +661,12 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 
 	rv = vsctpm_add_user_pin (p15card);
 	LOG_TEST_RET(ctx, rv, "Failed to add User PIN object");
+
+	rv = vsctpm_add_user_puk (p15card);
+	LOG_TEST_RET(ctx, rv, "Failed to add User PUK object");
+
+	rv = vsctpm_add_admin_skey (p15card);
+	LOG_TEST_RET(ctx, rv, "Failed to add Admin Key object");
 
 #if ENABLE_MINIDRIVER
 	rv = sc_pkcs15emu_vsctpm_enum_files (p15card);

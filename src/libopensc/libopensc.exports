@@ -202,6 +202,7 @@ sc_pkcs15_free_prkey
 sc_pkcs15_free_prkey_info
 sc_pkcs15_free_pubkey
 sc_pkcs15_free_pubkey_info
+sc_pkcs15_free_skey_info
 sc_pkcs15_get_application_by_type
 sc_pkcs15_get_object_guid
 sc_pkcs15_get_object_id
@@ -232,6 +233,7 @@ sc_pkcs15_search_objects
 sc_pkcs15_unbind
 sc_pkcs15_unblock_pin
 sc_pkcs15_verify_pin
+sc_pkcs15emu_add_auth_key_obj
 sc_pkcs15emu_add_data_object
 sc_pkcs15emu_add_pin_obj
 sc_pkcs15emu_add_rsa_prkey
@@ -239,6 +241,7 @@ sc_pkcs15emu_add_rsa_pubkey
 sc_pkcs15emu_add_ec_prkey
 sc_pkcs15emu_add_ec_pubkey
 sc_pkcs15emu_add_x509_cert
+sc_pkcs15emu_add_skey
 sc_pkcs15emu_object_add
 sc_pkcs15_bind_internal
 sc_print_path

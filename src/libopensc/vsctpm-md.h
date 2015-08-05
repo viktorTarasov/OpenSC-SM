@@ -65,6 +65,8 @@ int vsctpm_md_cmap_init_container(struct sc_card *, int, struct vsctpm_md_contai
 int vsctpm_md_get_challenge(struct sc_card *, unsigned char *, size_t);
 int vsctpm_md_user_pin_unblock(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
 int vsctpm_md_cbc_encrypt(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_get_property(struct sc_card *, LPCWSTR, void *, unsigned char *);
+int vsctpm_md_get_pin_info(struct sc_card *, DWORD, PIN_INFO *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -102,6 +104,10 @@ struct vsctpm_private_data {
 #endif
 };
 
+#ifndef CKM_DES3_CBC
+#define CKM_DES3_CBC (0x133UL)
+#endif
+
 #define VSCTPM_ALGORITHM_RSA_PKCS1 0x57
 #define VSCTPM_ALGORITHM_RSA_PKCS2 0x47
 
@@ -112,7 +118,7 @@ struct vsctpm_private_data {
 #define VSCTPM_CRT_TAG_HT       0xAA
 #define VSCTPM_CRT_TAG_KAT      0xA6
 
-#define VSCTPM_USER_PIN_RETRY_COUNT 5
+#define VSCTPM_USER_PIN_RETRY_COUNT 3
 
 #ifdef __cplusplus
 }

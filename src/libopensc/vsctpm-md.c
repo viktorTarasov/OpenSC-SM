@@ -346,8 +346,8 @@ vsctpm_md_init_card_data(struct sc_card *card, struct vsctpm_md_data *md)
 	}
 
 	sc_log(ctx, "Init MD card data: md->hmd %p; acquire context func %p", md->hmd, md->acquire_context);
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 err:
 	hRes = GetLastError();
 	sc_log(ctx, "Last error %lX", hRes);
@@ -861,9 +861,10 @@ vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 
 	if (len < cBinChallenge)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-	len = cBinChallenge;
 
+	len = cBinChallenge;
 	memcpy(rnd, pbBinChallenge, len);
+	LocalFree(pbBinChallenge);
 
 	LOG_FUNC_RETURN(ctx, len);
 }
@@ -880,7 +881,6 @@ vsctpm_md_cbc_encrypt(struct sc_card *card,
 	HCRYPTPROV hProv = NULL;
 	HCRYPTKEY hKey = NULL;
 	DWORD dwMode = CRYPT_MODE_CBC;
-	DWORD sz = data_len;
 	int rv = SC_ERROR_INTERNAL;
 
 	LOG_FUNC_CALLED(ctx);
@@ -894,9 +894,15 @@ vsctpm_md_cbc_encrypt(struct sc_card *card,
 	deskey_blob.hdr.aiKeyAlg = CALG_3DES;
 	deskey_blob.keySize = sizeof(deskey_blob.key);
 	memcpy(deskey_blob.key, key, deskey_blob.keySize);
+	sc_log(ctx, "DES key blob '%s'", sc_dump_hex(&deskey_blob, sizeof(deskey_blob)));
 
-	if(!CryptAcquireContext(&hProv, NULL, L"Microsoft Base Cryptographic Provider v1.0", PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))   {
-		sc_log(ctx, "Error while calling CryptAcquireContext: 0x%08x", GetLastError());
+	if(!CryptAcquireContext(&hProv, NULL, MS_ENHANCED_PROV, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))   {
+		sc_log(ctx, "Error while calling CryptAcquireContext(%s): 0x%08x", MS_ENHANCED_PROV, GetLastError());
+		goto end;
+	}
+
+	if(!CryptImportKey(hProv, (BYTE*)&deskey_blob, sizeof(deskey_blob), 0, 0, &hKey))   {
+		sc_log(ctx, "Error while calling CryptImportKey: 0x%08x", GetLastError());
 		goto end;
 	}
 
@@ -905,12 +911,14 @@ vsctpm_md_cbc_encrypt(struct sc_card *card,
 		goto end;
 	}
 
-	if(!CryptEncrypt(hKey, 0, TRUE, 0, data, &sz, data_len))  {
+	sc_log(ctx, "Data to encrypt (%i)'%s'", data_len, sc_dump_hex(data, data_len));
+	if(!CryptEncrypt(hKey, 0, FALSE, 0, data, &data_len, data_len))  {
 		sc_log(ctx, "Error while calling CryptEncrypt: 0x%08x", GetLastError());
 		goto end;
 	}
 
-	rv = SC_SUCCESS;
+	sc_log(ctx, "Encrypted data '%s'", sc_dump_hex(data, data_len));
+	rv = data_len;
 end:
 	if (hKey)
 		CryptDestroyKey(hKey);
@@ -922,25 +930,53 @@ end:
 
 int
 vsctpm_md_user_pin_unblock(struct sc_card *card,
-		unsigned char *puk, size_t puk_len,
+		unsigned char *auth, size_t auth_len,
 		unsigned char *pin, size_t pin_len)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+	// DWORD tries_left = VSCTPM_USER_PIN_RETRY_COUNT;
+	DWORD tries_left = 0;
 	HRESULT hRes = S_OK;
 
 	LOG_FUNC_CALLED(ctx);
-	if (!puk || !puk_len || !pin || !pin_len)
+	if (!auth || !auth_len || !pin || !pin_len)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
+	sc_log(ctx, "Auth Data(%i)'%s'", auth_len, sc_dump_hex(auth, auth_len));
+	sc_log(ctx, "NewPIN(%i)'%s'", pin_len, sc_dump_hex(pin, pin_len));
 	hRes = priv->md.card_data.pfnCardUnblockPin(&priv->md.card_data, wszCARD_USER_USER,
-			puk, puk_len, pin, pin_len,
-			VSCTPM_USER_PIN_RETRY_COUNT, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
+			auth, auth_len,
+			pin, pin_len,
+			tries_left, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
 	if (hRes != SCARD_S_SUCCESS)   {
-		sc_log(ctx, "CardUnblockPin(%p,%i %p,%i) failed: hRes %lX", puk, puk_len, pin, pin_len, hRes);
+		sc_log(ctx, "CardUnblockPin(%p,%i %p,%i) failed: hRes %lX", auth, auth_len, pin, pin_len, hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 	sc_log(ctx, "User PIN unblocked");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_get_pin_info(struct sc_card *card, DWORD role, PIN_INFO *pin_info)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD len = sizeof(PIN_INFO);
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pin_info)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "Get PIN info, role 0x%X", role);
+
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_PIN_INFO, pin_info, len, &len, role);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

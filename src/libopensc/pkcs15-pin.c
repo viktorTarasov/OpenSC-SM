@@ -343,6 +343,11 @@ int sc_pkcs15_verify_pin(struct sc_pkcs15_card *p15card,
 
 		sc_log(ctx, "found secret key '%s'", skey_obj->label);
 		data.pin_reference = skey_info->key_reference;
+
+		data.pin1.data = pincode;
+		data.pin1.len = pinlen;
+		data.pin1.min_length = pinlen;
+		data.pin1.max_length = pinlen;
 	}
 
 	if(p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
@@ -476,6 +481,8 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	struct sc_pkcs15_auth_info *puk_info = NULL;
 	struct sc_pkcs15_auth_info *auth_info = (struct sc_pkcs15_auth_info *)pin_obj->data;
 	struct sc_card *card = p15card->card;
+	unsigned char puk_bin[0x100];
+	size_t puk_bin_len = sizeof(puk_bin);
 	int r;
 
 	LOG_FUNC_CALLED(ctx);
@@ -520,32 +527,43 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	data.cmd             = SC_PIN_CMD_UNBLOCK;
 	data.pin_type        = SC_AC_CHV;
 	data.pin_reference   = auth_info->attrs.pin.reference;
-	data.pin1.data       = puk;
-	data.pin1.len        = puklen;
-	data.pin1.pad_char   = auth_info->attrs.pin.pad_char;
-	data.pin1.min_length = auth_info->attrs.pin.min_length;
-	data.pin1.max_length = auth_info->attrs.pin.max_length;
-	data.pin1.pad_length = auth_info->attrs.pin.stored_length;
+	if ( puk_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+		data.pin1.data       = puk;
+		data.pin1.len        = puklen;
+		data.pin1.pad_char   = puk_info->attrs.pin.pad_char;
+		data.pin1.min_length = puk_info->attrs.pin.min_length;
+		data.pin1.max_length = puk_info->attrs.pin.max_length;
+		data.pin1.pad_length = puk_info->attrs.pin.stored_length;
+
+		switch (puk_info->attrs.pin.type) {
+		case SC_PKCS15_PIN_TYPE_BCD:
+			data.pin1.encoding = SC_PIN_ENCODING_BCD;
+			break;
+		case SC_PKCS15_PIN_TYPE_ASCII_NUMERIC:
+			data.pin1.encoding = SC_PIN_ENCODING_ASCII;
+			break;
+		}
+	}
+	else if (puk_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+		sc_hex_to_bin(puk, puk_bin, &puk_bin_len);
+
+		data.pin1.data       = puk_bin;
+		data.pin1.len        = puk_bin_len;
+		data.pin1.min_length = puk_bin_len;
+		data.pin1.max_length = puk_bin_len;
+	}
+
 	data.pin2.data       = newpin;
 	data.pin2.len        = newpinlen;
-	data.pin2.pad_char   = puk_info->attrs.pin.pad_char;
-	data.pin2.min_length = puk_info->attrs.pin.min_length;
-	data.pin2.max_length = puk_info->attrs.pin.max_length;
-	data.pin2.pad_length = puk_info->attrs.pin.stored_length;
+	data.pin2.pad_char   = auth_info->attrs.pin.pad_char;
+	data.pin2.min_length = auth_info->attrs.pin.min_length;
+	data.pin2.max_length = auth_info->attrs.pin.max_length;
+	data.pin2.pad_length = auth_info->attrs.pin.stored_length;
 
 	if (auth_info->attrs.pin.flags & SC_PKCS15_PIN_FLAG_NEEDS_PADDING)
 		data.flags |= SC_PIN_CMD_NEED_PADDING;
 
 	switch (auth_info->attrs.pin.type) {
-	case SC_PKCS15_PIN_TYPE_BCD:
-		data.pin1.encoding = SC_PIN_ENCODING_BCD;
-		break;
-	case SC_PKCS15_PIN_TYPE_ASCII_NUMERIC:
-		data.pin1.encoding = SC_PIN_ENCODING_ASCII;
-		break;
-	}
-
-	switch (puk_info->attrs.pin.type) {
 	case SC_PKCS15_PIN_TYPE_BCD:
 		data.pin2.encoding = SC_PIN_ENCODING_BCD;
 		break;

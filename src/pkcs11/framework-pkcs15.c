@@ -1472,8 +1472,10 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 		return CKR_USER_TYPE_INVALID;
 	}
 	pin_info = (struct sc_pkcs15_auth_info *) auth_object->data;
-	if (pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
+	if (pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN && pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+		sc_log(context, "Login rejected for PIN type %X", pin_info->auth_type);
 		return CKR_FUNCTION_REJECTED;
+	}
 
 	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
 		/* pPin should be NULL in case of a pin pad reader, but
@@ -1490,10 +1492,10 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 		if (ulPinLen == 0)
 			pPin = NULL;
 	}
-	else if (ulPinLen > pin_info->attrs.pin.max_length)   {
+	else if (pin_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN && ulPinLen > pin_info->attrs.pin.max_length)   {
+		sc_log(context, "Invalid PIN length %i/%i", ulPinLen, pin_info->attrs.pin.max_length);
 		return CKR_ARGUMENTS_BAD;
 	}
-
 
 	/* By default, we make the reader resource manager keep other
 	 * processes from accessing the card while we're logged in.

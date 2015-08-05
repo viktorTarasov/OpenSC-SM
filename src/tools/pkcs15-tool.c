@@ -1248,6 +1248,11 @@ static void print_pin_info(const struct sc_pkcs15_object *obj)
 		const struct sc_pkcs15_authkey_attributes *attrs = &auth_info->attrs.authkey;
 		printf("\tDerived        : %i\n", attrs->derived);
 		printf("\tSecretKeyID    : %s\n", sc_pkcs15_print_id(&attrs->skey_id));
+		printf("\tFlags          : [0x%02X]", attrs->flags);
+		for (i = 0; i < pf_count; i++)
+			if (attrs->flags & (1 << i))
+				printf(", %s", pin_flags[i]);
+		printf("\n");
 	}
 
 	if (auth_info->path.len || auth_info->path.aid.len)

@@ -139,3 +139,12 @@ int sc_pkcs15_encode_skdf_entry(struct sc_context *ctx,
 {
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 }
+
+void sc_pkcs15_free_skey_info(sc_pkcs15_skey_info_t *skey)
+{
+	if (skey->data.value)
+		free(skey->data.value);
+	free(skey);
+}
+
+

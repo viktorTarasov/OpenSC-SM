@@ -1274,6 +1274,7 @@ __sc_pkcs15_search_objects(struct sc_pkcs15_card *p15card, unsigned int class_ma
 			int (*func)(sc_pkcs15_object_t *, void *), void *func_arg,
 			sc_pkcs15_object_t **ret, size_t ret_size)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_object *obj = NULL;
 	struct sc_pkcs15_df	*df = NULL;
 	unsigned int	df_mask = 0;
@@ -1325,9 +1326,7 @@ __sc_pkcs15_search_objects(struct sc_pkcs15_card *p15card, unsigned int class_ma
 		/* Check object type */
 		if (!(class_mask & SC_PKCS15_TYPE_TO_CLASS(obj->type)))
 			continue;
-		if (type != 0
-		 && obj->type != type
-		 && (obj->type & SC_PKCS15_TYPE_CLASS_MASK) != type)
+		if (type != 0 && obj->type != type && (obj->type & SC_PKCS15_TYPE_CLASS_MASK) != type)
 			continue;
 
 		/* Potential candidate, apply search function */
@@ -1430,10 +1429,14 @@ compare_obj_flags(struct sc_pkcs15_object *obj, unsigned int mask, unsigned int 
 
 	switch (obj->type) {
 	case SC_PKCS15_TYPE_AUTH_PIN:
+	case SC_PKCS15_TYPE_AUTH_AUTHKEY:
 		auth_info = (struct sc_pkcs15_auth_info *) obj->data;
-		if (auth_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
+		if (auth_info->auth_type = SC_PKCS15_PIN_AUTH_TYPE_PIN)
+			flags = auth_info->attrs.pin.flags;
+		else if (auth_info->auth_type = SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)
+			flags = auth_info->attrs.authkey.flags;
+		else
 			return 0;
-		flags = auth_info->attrs.pin.flags;
 		break;
 	default:
 		return 0;
@@ -1541,6 +1544,7 @@ static int
 find_by_key(struct sc_pkcs15_card *p15card, unsigned int type, struct sc_pkcs15_search_key *sk,
 		struct sc_pkcs15_object **out)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	int r;
 
 	r = sc_pkcs15_get_objects_cond(p15card, type, compare_obj_key, sk, out, 1);
@@ -1569,8 +1573,9 @@ sc_pkcs15_get_objects_cond(struct sc_pkcs15_card *p15card, unsigned int type,
 			       void *func_arg,
 			       struct sc_pkcs15_object **ret, size_t ret_size)
 {
-	return __sc_pkcs15_search_objects(p15card, 0, type,
-			func, func_arg, ret, ret_size);
+	struct sc_context *ctx = p15card->card->ctx;
+
+	return __sc_pkcs15_search_objects(p15card, 0, type, func, func_arg, ret, ret_size);
 }
 
 
@@ -1688,12 +1693,18 @@ sc_pkcs15_find_pin_by_type_and_reference(struct sc_pkcs15_card *p15card, const s
 int
 sc_pkcs15_find_so_pin(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object **out)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_search_key sk;
+	int rv;
 
 	memset(&sk, 0, sizeof(sk));
 	sk.flags_mask = sk.flags_value = SC_PKCS15_PIN_FLAG_SO_PIN;
 
-	return find_by_key(p15card, SC_PKCS15_TYPE_AUTH_PIN, &sk, out);
+	rv = find_by_key(p15card, SC_PKCS15_TYPE_AUTH_PIN, &sk, out);
+	if (rv != SC_ERROR_OBJECT_NOT_FOUND)
+		return rv;
+	rv = find_by_key(p15card, SC_PKCS15_TYPE_AUTH_AUTHKEY, &sk, out);
+	return rv;
 }
 
 
@@ -1890,6 +1901,9 @@ sc_pkcs15_free_object(struct sc_pkcs15_object *obj)
 		break;
 	case SC_PKCS15_TYPE_AUTH:
 		sc_pkcs15_free_auth_info((sc_pkcs15_auth_info_t *)obj->data);
+		break;
+	case SC_PKCS15_TYPE_SKEY:
+		sc_pkcs15_free_skey_info((sc_pkcs15_skey_info_t *)obj->data);
 		break;
 	default:
 		free(obj->data);
@@ -2644,6 +2658,7 @@ sc_pkcs15_get_object_id(const struct sc_pkcs15_object *obj, struct sc_pkcs15_id 
 		*out = ((struct sc_pkcs15_pubkey_info *) obj->data)->id;
 		break;
 	case SC_PKCS15_TYPE_AUTH_PIN:
+	case SC_PKCS15_TYPE_AUTH_AUTHKEY:
 		*out = ((struct sc_pkcs15_auth_info *) obj->data)->auth_id;
 		break;
 	case SC_PKCS15_TYPE_DATA_OBJECT:

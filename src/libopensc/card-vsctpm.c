@@ -522,6 +522,24 @@ vsctpm_list_files(struct sc_card *card, u8 *buf, size_t buflen)
 
 
 static int
+vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Verify AUTHKEY(type:%X,ref:%i,len:%i)", pin_cmd->pin_type, pin_cmd->pin_reference, pin_cmd->pin1.len);
+
+	if (pin_cmd->pin_type != SC_AC_AUT)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Expected AUTHKEY PIN type");
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
@@ -529,7 +547,12 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Verify CHV PIN(ref:%i,len:%i)", pin_cmd->pin_reference, pin_cmd->pin1.len);
+	sc_log(ctx, "Verify PIN(type:%X,ref:%i,len:%i)", pin_cmd->pin_type, pin_cmd->pin_reference, pin_cmd->pin1.len);
+
+	if (pin_cmd->pin_type == SC_AC_AUT)   {
+		rv = vsctpm_authkey_verify(card, pin_cmd, tries_left);
+		LOG_FUNC_RETURN(ctx, rv);
+	}
 
 	if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
@@ -604,7 +627,7 @@ static int
 vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
-	unsigned char pin_data[0x100], challenge[8];
+	unsigned char challenge[8];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -622,6 +645,10 @@ vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_
 	rv = vsctpm_md_get_challenge(card, challenge, sizeof(challenge));
 	LOG_TEST_RET(ctx, rv, "MD get challenge failed");
 	sc_log(ctx, "MD challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
+
+	rv = vsctpm_md_get_challenge(card, challenge, sizeof(challenge));
+	LOG_TEST_RET(ctx, rv, "MD get challenge failed");
+	sc_log(ctx, "MD second challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
 
 	rv = vsctpm_md_cbc_encrypt(card, data->pin1.data, data->pin1.len, challenge, sizeof(challenge));
 	LOG_TEST_RET(ctx, rv, "MD CBC encrypt failed");
@@ -654,6 +681,7 @@ vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 		break;
 	case SC_PIN_CMD_UNBLOCK:
 		rv = vsctpm_pin_reset(card, data, tries_left);
+		break;
 	case SC_PIN_CMD_GET_INFO:
 	default:
 		sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
@@ -722,7 +750,6 @@ vsctpm_md_delete_context(struct sc_card *card)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 

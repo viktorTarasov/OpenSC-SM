@@ -105,6 +105,7 @@ struct sc_pkcs15_pin_attributes {
 struct sc_pkcs15_authkey_attributes {
 	int derived;
 	struct sc_pkcs15_id skey_id;
+	unsigned int  flags;
 };
 /* BiometricAttributes of the biometricTemplate authentication object */
 struct sc_pkcs15_biometric_attributes {
@@ -909,6 +910,7 @@ void sc_pkcs15_free_cert_info(sc_pkcs15_cert_info_t *cert);
 void sc_pkcs15_free_data_info(sc_pkcs15_data_info_t *data);
 void sc_pkcs15_free_auth_info(sc_pkcs15_auth_info_t *auth_info);
 void sc_pkcs15_free_object(struct sc_pkcs15_object *obj);
+void sc_pkcs15_free_skey_info(sc_pkcs15_skey_info_t *key);
 
 /* Generic file i/o */
 int sc_pkcs15_read_file(struct sc_pkcs15_card *p15card,
@@ -1005,6 +1007,8 @@ int sc_pkcs15emu_object_add(struct sc_pkcs15_card *, unsigned int,
 /* some wrapper functions for sc_pkcs15emu_object_add */
 int sc_pkcs15emu_add_pin_obj(struct sc_pkcs15_card *,
 	const struct sc_pkcs15_object *, const sc_pkcs15_auth_info_t *);
+int sc_pkcs15emu_add_auth_key_obj(struct sc_pkcs15_card *,
+	const struct sc_pkcs15_object *, const sc_pkcs15_auth_info_t *);
 int sc_pkcs15emu_add_rsa_prkey(struct sc_pkcs15_card *,
 	const struct sc_pkcs15_object *, const sc_pkcs15_prkey_info_t *);
 int sc_pkcs15emu_add_rsa_pubkey(struct sc_pkcs15_card *,
@@ -1017,6 +1021,8 @@ int sc_pkcs15emu_add_x509_cert(struct sc_pkcs15_card *,
 	const struct sc_pkcs15_object *, const sc_pkcs15_cert_info_t *);
 int sc_pkcs15emu_add_data_object(struct sc_pkcs15_card *,
 	const struct sc_pkcs15_object *, const sc_pkcs15_data_info_t *);
+int sc_pkcs15emu_add_skey(struct sc_pkcs15_card *,
+	const struct sc_pkcs15_object *, const sc_pkcs15_skey_info_t *);
 
 #ifdef __cplusplus
 }
