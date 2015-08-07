@@ -36,6 +36,4 @@ AM_CPPFLAGS = -DSC_PKCS15_PROFILE_DIRECTORY=\"$(pkgdatadir)\" \
 	-I$(top_srcdir)/src
 AM_CFLAGS = $(OPTIONAL_OPENSSL_CFLAGS)
 
-libpkcs15init_la_SOURCES = \
-	pkcs15-lib.c profile.c \
-	pkcs15-iasecc.c
+libpkcs15init_la_SOURCES = pkcs15-lib.c profile.c pkcs15-iasecc.c pkcs15-vsctpm.c

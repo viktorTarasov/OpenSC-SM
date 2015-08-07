@@ -1,8 +1,7 @@
 TOPDIR = ..\..
 
 TARGET = pkcs15init.lib
-OBJECTS = pkcs15-lib.obj profile.obj \
-          pkcs15-iasecc.obj
+OBJECTS = pkcs15-lib.obj profile.obj pkcs15-iasecc.obj pkcs15-vsctpm.obj
 
 all: $(TARGET)
 

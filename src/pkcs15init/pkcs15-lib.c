@@ -162,6 +162,7 @@ static struct profile_operations {
 	{ "authentic", (void *) sc_pkcs15init_get_authentic_ops },
 */
 	{ "iasecc", (void *) sc_pkcs15init_get_iasecc_ops },
+	{ "vsctpm", (void *) sc_pkcs15init_get_vsctpm_ops },
 #endif
 	{ NULL, NULL },
 };
