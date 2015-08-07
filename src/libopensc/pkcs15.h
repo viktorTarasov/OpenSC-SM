@@ -106,6 +106,7 @@ struct sc_pkcs15_authkey_attributes {
 	int derived;
 	struct sc_pkcs15_id skey_id;
 	unsigned int  flags;
+	int  reference;
 };
 /* BiometricAttributes of the biometricTemplate authentication object */
 struct sc_pkcs15_biometric_attributes {

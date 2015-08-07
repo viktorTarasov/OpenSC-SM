@@ -483,22 +483,29 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 	/* User PIN flags are cleared before re-calculation */
 	slot->token_info.flags &= ~(CKF_USER_PIN_COUNT_LOW|CKF_USER_PIN_FINAL_TRY|CKF_USER_PIN_LOCKED);
 	auth = slot_data_auth(slot->fw_data);
-	sc_log(context, "C_GetTokenInfo() auth. object %p, token-info flags 0x%X", auth, slot->token_info.flags);
+	sc_log(context, "C_GetTokenInfo() auth.object %p, token-info flags 0x%X", auth, slot->token_info.flags);
 	if (auth) {
 		pin_info = (struct sc_pkcs15_auth_info*) auth->data;
 
-		if (pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+		memset(&data, 0, sizeof(data));
+		data.cmd = SC_PIN_CMD_GET_INFO;
+
+		sc_log(context, "C_GetTokenInfo(): auth ('%s',type:0x%X)", auth->label, pin_info->auth_type);
+		if (pin_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+			data.pin_type = SC_AC_CHV;
+			data.pin_reference = pin_info->attrs.pin.reference;
+		}
+		else if (pin_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+			data.pin_type = SC_AC_AUT;
+			data.pin_reference = pin_info->attrs.authkey.reference;
+		}
+		else   {
 			rv = CKR_FUNCTION_REJECTED;
 			goto out;
 		}
 
-		/* Try to update PIN info from card */
-		memset(&data, 0, sizeof(data));
-		data.cmd = SC_PIN_CMD_GET_INFO;
-		data.pin_type = SC_AC_CHV;
-		data.pin_reference = pin_info->attrs.pin.reference;
-
 		r = sc_pin_cmd(slot->p11card->card, &data, NULL);
+		sc_log(context, "C_GetTokenInfo(): get-pin-info() rv %i", r);
 		if (r == SC_SUCCESS) {
 			if (data.pin1.max_tries > 0)
 				pin_info->max_tries = data.pin1.max_tries;

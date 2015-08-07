@@ -288,17 +288,17 @@ int sc_pkcs15_verify_pin(struct sc_pkcs15_card *p15card,
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pkcs15_auth_info *auth_info = (struct sc_pkcs15_auth_info *)pin_obj->data;
-	int r;
-	sc_card_t *card;
+	struct sc_card *card = p15card->card;
 	struct sc_pin_cmd_data data;
+	unsigned char authkey[0x100];
+	size_t authkey_len = sizeof(authkey);
+	int r;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "PIN(type:%X;method:%X;len:)", auth_info->auth_type, auth_info->auth_method, pinlen);
 
 	if (pinlen > SC_MAX_PIN_SIZE)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_PIN_LENGTH, "Invalid PIN size");
-
-	card = p15card->card;
 
 	/* Initialize arguments */
 	memset(&data, 0, sizeof(data));
@@ -334,6 +334,11 @@ int sc_pkcs15_verify_pin(struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_id *skey_id =  &auth_info->attrs.authkey.skey_id;
 		struct sc_pkcs15_skey_info *skey_info = NULL;
 
+		if (strlen(pincode) != pinlen)   {
+			sc_log(ctx, "AUTHKEY value is expected as a string");
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+		}
+
 		r = sc_pkcs15_find_skey_by_id(p15card, skey_id, &skey_obj);
 		if (r)   {
 			sc_log(ctx, "cannot find secret key with id:%s", sc_pkcs15_print_id(skey_id));
@@ -344,10 +349,12 @@ int sc_pkcs15_verify_pin(struct sc_pkcs15_card *p15card,
 		sc_log(ctx, "found secret key '%s'", skey_obj->label);
 		data.pin_reference = skey_info->key_reference;
 
-		data.pin1.data = pincode;
-		data.pin1.len = pinlen;
-		data.pin1.min_length = pinlen;
-		data.pin1.max_length = pinlen;
+		sc_hex_to_bin(pincode, authkey, &authkey_len);
+
+		data.pin1.data       = authkey;
+		data.pin1.len        = authkey_len;
+		data.pin1.min_length = authkey_len;
+		data.pin1.max_length = authkey_len;
 	}
 
 	if(p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
@@ -545,6 +552,11 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 		}
 	}
 	else if (puk_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+		if (strlen(puk) != puklen)   {
+			sc_log(ctx, "AUTHKEY value is expected as a string");
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+		}
+
 		sc_hex_to_bin(puk, puk_bin, &puk_bin_len);
 
 		data.pin1.data       = puk_bin;

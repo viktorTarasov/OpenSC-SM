@@ -34,6 +34,8 @@
 #include "vsctpm-md.h"
 #include "reader-pcsc.h"
 
+static int vsctpm_md_get_sc_error(HRESULT);
+
 /**
  * CSP management functions and cache context, needed by minidrivers'
  * CardAcquireContext functions
@@ -145,7 +147,7 @@ vsctpm_md_test_list_cards(struct sc_card *card)
 	}
 
 	// Retrieve the list of cards.
-	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, reader->atr.value, NULL, NULL, (LPTSTR)&pmszCards, &cch);
+	rv = gpriv->SCardListCards(gpriv->pcsc_ctx, reader->atr.value, NULL, 0, (LPTSTR)&pmszCards, &cch);
 	if ( rv != SCARD_S_SUCCESS )   {
 		sc_log(ctx, "Failed SCardListCards: error %lX", rv);
 		return SC_SUCCESS;
@@ -252,7 +254,7 @@ vsctpm_md_test(struct sc_card *card)
 	rv = vsctpm_md_test_list_providers(card);
 	LOG_TEST_RET(ctx, rv, "'List providers' test failed");
 
-	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
 	if (!hCertStore)   {
 		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
@@ -272,7 +274,7 @@ vsctpm_md_test(struct sc_card *card)
 			}
 			sc_log(ctx, "Certificate for '%s', pCertContext %p", pszNameString, pCertContext);
 			sc_log(ctx, "type 0x%X, data(%i) %p", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded, pCertContext->pbCertEncoded);
-			sc_log(ctx, "cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+			// sc_log(ctx, "cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
 			sc_log(ctx, "cert serial '%s'", sc_dump_hex(pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData));
 
 			len = sizeof(buf);
@@ -284,7 +286,7 @@ vsctpm_md_test(struct sc_card *card)
 				CRYPT_KEY_PROV_INFO *keyInfo;
 				char name[255];
 
-				sc_log(ctx, "KeyInfo (%i) %s", len, sc_dump_hex(buf, len));
+				// sc_log(ctx, "KeyInfo (%i) %s", len, sc_dump_hex(buf, len));
 				keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
 
 				sc_log(ctx, "KeyInfo (%i), key spec 0x%X, provType 0x%X, flags 0x%X, number of params %i", len,
@@ -450,7 +452,7 @@ vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
 	hRes = priv->md.card_data.pfnCardReadFile(&priv->md.card_data, dir_name, file_name, 0, &ptr, &sz);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardReadFile(%s,%s) failed: hRes %lX", dir_name, file_name, hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, (vsctpm_md_get_sc_error(hRes)));
 	}
 	sc_log(ctx, "MD file (%s,%s) (%i,'%s')", dir_name, file_name, sz, sc_dump_hex(ptr, sz));
 
@@ -545,7 +547,7 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 
 	LOG_FUNC_CALLED(ctx);
 
-	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
 	if (!hCertStore)   {
 		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
@@ -571,7 +573,7 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 				if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
 					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
 						sc_log(ctx, "Sign certificate matched");
-						sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						// sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
 						if (vsctpm_cont->signRequestContext)   {
 							 CertFreeCertificateContext(vsctpm_cont->signRequestContext);
 							 vsctpm_cont->signRequestContext = NULL;
@@ -580,7 +582,7 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 					}
 					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
 						sc_log(ctx, "KeyExchange certificate matched");
-						sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+						// sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
 						if (vsctpm_cont->exRequestContext)   {
 							 CertFreeCertificateContext(vsctpm_cont->exRequestContext);
 							 vsctpm_cont->exRequestContext = NULL;
@@ -613,7 +615,7 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 
 	LOG_FUNC_CALLED(ctx);
 
-	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, NULL,
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"REQUEST");
 	if (!hCertStore)   {
 		sc_log(ctx, "CertOpenSystemStore() failed, error %X", GetLastError());
@@ -707,7 +709,7 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 			vsctpm_cont->signCertContext, vsctpm_cont->exCertContext,
 			vsctpm_cont->signRequestContext, vsctpm_cont->exRequestContext);
 
-	vsctpm_md_test(card);
+	// vsctpm_md_test(card);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -849,11 +851,10 @@ vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 	if (!priv->md.card_data.pfnCardGetChallenge)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "Now Get card Challenge (%p)", priv->md.card_data.pfnCardGetChallenge);
 	hRes = priv->md.card_data.pfnCardGetChallenge(&priv->md.card_data, &pbBinChallenge, &cBinChallenge);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetChallenge(%p,%i) failed: hRes %lX", rnd, len, hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 	sc_log(ctx, "Generated challenge(%i) %s", cBinChallenge, sc_dump_hex(pbBinChallenge, cBinChallenge));
 	if (!rnd)
@@ -878,8 +879,8 @@ vsctpm_md_cbc_encrypt(struct sc_card *card,
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_deskey_blob deskey_blob;
-	HCRYPTPROV hProv = NULL;
-	HCRYPTKEY hKey = NULL;
+	HCRYPTPROV hProv = 0;
+	HCRYPTKEY hKey = 0;
 	DWORD dwMode = CRYPT_MODE_CBC;
 	int rv = SC_ERROR_INTERNAL;
 
@@ -894,7 +895,7 @@ vsctpm_md_cbc_encrypt(struct sc_card *card,
 	deskey_blob.hdr.aiKeyAlg = CALG_3DES;
 	deskey_blob.keySize = sizeof(deskey_blob.key);
 	memcpy(deskey_blob.key, key, deskey_blob.keySize);
-	sc_log(ctx, "DES key blob '%s'", sc_dump_hex(&deskey_blob, sizeof(deskey_blob)));
+	sc_log(ctx, "DES key blob '%s'", sc_dump_hex((unsigned char *)(&deskey_blob), sizeof(deskey_blob)));
 
 	if(!CryptAcquireContext(&hProv, NULL, MS_ENHANCED_PROV, PROV_RSA_FULL, CRYPT_VERIFYCONTEXT))   {
 		sc_log(ctx, "Error while calling CryptAcquireContext(%s): 0x%08x", MS_ENHANCED_PROV, GetLastError());
@@ -928,6 +929,59 @@ end:
 }
 
 
+static int
+vsctpm_md_get_sc_error(HRESULT res)
+{
+	switch (res)   {
+	case SCARD_S_SUCCESS:
+		return SC_SUCCESS;
+	case SCARD_W_WRONG_CHV:
+		return SC_ERROR_PIN_CODE_INCORRECT;
+	case SCARD_E_INVALID_PARAMETER:
+		return SC_ERROR_INCORRECT_PARAMETERS;
+	case SCARD_E_UNSUPPORTED_FEATURE:
+		return SC_ERROR_NOT_SUPPORTED;
+	case SCARD_W_CHV_BLOCKED:
+		return SC_ERROR_AUTH_METHOD_BLOCKED;
+	case SCARD_W_SECURITY_VIOLATION:
+		return SC_ERROR_NOT_ALLOWED;
+	case SCARD_E_NO_MEMORY:
+		return SC_ERROR_NOT_ENOUGH_MEMORY;
+	}
+
+	return SC_ERROR_INTERNAL;
+}
+
+
+int
+vsctpm_md_admin_login(struct sc_card *card, unsigned char *auth, size_t auth_len, int *tries_left)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD attemptsRemaining = -1;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!auth || !auth_len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "Auth Data(%i)'%s'", auth_len, sc_dump_hex(auth, auth_len));
+
+	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_ADMIN, CARD_PIN_SILENT_CONTEXT,
+			auth, auth_len, NULL, NULL, &attemptsRemaining);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardAuthenticateEx() failed: hRes %lX", hRes);
+
+		if (tries_left && attemptsRemaining != -1)
+			*tries_left = attemptsRemaining;
+
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	sc_log(ctx, "User PIN unblocked");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 int
 vsctpm_md_user_pin_unblock(struct sc_card *card,
 		unsigned char *auth, size_t auth_len,
@@ -951,7 +1005,7 @@ vsctpm_md_user_pin_unblock(struct sc_card *card,
 			tries_left, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardUnblockPin(%p,%i %p,%i) failed: hRes %lX", auth, auth_len, pin, pin_len, hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 	sc_log(ctx, "User PIN unblocked");
 
@@ -972,15 +1026,37 @@ vsctpm_md_get_pin_info(struct sc_card *card, DWORD role, PIN_INFO *pin_info)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 	sc_log(ctx, "Get PIN info, role 0x%X", role);
 
-	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_PIN_INFO, pin_info, len, &len, role);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_PIN_INFO, (unsigned char *)pin_info, len, &len, role);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty() failed: hRes %lX", hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+int
+vsctpm_md_logout(struct sc_card *card, DWORD role)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD len = sizeof(PIN_INFO);
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardDeauthenticateEx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	sc_log(ctx, "MD logout for PIN role 0x%X", role);
+
+	hRes = priv->md.card_data.pfnCardDeauthenticateEx(&priv->md.card_data, CREATE_PIN_SET(role), 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardDeauthenticateEx() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */

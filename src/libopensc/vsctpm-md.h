@@ -46,8 +46,8 @@ struct vsctpm_md_container {
 	int idx;
 	CONTAINER_MAP_RECORD rec;
 
-	CERT_CONTEXT *signCertContext, *exCertContext;
-	CERT_CONTEXT *signRequestContext, *exRequestContext;
+	const CERT_CONTEXT *signCertContext, *exCertContext;
+	const CERT_CONTEXT *signRequestContext, *exRequestContext;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
@@ -63,10 +63,12 @@ int vsctpm_md_cmap_size(struct sc_card *);
 int vsctpm_md_cmap_reload(struct sc_card *);
 int vsctpm_md_cmap_init_container(struct sc_card *, int, struct vsctpm_md_container *);
 int vsctpm_md_get_challenge(struct sc_card *, unsigned char *, size_t);
-int vsctpm_md_user_pin_unblock(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_user_pin_unblock(struct sc_card *, unsigned char *, size_t, const unsigned char *, size_t);
+int vsctpm_md_admin_login(struct sc_card *, unsigned char *, size_t, int *);
 int vsctpm_md_cbc_encrypt(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
 int vsctpm_md_get_property(struct sc_card *, LPCWSTR, void *, unsigned char *);
 int vsctpm_md_get_pin_info(struct sc_card *, DWORD, PIN_INFO *);
+int vsctpm_md_logout(struct sc_card *, DWORD);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -99,6 +101,10 @@ struct vsctpm_private_data {
         struct vsctpm_md_file *md_files;
         size_t md_files_num;
 
+	unsigned char admin_key[24];
+	size_t admin_key_len;
+
+	int user_logged, admin_logged;
 #if ENABLE_MINIDRIVER
         struct vsctpm_md_data md;
 #endif
@@ -119,6 +125,9 @@ struct vsctpm_private_data {
 #define VSCTPM_CRT_TAG_KAT      0xA6
 
 #define VSCTPM_USER_PIN_RETRY_COUNT 3
+
+#define VSCTPM_USER_PIN_REF 0x80
+#define VSCTPM_ADMIN_PIN_REF 0x82
 
 #ifdef __cplusplus
 }

@@ -34,7 +34,6 @@
 #include "vsctpm-md.h"
 
 #define MANU_ID	"VSC TPM"
-#define VSCTPM_USER_PIN_REF 0x80
 #define VSCTPM_PKCS15_PIN_AUTH_ID 1
 #define VSCTPM_PKCS15_PUK_AUTH_ID 2
 #define VSCTPM_PKCS15_ADMIN_AUTH_ID 0x10
@@ -149,6 +148,7 @@ vsctpm_add_user_puk (struct sc_pkcs15_card *p15card)
         auth_info.attrs.authkey.skey_id.len		= 1;
         auth_info.attrs.authkey.skey_id.value[0]	= VSCTPM_PKCS15_ADMIN_AUTH_ID;
         auth_info.attrs.authkey.flags = SC_PKCS15_PIN_FLAG_SO_PIN | SC_PKCS15_PIN_FLAG_UNBLOCKING_PIN | SC_PKCS15_PIN_FLAG_CASE_SENSITIVE | SC_PKCS15_PIN_FLAG_INITIALIZED | SC_PKCS15_PIN_FLAG_LOCAL;
+        auth_info.attrs.authkey.reference		= VSCTPM_ADMIN_PIN_REF;
 
         strncpy(obj.label, "User PUK", SC_PKCS15_MAX_LABEL_SIZE - 1);
         obj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE | SC_PKCS15_CO_FLAG_PRIVATE;
@@ -257,7 +257,7 @@ sc_pkcs15emu_vsctpm_pubkey_from_cert_context(struct sc_context *ctx, CERT_CONTEX
 
 
 static int
-sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx, struct sc_pkcs15_id *id)
+sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, const CERT_CONTEXT *cert_ctx, struct sc_pkcs15_id *id)
 {
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	struct sc_pkcs15_der der;
@@ -408,7 +408,8 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 
 
 static int
-sc_pkcs15emu_vsctpm_container_add_pubkey(struct sc_pkcs15_card *p15card, unsigned idx, CERT_CONTEXT *cert_ctx)
+sc_pkcs15emu_vsctpm_container_add_pubkey(struct sc_pkcs15_card *p15card,
+		unsigned idx, const CERT_CONTEXT *cert_ctx)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
@@ -457,7 +458,7 @@ sc_pkcs15emu_vsctpm_container_add_pubkey(struct sc_pkcs15_card *p15card, unsigne
 
 
 static int
-sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, CERT_CONTEXT *cert_ctx)
+sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, const CERT_CONTEXT *cert_ctx)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;

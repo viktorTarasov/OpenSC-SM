@@ -296,7 +296,7 @@ typedef struct sc_cardctl_pkcs11_init_token {
  * Generic cardctl - set pin using PKCS#11 style
  */
 typedef struct sc_cardctl_pkcs11_init_pin {
-	const unsigned char *	pin;
+	const unsigned char	*pin;
 	size_t			pin_len;
 } sc_cardctl_pkcs11_init_pin_t;
 
