@@ -69,6 +69,8 @@ int vsctpm_md_cbc_encrypt(struct sc_card *, unsigned char *, size_t, unsigned ch
 int vsctpm_md_get_property(struct sc_card *, LPCWSTR, void *, unsigned char *);
 int vsctpm_md_get_pin_info(struct sc_card *, DWORD, PIN_INFO *);
 int vsctpm_md_logout(struct sc_card *, DWORD);
+int vsctpm_md_cmap_get_free_index(struct sc_card *);
+int vsctpm_md_free_container (struct sc_context *, struct vsctpm_md_container *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;

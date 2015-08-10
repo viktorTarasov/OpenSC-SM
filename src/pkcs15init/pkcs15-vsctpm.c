@@ -117,6 +117,20 @@ vsctpm_pkcs15_new_file(struct sc_profile *profile, struct sc_card *card,
 }
 
 
+static int
+vsctpm_md_key_type_from_usage(struct sc_context *ctx, unsigned usage)
+{
+	LOG_FUNC_CALLED(ctx);
+
+	if (usage & SC_PKCS15_PRKEY_USAGE_NONREPUDIATION)
+		LOG_FUNC_RETURN(ctx, AT_SIGNATURE);
+	if (usage & (SC_PKCS15_PRKEY_USAGE_DECRYPT | SC_PKCS15_PRKEY_USAGE_UNWRAP | SC_PKCS15_PRKEY_USAGE_DERIVE))
+		LOG_FUNC_RETURN(ctx, AT_KEYEXCHANGE);
+
+	LOG_FUNC_RETURN(ctx, AT_KEYEXCHANGE);
+}
+
+
 /*
  * Select a key reference
  */
@@ -126,13 +140,23 @@ vsctpm_pkcs15_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
-	struct sc_file  *file = NULL;
-	int rv = 0, idx = key_info->key_reference;
+	struct sc_file *file = NULL;
+	int rv = 0, idx, type;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "'seed' key reference %i", key_info->key_reference);
+	sc_log(ctx, "Select key reference, initial value 0x%X", key_info->key_reference);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+	rv = vsctpm_md_cmap_get_free_index(card);
+	LOG_TEST_RET(ctx, rv, "Failed to get CMAP free index");
+	idx = rv + 1;
+
+	type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
+	if (type == AT_KEYEXCHANGE)
+		idx |= 0x80;
+
+	key_info->key_reference = idx;
+
+	sc_log(ctx, "Select key reference, key type %i, index 0x%X", type, key_info->key_reference);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -152,7 +176,7 @@ vsctpm_sdo_get_data(struct sc_card *card, struct vsctpm_sdo *sdo)
 
 static int
 vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
-					struct sc_pkcs15_object *object)
+		struct sc_pkcs15_object *object)
 {
 	struct sc_card *card = p15card->card;
 	struct sc_context *ctx = card->ctx;
@@ -182,8 +206,6 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	size_t keybits = key_info->modulus_length;
-	struct vsctpm_sdo *sdo_prvkey = NULL;
-	struct vsctpm_sdo *sdo_pubkey = NULL;
 	struct sc_file	*file = NULL;
 	unsigned char *tmp = NULL;
 	size_t tmp_len;

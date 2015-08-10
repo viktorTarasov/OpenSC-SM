@@ -211,38 +211,6 @@ vsctpm_add_admin_skey(struct sc_pkcs15_card *p15card)
 
 #if ENABLE_MINIDRIVER
 static int
-sc_pkcs15emu_vsctpm_free_container (struct sc_context *ctx, struct vsctpm_md_container *mdc)
-{
-	LOG_FUNC_CALLED(ctx);
-	if(!mdc)
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-
-	sc_log(ctx, "signCertContext %p", mdc->signCertContext);
-	if (mdc->signCertContext)
-		CertFreeCertificateContext(mdc->signCertContext);
-	mdc->signCertContext = NULL;
-
-	sc_log(ctx, "exCertContext %p", mdc->exCertContext);
-	if (mdc->exCertContext)
-		CertFreeCertificateContext(mdc->exCertContext);
-	mdc->exCertContext = NULL;
-
-	sc_log(ctx, "signRequestContext %p", mdc->signRequestContext);
-	if (mdc->signRequestContext)
-		CertFreeCertificateContext(mdc->signRequestContext);
-	mdc->signRequestContext = NULL;
-
-	sc_log(ctx, "exRequestContext %p", mdc->exRequestContext);
-	if (mdc->exRequestContext)
-		CertFreeCertificateContext(mdc->exRequestContext);
-	mdc->signRequestContext = NULL;
-
-	memset(mdc, 0, sizeof(struct vsctpm_md_container));
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-
-
-static int
 sc_pkcs15emu_vsctpm_pubkey_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx, struct sc_pkcs15_der *out)
 {
 	struct sc_pkcs15_pubkey *pubkey = NULL;
@@ -577,7 +545,7 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange request error");
 		}
 
-		sc_pkcs15emu_vsctpm_free_container(ctx, &mdc);
+		vsctpm_md_free_container(ctx, &mdc);
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

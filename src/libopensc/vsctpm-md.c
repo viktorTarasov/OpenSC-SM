@@ -715,6 +715,47 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 }
 
 
+int
+vsctpm_md_cmap_get_free_index(struct sc_card *card)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+        unsigned char *buf = NULL;
+        size_t buf_len = 0;
+        struct vsctpm_md_container mdc;
+        int    rv, idx, nn_cont;
+
+        LOG_FUNC_CALLED(ctx);
+
+        rv = vsctpm_md_cmap_size(card);
+        LOG_TEST_RET(ctx, rv, "CMAP cannot get size");
+        nn_cont = rv;
+        sc_log(ctx, "CMAP length %i", nn_cont);
+
+        for (idx=0; idx < nn_cont; idx++)   {
+		int br = 0;
+                rv = vsctpm_md_cmap_init_container(card, idx, &mdc);
+                if (rv == SC_ERROR_OBJECT_NOT_FOUND)
+                        break;
+                LOG_TEST_RET(ctx, rv, "Get MD container error");
+
+                sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i", idx, mdc.rec.bFlags, mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits);
+
+                br = ((mdc.rec.bFlags & CONTAINER_MAP_VALID_CONTAINER) == 0);
+		if (!br)
+			br = ((mdc.rec.wSigKeySizeBits == 0) && (mdc.rec.wKeyExchangeKeySizeBits == 0));
+
+		vsctpm_md_free_container(ctx, &mdc);
+		if (br)
+			break;
+	}
+
+        sc_log(ctx, "returns free index %i", idx);
+	LOG_FUNC_RETURN(ctx, idx);
+}
+
+
+
 /*
 int
 __vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
@@ -1056,6 +1097,38 @@ vsctpm_md_logout(struct sc_card *card, DWORD role)
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_free_container (struct sc_context *ctx, struct vsctpm_md_container *mdc)
+{
+        LOG_FUNC_CALLED(ctx);
+        if(!mdc)
+                LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+        sc_log(ctx, "signCertContext %p", mdc->signCertContext);
+        if (mdc->signCertContext)
+                CertFreeCertificateContext(mdc->signCertContext);
+        mdc->signCertContext = NULL;
+
+        sc_log(ctx, "exCertContext %p", mdc->exCertContext);
+        if (mdc->exCertContext)
+                CertFreeCertificateContext(mdc->exCertContext);
+        mdc->exCertContext = NULL;
+
+        sc_log(ctx, "signRequestContext %p", mdc->signRequestContext);
+        if (mdc->signRequestContext)
+                CertFreeCertificateContext(mdc->signRequestContext);
+        mdc->signRequestContext = NULL;
+
+        sc_log(ctx, "exRequestContext %p", mdc->exRequestContext);
+        if (mdc->exRequestContext)
+                CertFreeCertificateContext(mdc->exRequestContext);
+        mdc->signRequestContext = NULL;
+
+        memset(mdc, 0, sizeof(struct vsctpm_md_container));
+        LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 #endif /* ENABLE_MINIDRIVER */
