@@ -459,10 +459,11 @@ vsctpm_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 	struct sc_cardctl_pkcs11_init_pin *params = (struct sc_cardctl_pkcs11_init_pin *)ptr;
 	int rv;
 
-	sc_log(ctx, "VSC ctl cmd SC_CARDCTL_GET_SERIALNR: cmd:%li, ptr:%p", cmd, ptr);
+	sc_log(ctx, "VSC ctl cmd:%li, ptr:%p", cmd, ptr);
 	switch (cmd) {
 	case SC_CARDCTL_GET_SERIALNR:
-		return vsctpm_get_serialnr(card, (struct sc_serial_number *) ptr);
+		rv = vsctpm_get_serialnr(card, (struct sc_serial_number *) ptr);
+		LOG_FUNC_RETURN(ctx, rv);
 	case SC_CARDCTL_PKCS11_INIT_PIN:
 		if (!priv->admin_key_len)
 			LOG_TEST_RET(ctx, SC_ERROR_CANNOT_LOAD_KEY, "Need Admin session opened");

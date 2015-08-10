@@ -149,14 +149,14 @@
               <Component Id="iasecc_admin_eid.profile" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\pkcs15init\iasecc_admin_eid.profile"/>
               </Component>
-              <Component Id="iasecc_generic_oberthur.profile" Guid="*" Win64="$(var.Win64YesNo)">
-                <File Source="$(var.SOURCE_DIR)\src\pkcs15init\iasecc_generic_oberthur.profile"/>
-              </Component>
               <Component Id="iasecc_generic_pki.profile" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\pkcs15init\iasecc_generic_pki.profile"/>
               </Component>
               <Component Id="iasecc.profile" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\pkcs15init\iasecc.profile"/>
+              </Component>
+              <Component Id="vsctpm.profile" Guid="*" Win64="$(var.Win64YesNo)">
+                <File Source="$(var.SOURCE_DIR)\src\pkcs15init\vsctpm.profile"/>
               </Component>
             </Directory>
           </Directory>
@@ -205,9 +205,9 @@
         <ComponentRef Id="ias_adele_admin2.profile"/>
         <ComponentRef Id="ias_adele_common.profile"/>
         <ComponentRef Id="iasecc_admin_eid.profile"/>
-        <ComponentRef Id="iasecc_generic_oberthur.profile"/>
         <ComponentRef Id="iasecc_generic_pki.profile"/>
         <ComponentRef Id="iasecc.profile"/>
+        <ComponentRef Id="vsctpm.profile"/>
       </Feature>
       <Feature Id="OpenSC_menu" Level="1" Title="Start menu entries" Description="Start menu entries: link to documentation">
         <ComponentRef Id="ProgramMenuDir"/>
