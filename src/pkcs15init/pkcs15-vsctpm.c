@@ -87,35 +87,6 @@ vsctpm_pkcs15_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 /*
  * Allocate a file
  */
-static int
-vsctpm_pkcs15_new_file(struct sc_profile *profile, struct sc_card *card,
-		unsigned int type, unsigned int num, struct sc_file **out)
-{
-	struct sc_context *ctx = card->ctx;
-	struct sc_file	*file = NULL;
-	const char *_template = NULL;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "type %X; num %i\n", type, num);
-	switch (type) {
-		case SC_PKCS15_TYPE_PRKEY_RSA:
-			_template = "private-key";
-			break;
-		case SC_PKCS15_TYPE_PUBKEY_RSA:
-			_template = "public-key";
-			break;
-		case SC_PKCS15_TYPE_CERT:
-			_template = "certificate";
-			break;
-		default:
-			LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Profile template not supported");
-	}
-
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-
 
 static int
 vsctpm_md_key_type_from_usage(struct sc_context *ctx, unsigned usage)
@@ -181,16 +152,31 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	struct sc_card *card = p15card->card;
 	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
-	struct vsctpm_sdo *sdo_prvkey = NULL, *sdo_pubkey = NULL;
 	size_t keybits = key_info->modulus_length;
-	unsigned char zeros[0x200];
-	int	 rv;
+	struct vsctpm_md_container mdc;
+	struct sc_pkcs15_prkey *priv_key = NULL;
+	unsigned type;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "create private key(keybits:%i,usage:%X,access:%X,ref:%X)",
-			keybits, key_info->usage, key_info->access_flags, key_info->key_reference);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+	sc_log(ctx, "create private key(keybits:%i,usage:%X,access:%X,ref:%X)",
+		keybits, key_info->usage, key_info->access_flags, key_info->key_reference);
+
+	memset(&mdc, 0, sizeof(struct vsctpm_md_container));
+	mdc.idx = (key_info->key_reference & 0x7F) - 1;
+
+	type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
+	if (type == AT_KEYEXCHANGE)
+		mdc.rec.wKeyExchangeKeySizeBits = keybits;
+	else if (type == AT_SIGNATURE)
+		mdc.rec.wSigKeySizeBits = keybits;
+	else
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+	rv = vsctpm_md_cmap_create_container(card, &mdc, &priv_key);
+	LOG_TEST_RET(ctx, rv, "Failed to create 'GENERATE' container");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 

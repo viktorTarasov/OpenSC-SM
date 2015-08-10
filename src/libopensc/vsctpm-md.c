@@ -1131,6 +1131,55 @@ vsctpm_md_free_container (struct sc_context *ctx, struct vsctpm_md_container *md
         LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+int
+vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container *mdc,
+		struct sc_pkcs15_prkey **key)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	DWORD dwFlags, dwKeySpec, dwKeySize;
+	HRESULT hRes = S_OK;
+	unsigned char *key_blob = NULL;
+	int rv, idx;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!key)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (!priv->md.card_data.pfnCardCreateContainerEx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	dwFlags = (*key) ? CARD_CREATE_CONTAINER_KEY_IMPORT : CARD_CREATE_CONTAINER_KEY_GEN;
+	dwKeySpec = mdc->rec.wSigKeySizeBits ? AT_SIGNATURE : AT_KEYEXCHANGE;
+	dwKeySize = mdc->rec.wSigKeySizeBits ? mdc->rec.wSigKeySizeBits : mdc->rec.wKeyExchangeKeySizeBits;
+	idx = mdc->idx;
+	sc_log(ctx, "Create container(idx:%i,KeySpec:0x%X,KeySize:0x%X)", idx, dwKeySpec, dwKeySize);
+
+	hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob, ROLE_USER);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardCreateContainerEx() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
+
+	rv = vsctpm_md_free_container (ctx, mdc);
+	LOG_TEST_RET(ctx, rv, "Failed to free  CMAP container");
+
+	rv = vsctpm_md_cmap_init_container(card, idx, mdc);
+	LOG_TEST_RET(ctx, rv, "Failed to init CMAP container");
+
+	sc_log(ctx, "Container(%i) context %p %p %p %p", idx, mdc->signCertContext, mdc->exCertContext,
+			mdc->signRequestContext, mdc->exRequestContext);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
 

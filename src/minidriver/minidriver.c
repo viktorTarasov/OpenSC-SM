@@ -197,12 +197,12 @@ static struct md_opensc_static_data md_static_data;
 
 #define C_ASN1_MD_CONTAINER_ATTRS_SIZE 7
 static const struct sc_asn1_entry c_asn1_md_container_attrs[C_ASN1_MD_CONTAINER_ATTRS_SIZE] = {
-	{ "index", SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
-	{ "id", SC_ASN1_PKCS15_ID, SC_ASN1_TAG_OCTET_STRING, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
-	{ "guid", SC_ASN1_UTF8STRING, SC_ASN1_TAG_UTF8STRING, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
-	{ "flags", SC_ASN1_BIT_FIELD, SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
-	{ "sizeKeyExchange", SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
-	{ "sizeSign", SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
+	{ "index",	SC_ASN1_INTEGER,	SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
+	{ "id",		SC_ASN1_PKCS15_ID,	SC_ASN1_TAG_OCTET_STRING, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
+	{ "guid",	SC_ASN1_UTF8STRING,	SC_ASN1_TAG_UTF8STRING, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
+	{ "flags",	SC_ASN1_BIT_FIELD,	SC_ASN1_TAG_BIT_STRING, 0, NULL, NULL },
+	{ "sizeKeyExchange", SC_ASN1_INTEGER,	SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
+	{ "sizeSign",	SC_ASN1_INTEGER,	SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
 	{ NULL, 0, 0, 0, NULL, NULL }
 };
 
@@ -218,7 +218,8 @@ static DWORD md_get_cardcf(PCARD_DATA pCardData, CARD_CACHE_FILE_FORMAT **out);
 static DWORD md_pkcs15_delete_object(PCARD_DATA pCardData, struct sc_pkcs15_object *obj);
 static DWORD md_fs_init(PCARD_DATA pCardData);
 
-static void logprintf(PCARD_DATA pCardData, int level, _Printf_format_string_ const char* format, ...)
+static void
+logprintf(PCARD_DATA pCardData, int level, _Printf_format_string_ const char* format, ...)
 {
 	va_list arg;
 	VENDOR_SPECIFIC *vs;
@@ -263,7 +264,9 @@ static void logprintf(PCARD_DATA pCardData, int level, _Printf_format_string_ co
 	va_end(arg);
 }
 
-static void loghex(PCARD_DATA pCardData, int level, PBYTE data, size_t len)
+
+static void
+loghex(PCARD_DATA pCardData, int level, PBYTE data, size_t len)
 {
 	char line[74];
 	char *c;
@@ -299,7 +302,9 @@ static void loghex(PCARD_DATA pCardData, int level, PBYTE data, size_t len)
 		logprintf(pCardData, level, " %04X  %s\n", a, line);
 }
 
-static void print_werror(PCARD_DATA pCardData, PSTR str)
+
+static void
+print_werror(PCARD_DATA pCardData, PSTR str)
 {
 	void *buf;
 	FormatMessageA(
