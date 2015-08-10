@@ -127,45 +127,12 @@ vsctpm_pkcs15_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
 	struct sc_file  *file = NULL;
-	int rv = 0, idx = key_info->key_reference & ~IASECC_OBJECT_REF_LOCAL;
+	int rv = 0, idx = key_info->key_reference;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "'seed' key reference %i; path %s", key_info->key_reference & ~IASECC_OBJECT_REF_LOCAL,
-			sc_print_path(&key_info->path));
+	sc_log(ctx, "'seed' key reference %i", key_info->key_reference);
 
-	rv = sc_select_file(card, &key_info->path, &file);
-	LOG_TEST_RET(ctx, rv, "Cannot select DF to select key reference in");
-
-	/* 1 <= ObjReference <= 31 */
-	if (idx < IASECC_OBJECT_REF_MIN)
-		idx = IASECC_OBJECT_REF_MIN;
-
-	/* Look for the suitable slot */
-	if (idx <= IASECC_OBJECT_REF_MAX)   {
-		struct vsctpm_ctl_get_free_reference ctl_data;
-
-		ctl_data.key_size = key_info->modulus_length;
-		ctl_data.usage = key_info->usage;
-		ctl_data.access = key_info->access_flags;
-		ctl_data.index = idx;
-
-		rv = sc_card_ctl(card, SC_CARDCTL_IASECC_GET_FREE_KEY_REFERENCE, &ctl_data);
-		if (!rv)
-			sc_log(ctx, "found allocated slot %i", idx);
-		else if (rv == SC_ERROR_DATA_OBJECT_NOT_FOUND && idx <= IASECC_OBJECT_REF_MAX)
-			sc_log(ctx, "found empty slot %i", idx);
-		else
-			LOG_TEST_RET(ctx, rv, "Cannot select key reference");
-
-		idx = ctl_data.index;
-	}
-
-	/* All card objects but PINs are locals */
-	key_info->key_reference = idx | IASECC_OBJECT_REF_LOCAL;
-	sc_log(ctx, "selected key reference %i", key_info->key_reference);
-
-	if (file)
-		sc_file_free(file);
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -177,9 +144,8 @@ vsctpm_sdo_get_data(struct sc_card *card, struct vsctpm_sdo *sdo)
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	rv = sc_card_ctl(card, SC_CARDCTL_IASECC_SDO_GET_DATA, sdo);
-	LOG_TEST_RET(ctx, rv, "VscTpm: GET DATA error");
 
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -247,7 +213,7 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Store IAS/ECC key(keybits:%i,AuthID:%s)", keybits, sc_pkcs15_print_id(&object->auth_id));
+	sc_log(ctx, "Store key(keybits:%i,AuthID:%s)", keybits, sc_pkcs15_print_id(&object->auth_id));
 
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, rv);

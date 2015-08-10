@@ -68,6 +68,8 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 	struct sc_pkcs15_auth_info auth_info;
         struct sc_pkcs15_object   obj;
 	int rv, tries_left = -1;
+
+#if ENABLE_MINIDRIVER
 	PIN_INFO md_pin_info;
 	size_t md_pin_info_size = sizeof(md_pin_info);
 
@@ -111,6 +113,9 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
         LOG_TEST_RET(ctx, rv, "VSC TPM init failed: cannot add User PIN object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -122,6 +127,8 @@ vsctpm_add_user_puk (struct sc_pkcs15_card *p15card)
 	struct sc_pkcs15_auth_info auth_info;
         struct sc_pkcs15_object   obj;
 	int rv, tries_left;
+
+#if ENABLE_MINIDRIVER
 	PIN_INFO md_pin_info;
 	size_t md_pin_info_size = sizeof(md_pin_info);
 
@@ -158,6 +165,9 @@ vsctpm_add_user_puk (struct sc_pkcs15_card *p15card)
         LOG_TEST_RET(ctx, rv, "VSC TPM init failed: cannot add User PUK object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -367,7 +377,8 @@ sc_pkcs15emu_vsctpm_pubkey_info_from_cert_context(struct sc_context *ctx,
 
 
 static int
-sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigned idx, CERT_CONTEXT *cert_ctx)
+sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card,
+		unsigned idx, const CERT_CONTEXT *cert_ctx)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
