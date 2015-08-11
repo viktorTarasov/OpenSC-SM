@@ -431,6 +431,110 @@ vsctpm_md_get_guid(struct sc_card *card, unsigned char *out, size_t *out_len)
 
 
 int
+vsctpm_md_get_card_info(struct sc_card *card)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_md_card_capabilities *caps = &priv->md.info;
+	HRESULT hRes = S_OK;
+	DWORD sz = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardGetProperty)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sz = sizeof(caps->free_space);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE,
+			&caps->free_space, sizeof(caps->free_space), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_FREE_SPACE) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Free space available:%i,containers:%i,max_containers:%i",
+			caps->free_space.dwBytesAvailable,  caps->free_space.dwKeyContainersAvailable,  caps->free_space.dwMaxKeyContainers);
+
+	sz = sizeof(caps->caps);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_CAPABILITIES,
+			&caps->caps, sizeof(caps->caps), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_CAPABILITIES) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Caps version:%i,keyGen:%i,certCopression:%i", caps->caps.dwVersion, caps->caps.fKeyGen, caps->caps.fCertificateCompression);
+
+	sz = sizeof(caps->sign_key_sizes);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
+			&caps->sign_key_sizes, sizeof(caps->sign_key_sizes), &sz, AT_SIGNATURE);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_SIGNATURE) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Sign key sizes version:%i,minBitLen:%i,defaultBitLen:%i,maxBitLen:%i,incrBitLen:%i", caps->sign_key_sizes.dwVersion,
+			caps->sign_key_sizes.dwMinimumBitlen, caps->sign_key_sizes.dwDefaultBitlen,
+			caps->sign_key_sizes.dwMaximumBitlen, caps->sign_key_sizes.dwIncrementalBitlen);
+
+	sz = sizeof(caps->keyexchange_key_sizes);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
+			&caps->keyexchange_key_sizes, sizeof(caps->keyexchange_key_sizes), &sz, AT_KEYEXCHANGE);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_KEYEXCHANGE) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "KeyExchange sizes version:%i,minBitLen:%i,defaultBitLen:%i,maxBitLen:%i,incrBitLen:%i", caps->keyexchange_key_sizes.dwVersion,
+			caps->keyexchange_key_sizes.dwMinimumBitlen, caps->keyexchange_key_sizes.dwDefaultBitlen,
+			caps->keyexchange_key_sizes.dwMaximumBitlen, caps->keyexchange_key_sizes.dwIncrementalBitlen);
+
+	sz = sizeof(caps->key_import);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_KEY_IMPORT_SUPPORT,
+			&caps->key_import, sizeof(caps->key_import), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_KEYIMPORT_SUPPORT) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Key import support 0x%X", caps->key_import);
+
+	sz = sizeof(caps->list_pins);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_LIST_PINS,
+			&caps->list_pins, sizeof(caps->list_pins), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_LIST_PINS) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "List PINs 0x%X", caps->list_pins);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_pin_authentication_state(struct sc_card *card, DWORD *out)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_md_card_capabilities *caps = &priv->md.info;
+	HRESULT hRes = S_OK;
+	DWORD sz = 0, auth_state;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardGetProperty)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sz = sizeof(auth_state);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_AUTHENTICATED_STATE,
+			&auth_state, sizeof(auth_state), &sz, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardGetProperty(CP_CARD_AUTHENTICATED_STATE) failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	sc_log(ctx, "Authentication state 0x%X", auth_state);
+
+	if (out)
+		*out = auth_state;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
 vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
 		unsigned char **out, size_t *out_len)
 {
@@ -1138,26 +1242,31 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	DWORD dwFlags, dwKeySpec, dwKeySize;
+	DWORD dwFlags, dwKeySpec, dwKeySize, dwAuthState = 0;
 	HRESULT hRes = S_OK;
 	unsigned char *key_blob = NULL;
 	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
-
-	if (!key)
+	if (!mdc || !key)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
-	if (!priv->md.card_data.pfnCardCreateContainerEx)
+	rv = vsctpm_md_pin_authentication_state(card, &dwAuthState);
+	if (rv == SC_SUCCESS)
+		sc_log(ctx, "PIN authentication state 0x%X", dwAuthState);
+
+	// if (!priv->md.card_data.pfnCardCreateContainerEx)
+	if (!priv->md.card_data.pfnCardCreateContainer)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	dwFlags = (*key) ? CARD_CREATE_CONTAINER_KEY_IMPORT : CARD_CREATE_CONTAINER_KEY_GEN;
 	dwKeySpec = mdc->rec.wSigKeySizeBits ? AT_SIGNATURE : AT_KEYEXCHANGE;
 	dwKeySize = mdc->rec.wSigKeySizeBits ? mdc->rec.wSigKeySizeBits : mdc->rec.wKeyExchangeKeySizeBits;
 	idx = mdc->idx;
-	sc_log(ctx, "Create container(idx:%i,KeySpec:0x%X,KeySize:0x%X)", idx, dwKeySpec, dwKeySize);
+	sc_log(ctx, "Create container(idx:%i,flags:0x%X,KeySpec:0x%X,KeySize:0x%X)", idx, dwFlags, dwKeySpec, dwKeySize);
 
-	hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob, ROLE_USER);
+	//hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob, ROLE_USER);
+	hRes = priv->md.card_data.pfnCardCreateContainer(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardCreateContainerEx() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));

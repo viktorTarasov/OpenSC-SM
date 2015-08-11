@@ -618,6 +618,9 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 	rv = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
 	LOG_TEST_RET(ctx, rv, "Cannot get serial nomber");
 
+        rv = vsctpm_md_get_card_info (card);
+	LOG_TEST_RET(ctx, rv, "Cannot get card info");
+
 	rv = sc_bin_to_hex(serial.value, serial.len, buf, sizeof(buf), 0);
 	if (rv != SC_SUCCESS)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);

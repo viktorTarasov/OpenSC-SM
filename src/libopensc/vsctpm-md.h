@@ -28,10 +28,19 @@ struct vsctpm_publickeublob {
 	RSAPUBKEY	rsapubkey;
 };
 
+struct vsctpm_md_card_capabilities {
+	CARD_FREE_SPACE_INFO free_space;
+	CARD_CAPABILITIES caps;
+	CARD_KEY_SIZES sign_key_sizes, keyexchange_key_sizes;
+	DWORD key_import, list_pins;
+};
+
 struct vsctpm_md_data   {
 	CARD_DATA       card_data;
 	HMODULE         hmd;
 	PFN_CARD_ACQUIRE_CONTEXT acquire_context;
+
+	struct vsctpm_md_card_capabilities info;
 
 	struct sc_lv_data cmap_data;
 
@@ -71,6 +80,8 @@ int vsctpm_md_get_pin_info(struct sc_card *, DWORD, PIN_INFO *);
 int vsctpm_md_logout(struct sc_card *, DWORD);
 int vsctpm_md_cmap_get_free_index(struct sc_card *);
 int vsctpm_md_free_container (struct sc_context *, struct vsctpm_md_container *);
+int vsctpm_md_get_card_info(struct sc_card *);
+int vsctpm_md_pin_authentication_state(struct sc_card *, DWORD *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
