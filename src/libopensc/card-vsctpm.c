@@ -87,6 +87,8 @@ vsctpm_init(struct sc_card * card)
 
 	LOG_FUNC_CALLED(ctx);
 
+	vsctpm_md_test(card);
+
 	card->cla = 0x00;
 
 	card->caps = SC_CARD_CAP_RNG;
@@ -613,10 +615,15 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
 	}
 	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
+#ifdef VSCTPM_NOT_USE_APDU
+		rv = vsctpm_md_pin_authenticate(card,  pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
+		LOG_FUNC_RETURN(ctx, rv);
+#else
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
 		apdu.data = pin_cmd->pin1.data;
 		apdu.datalen = pin_cmd->pin1.len;
 		apdu.lc = pin_cmd->pin1.len;
+#endif
 	}
 	else   {
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);

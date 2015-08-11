@@ -61,6 +61,7 @@ struct vsctpm_md_container {
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
 
+int vsctpm_md_test(struct sc_card *);
 int vsctpm_md_init_card_data(struct sc_card *, struct vsctpm_md_data *);
 void vsctpm_md_reset_card_data(struct sc_card *);
 void vsctpm_md_free(struct sc_card *, void *);
@@ -82,6 +83,8 @@ int vsctpm_md_cmap_get_free_index(struct sc_card *);
 int vsctpm_md_free_container (struct sc_context *, struct vsctpm_md_container *);
 int vsctpm_md_get_card_info(struct sc_card *);
 int vsctpm_md_pin_authentication_state(struct sc_card *, DWORD *);
+int vsctpm_md_pin_authenticate(struct sc_card *, unsigned char *, size_t, int *);
+int vsctpm_md_cmap_delete_container(struct sc_card *, int);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -141,6 +144,8 @@ struct vsctpm_private_data {
 
 #define VSCTPM_USER_PIN_REF 0x80
 #define VSCTPM_ADMIN_PIN_REF 0x82
+
+#define VSCTPM_NOT_USE_APDU
 
 #ifdef __cplusplus
 }

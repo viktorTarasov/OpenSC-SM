@@ -156,6 +156,7 @@ vsctpm_md_test_list_cards(struct sc_card *card)
 	for (ii=0, pCard = pmszCards; '\0' != *pCard; ii++)   {
 		LPTSTR szProvider = NULL;
 		DWORD chProvider = SCARD_AUTOALLOCATE;
+		HCRYPTPROV hCryptProv;
 
 		sc_log(ctx, "cards: %i -- %s", ii, pCard);
 		// Get the library name
@@ -175,18 +176,40 @@ vsctpm_md_test_list_cards(struct sc_card *card)
 		}
 		sc_log(ctx, "CSP provider: %i -- %s", ii, szProvider);
 
-/*
-		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
+		// if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
+		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+			unsigned char data[2000];
+			size_t sz;
 			sc_log(ctx, "Acquired Crypto provider %lX", hCryptProv);
 
-			if (!CryptReleaseContext(hCryptProv,0))   {
-				sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+			sz = sizeof(data);
+			if (CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_FIRST))   {
+				sc_log(ctx, "First container '%s'", (char *)data);
+
+				sz = sizeof(data);
+				while(CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_NEXT))   {
+					sc_log(ctx, "Next container '%s'", (char *)data);
+					sz = sizeof(data);
+				}
 			}
+
+			sz = sizeof(data);
+			if (CryptGetProvParam(hCryptProv, PP_SMARTCARD_READER, data, &sz, CRYPT_FIRST))
+				sc_log(ctx, "Smartcard reader '%s'(%i)", (char *)data, sz);
+
+			sz = sizeof(data);
+			if (CryptGetProvParam(hCryptProv, PP_SMARTCARD_GUID, data, &sz, CRYPT_FIRST))
+				sc_log(ctx, "Smartcard GUID '%s'(%i)", sc_dump_hex(data,sz), sz);
+
+			if (!CryptReleaseContext(hCryptProv, 0))
+				sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+			else
+				sc_log(ctx, "CryptReleaseContext() released");
 		}
 		else   {
 			sc_log(ctx, "CryptAcquireContext() failed: error %X", GetLastError());
 		}
-*/
+
 		pCard = pCard + strlen(pCard) + 1;
 	}
 
@@ -236,7 +259,7 @@ vsctpm_md_test_list_providers(struct sc_card *card)
 }
 
 
-static int
+int
 vsctpm_md_test(struct sc_card *card)
 {
 	struct sc_context *ctx = card->ctx;
@@ -502,6 +525,8 @@ vsctpm_md_get_card_info(struct sc_card *card)
 	}
 	sc_log(ctx, "List PINs 0x%X", caps->list_pins);
 
+	// vsctpm_md_test(card);
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -530,6 +555,33 @@ vsctpm_md_pin_authentication_state(struct sc_card *card, DWORD *out)
 
 	if (out)
 		*out = auth_state;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_size, int *tries_left)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD attempts = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardAuthenticateEx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
+	if (hRes == SCARD_W_WRONG_CHV)   {
+		if (tries_left)
+			*tries_left = attempts;
+		sc_log(ctx, "attempts left %i", attempts);
+	}
+	else if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardAuthenticateEx() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -780,6 +832,7 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	char cmap_guid[256];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -809,11 +862,10 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 	rv = vsctpm_md_cmap_get_request_context(card, vsctpm_cont);
 	LOG_TEST_RET(ctx, rv, "Failed to get request for container");
 
-	sc_log(ctx, "Container contextx %p %p %p %p",
-			vsctpm_cont->signCertContext, vsctpm_cont->exCertContext,
-			vsctpm_cont->signRequestContext, vsctpm_cont->exRequestContext);
-
-	// vsctpm_md_test(card);
+	wcstombs(cmap_guid, vsctpm_cont->rec.wszGuid, sizeof(cmap_guid));
+	sc_log(ctx, "Container('%s') contexts SignCert:%i ExKeyCert:%i SignReq:%i ExKeyReq:%i", cmap_guid,
+			vsctpm_cont->signCertContext != NULL, vsctpm_cont->exCertContext != NULL,
+			vsctpm_cont->signRequestContext != NULL, vsctpm_cont->exRequestContext != NULL);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -1250,11 +1302,6 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 	LOG_FUNC_CALLED(ctx);
 	if (!mdc || !key)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-
-	rv = vsctpm_md_pin_authentication_state(card, &dwAuthState);
-	if (rv == SC_SUCCESS)
-		sc_log(ctx, "PIN authentication state 0x%X", dwAuthState);
-
 	// if (!priv->md.card_data.pfnCardCreateContainerEx)
 	if (!priv->md.card_data.pfnCardCreateContainer)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -1288,6 +1335,30 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 }
 
 
+int
+vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	HRESULT hRes = S_OK;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardDeleteContainer)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "Delete container(idx:%i)", idx);
+	hRes = priv->md.card_data.pfnCardDeleteContainer(&priv->md.card_data, idx, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardDeleteContainer() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */

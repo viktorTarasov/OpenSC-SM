@@ -231,6 +231,27 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 
 
 static int
+vsctpm_pkcs15_delete_container (struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *key_object)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) key_object->data;
+	int rv, idx;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Delete Private Key '%s', reference 0x%X, container index %i", key_object->label, key_info->key_reference, idx);
+
+	idx = (key_info->key_reference & 0x7F) - 1;
+	sc_log(ctx, "Container index %i", idx);
+
+	rv = vsctpm_md_cmap_delete_container(card, idx);
+	LOG_TEST_RET(ctx, rv, "Cannot delete container");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
 vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object, const struct sc_path *path)
 {
@@ -243,22 +264,19 @@ vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 	switch(object->type & SC_PKCS15_TYPE_CLASS_MASK)   {
 	case SC_PKCS15_TYPE_PUBKEY:
 		sc_log(ctx, "Delete Public Key '%s'", object->label);
-
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	case SC_PKCS15_TYPE_PRKEY:
-		sc_log(ctx, "Delete Private Key '%s'", object->label);
-
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+		rv = vsctpm_pkcs15_delete_container(p15card, object);
+		LOG_TEST_RET(ctx, rv, "Cannot delete container");
 	case SC_PKCS15_TYPE_CERT:
 		sc_log(ctx, "Delete Certificate '%s'", object->label);
-
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 		break;
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
