@@ -152,7 +152,6 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	struct sc_card *card = p15card->card;
 	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
-	size_t keybits = key_info->modulus_length;
 	struct vsctpm_md_container mdc;
 	struct sc_pkcs15_prkey *priv_key = NULL;
 	unsigned type;
@@ -161,16 +160,19 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	LOG_FUNC_CALLED(ctx);
 
 	sc_log(ctx, "create private key(keybits:%i,usage:%X,access:%X,ref:%X)",
-		keybits, key_info->usage, key_info->access_flags, key_info->key_reference);
+		key_info->modulus_length, key_info->usage, key_info->access_flags, key_info->key_reference);
+
+	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
+	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
 
 	memset(&mdc, 0, sizeof(struct vsctpm_md_container));
 	mdc.idx = (key_info->key_reference & 0x7F) - 1;
 
 	type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
 	if (type == AT_KEYEXCHANGE)
-		mdc.rec.wKeyExchangeKeySizeBits = keybits;
+		mdc.rec.wKeyExchangeKeySizeBits = key_info->modulus_length;
 	else if (type == AT_SIGNATURE)
-		mdc.rec.wSigKeySizeBits = keybits;
+		mdc.rec.wSigKeySizeBits = key_info->modulus_length;
 	else
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
