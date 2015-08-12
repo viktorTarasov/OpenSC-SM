@@ -176,7 +176,6 @@ vsctpm_md_test_list_cards(struct sc_card *card)
 		}
 		sc_log(ctx, "CSP provider: %i -- %s", ii, szProvider);
 
-		// if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, 0))   {
 		if(CryptAcquireContext(&hCryptProv, NULL, szProvider, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 			unsigned char data[2000];
 			size_t sz;
@@ -1287,7 +1286,7 @@ vsctpm_md_free_container (struct sc_context *ctx, struct vsctpm_md_container *md
         LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-
+#if 0
 int
 vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container *mdc,
 		struct sc_pkcs15_prkey **key)
@@ -1330,6 +1329,42 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 
 	sc_log(ctx, "Container(%i) context %p %p %p %p", idx, mdc->signCertContext, mdc->exCertContext,
 			mdc->signRequestContext, mdc->exRequestContext);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+#endif
+
+int
+vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container *mdc,
+		struct sc_pkcs15_prkey **key)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	DWORD dwFlags, dwKeySpec, dwKeySize, dwAuthState = 0;
+	HRESULT hRes = S_OK;
+	HCRYPTPROV hCryptProv;
+	unsigned char *key_blob = NULL;
+	unsigned char data[2000];
+	size_t sz;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!mdc || !key)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if(!CryptAcquireContext(&hCryptProv, NULL, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_NEWKEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sz = sizeof(data);
+	if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))
+		sc_log(ctx, "New container '%s'(%i)", (char *)data, sz);
+
+	if (!CryptReleaseContext(hCryptProv, 0))   {
+		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
