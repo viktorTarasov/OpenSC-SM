@@ -826,6 +826,100 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 }
 
 
+static int
+vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container *vsctpm_cont)
+{
+	struct sc_context *ctx = card->ctx;
+        struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+        HCRYPTPROV hCryptProv;
+        HCRYPTKEY hKey;
+        HRESULT hRes = S_OK;
+//	DWORD dwKeySpec;
+	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+        unsigned char cmap_guid[256];
+	unsigned char data[10000];
+        size_t sz;
+        int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        if (!vsctpm_cont)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	wcstombs(cmap_guid, vsctpm_cont->rec.wszGuid, sizeof(cmap_guid));
+	sc_log(ctx, "Get key context for contaner '%s'", cmap_guid);
+
+        if ((vsctpm_cont->rec.bFlags & CONTAINER_MAP_VALID_CONTAINER) == 0)   {
+		sc_log(ctx, "Ignore non-valid container '%s'", cmap_guid);
+                LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+        if (!vsctpm_cont->rec.wSigKeySizeBits && !vsctpm_cont->rec.wKeyExchangeKeySizeBits)    {
+		sc_log(ctx, "Ignore container '%s' without keys", cmap_guid);
+                LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+        if(!CryptAcquireContext(&hCryptProv, cmap_guid, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+                sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
+                LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+        }
+
+	if (vsctpm_cont->rec.wSigKeySizeBits)   {
+		CERT_PUBLIC_KEY_INFO *pub_info;
+
+		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, NULL, &sz))   {
+			pub_info = vsctpm_cont->signPublicKeyInfo = malloc(sz);
+			if (vsctpm_cont->signPublicKeyInfo == NULL)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+			if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, vsctpm_cont->signPublicKeyInfo, &sz))   {
+				pub_info = (CERT_PUBLIC_KEY_INFO *)vsctpm_cont->signPublicKeyInfo;
+				sc_log(ctx, "CryptExportPublicKeyInfo pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
+				sc_log(ctx, "CryptExportPublicKeyInfo algorithm '%s'", pub_info->Algorithm.pszObjId);
+				sc_log(ctx, "CryptExportPublicKeyInfo objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
+			}
+			else   {
+				sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+		}
+	}
+
+	if (vsctpm_cont->rec.wKeyExchangeKeySizeBits)   {
+		CERT_PUBLIC_KEY_INFO *pub_info;
+
+		if (CryptExportPublicKeyInfo(hCryptProv, AT_KEYEXCHANGE, dwEncodingType, NULL, &sz))   {
+			pub_info = vsctpm_cont->exPublicKeyInfo = malloc(sz);
+			if (vsctpm_cont->exPublicKeyInfo == NULL)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+			if (CryptExportPublicKeyInfo(hCryptProv, AT_KEYEXCHANGE, dwEncodingType, vsctpm_cont->exPublicKeyInfo, &sz))   {
+				pub_info = (CERT_PUBLIC_KEY_INFO *)vsctpm_cont->exPublicKeyInfo;
+				sc_log(ctx, "CryptExportPublicKeyInfo pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
+				sc_log(ctx, "CryptExportPublicKeyInfo algorithm '%s'", pub_info->Algorithm.pszObjId);
+				sc_log(ctx, "CryptExportPublicKeyInfo objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
+			}
+			else   {
+				sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+		}
+	}
+
+        rv = SC_SUCCESS;
+out:
+        sc_log(ctx, "CryptReleaseContext");
+        if (!CryptReleaseContext(hCryptProv, 0))   {
+                sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+                LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+        }
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
+
 int
 vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
 {
@@ -860,6 +954,9 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 
 	rv = vsctpm_md_cmap_get_request_context(card, vsctpm_cont);
 	LOG_TEST_RET(ctx, rv, "Failed to get request for container");
+
+	rv = vsctpm_md_cmap_get_key_context(card, vsctpm_cont);
+	LOG_TEST_RET(ctx, rv, "Failed to get key contexts");
 
 	wcstombs(cmap_guid, vsctpm_cont->rec.wszGuid, sizeof(cmap_guid));
 	sc_log(ctx, "Container('%s') contexts SignCert:%i ExKeyCert:%i SignReq:%i ExKeyReq:%i", cmap_guid,
@@ -1282,6 +1379,16 @@ vsctpm_md_free_container (struct sc_context *ctx, struct vsctpm_md_container *md
                 CertFreeCertificateContext(mdc->exRequestContext);
         mdc->signRequestContext = NULL;
 
+	sc_log(ctx, "signPublicKeyInfo %p", mdc->signPublicKeyInfo);
+	if (mdc->signPublicKeyInfo)
+		free(mdc->signPublicKeyInfo);
+	mdc->signPublicKeyInfo = NULL;
+
+	sc_log(ctx, "exPublicKeyInfo %p", mdc->exPublicKeyInfo);
+	if (mdc->exPublicKeyInfo)
+		free(mdc->exPublicKeyInfo);
+	mdc->exPublicKeyInfo = NULL;
+
         memset(mdc, 0, sizeof(struct vsctpm_md_container));
         LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -1402,7 +1509,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	sc_log(ctx, "CMAP container '%s'", container);
+	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X", container, type, key_length);
 
 	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());

@@ -262,8 +262,8 @@ sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, const CERT_CONT
 
 
 static int
-sc_pkcs15emu_vsctpm_prvkey_info_from_cert_context(struct sc_context *ctx,
-		CERT_CONTEXT *cert_ctx, struct sc_pkcs15_prkey_info *kinfo)
+sc_pkcs15emu_vsctpm_prvkey_info_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx,
+		struct sc_pkcs15_prkey_info *kinfo)
 {
 	struct sc_pkcs15_cert cert;
 	struct sc_pkcs15_der blob;
@@ -299,6 +299,81 @@ sc_pkcs15emu_vsctpm_prvkey_info_from_cert_context(struct sc_context *ctx,
 	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
 
 	sc_pkcs15_free_certificate_data(&cert);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_prvkey_info_from_pubkeyinfo(struct sc_context *ctx, CERT_PUBLIC_KEY_INFO *pubkey_info,
+		struct sc_pkcs15_prkey_info *kinfo)
+{
+	struct sc_pkcs15_pubkey *pubkey;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pubkey_info || !kinfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+        pubkey = calloc(1, sizeof(struct sc_pkcs15_pubkey));
+	if (!pubkey)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	pubkey->algorithm = SC_ALGORITHM_RSA;
+
+	sc_log(ctx, "Private key info blob (%p, %i)", pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+	rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+	LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+
+#ifdef ENABLE_OPENSSL
+	SHA1(pubkey->u.rsa.modulus.data, pubkey->u.rsa.modulus.len, kinfo->id.value);
+	kinfo->id.len = SHA_DIGEST_LENGTH;
+#elif
+#error "Get Object ID not implemented"
+#endif
+	kinfo->modulus_length = ((pubkey->u.rsa.modulus.len + 3) & ~0x07) << 3;
+	kinfo->native = 1;
+
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_SIGN | SC_PKCS15_PRKEY_USAGE_SIGNRECOVER;
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT | SC_PKCS15_PRKEY_USAGE_UNWRAP;
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
+
+	sc_pkcs15_free_pubkey(pubkey);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_pubkey_info_from_pubkeyinfo(struct sc_context *ctx, CERT_PUBLIC_KEY_INFO *pubkey_info,
+		struct sc_pkcs15_pubkey_info *kinfo)
+{
+	struct sc_pkcs15_pubkey *pubkey;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pubkey_info || !kinfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+        pubkey = calloc(1, sizeof(struct sc_pkcs15_pubkey));
+	if (!pubkey)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	pubkey->algorithm = SC_ALGORITHM_RSA;
+
+	sc_log(ctx, "Public key info blob (%p, %i)", pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+	rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+	LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+
+#ifdef ENABLE_OPENSSL
+	SHA1(pubkey->u.rsa.modulus.data, pubkey->u.rsa.modulus.len, kinfo->id.value);
+	kinfo->id.len = SHA_DIGEST_LENGTH;
+#elif
+#error "Get Object ID not implemented"
+#endif
+	kinfo->modulus_length = (pubkey->u.rsa.modulus.len & ~0x07) << 3;
+	kinfo->native = 1;
+
+        kinfo->usage = SC_PKCS15_PRKEY_USAGE_ENCRYPT | SC_PKCS15_PRKEY_USAGE_VERIFY;
+	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER | SC_PKCS15_PRKEY_USAGE_WRAP;
+
+	sc_pkcs15_free_pubkey(pubkey);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -381,6 +456,86 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card,
 
 	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &kobj, &kinfo);
 	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 private key object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_pubkeyinfo_add_prvkey(struct sc_pkcs15_card *p15card,
+		unsigned idx, char *label, CERT_PUBLIC_KEY_INFO *pubkey_info)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_pkcs15_prkey_info kinfo;
+	struct sc_pkcs15_object kobj;
+	struct sc_pkcs15_pubkey *pubkey = NULL;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pubkey_info || !label)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	memset(&kinfo, 0, sizeof(kinfo));
+	memset(&kobj, 0, sizeof(kobj));
+
+	sc_log(ctx, "Private key '%s' index:0x%X", idx, label);
+
+	strlcpy(kobj.label, label, sizeof(kobj.label));
+	sc_log(ctx, "Private key label '%s'", kobj.label);
+
+	kinfo.key_reference = idx;
+
+	rv = sc_pkcs15emu_vsctpm_prvkey_info_from_pubkeyinfo(ctx, pubkey_info, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Cannot get key info from cert context");
+
+	kobj.flags = SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE;
+	kobj.auth_id.len = 1;
+	kobj.auth_id.value[0] = VSCTPM_PKCS15_PIN_AUTH_ID;
+
+	rv = sc_pkcs15emu_add_rsa_prkey(p15card, &kobj, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 private key object");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+static int
+sc_pkcs15emu_vsctpm_pubkeyinfo_add_pubkey(struct sc_pkcs15_card *p15card,
+		unsigned idx, char *label, CERT_PUBLIC_KEY_INFO *pubkey_info)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_card *card = p15card->card;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_pkcs15_pubkey_info kinfo;
+	struct sc_pkcs15_object kobj;
+	struct sc_pkcs15_pubkey *pubkey = NULL;
+	int    rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pubkey_info || !label)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	memset(&kinfo, 0, sizeof(kinfo));
+	memset(&kobj, 0, sizeof(kobj));
+
+	sc_log(ctx, "Public key '%s' index:0x%X", idx, label);
+
+	strlcpy(kobj.label, label, sizeof(kobj.label));
+	sc_log(ctx, "Public key label '%s'", kobj.label);
+
+	kinfo.key_reference = idx;
+
+	rv = sc_pkcs15emu_vsctpm_pubkey_info_from_pubkeyinfo(ctx, pubkey_info, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Cannot get key info from pubkey-info context");
+
+	kobj.flags = SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE;
+	kobj.auth_id.len = 1;
+	kobj.auth_id.value[0] = VSCTPM_PKCS15_PIN_AUTH_ID;
+
+	rv = sc_pkcs15emu_add_rsa_pubkey(p15card, &kobj, &kinfo);
+	LOG_TEST_RET(ctx, rv, "Failed to add PKCS#15 public key object");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -490,6 +645,7 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 	size_t buf_len = 0;
 	struct vsctpm_md_container mdc;
 	int    rv, idx, nn_cont;
+	char cmap_guid[256];
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -503,7 +659,9 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 		if (rv == SC_ERROR_OBJECT_NOT_FOUND)
 			continue;
 		LOG_TEST_RET(ctx, rv, "Get MD container error");
-		sc_log(ctx, "cmap-record %i: flags %X, sizes %i/%i", idx, mdc.rec.bFlags, mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits);
+
+		wcstombs(cmap_guid, mdc.rec.wszGuid, sizeof(cmap_guid));
+		sc_log(ctx, "%i: cmap-record(%s) flags %X, sizes %i/%i", idx, cmap_guid, mdc.rec.bFlags, mdc.rec.wSigKeySizeBits, mdc.rec.wKeyExchangeKeySizeBits);
 
 		if (mdc.signCertContext)   {
 			unsigned ref = (idx + 1);
@@ -513,6 +671,24 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 
 			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.signCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign certificate error");
+		}
+		else if (mdc.signRequestContext)   {
+			unsigned ref = (idx + 1);
+
+			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.signRequestContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
+
+			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, ref, mdc.signRequestContext);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
+		}
+		else if (mdc.signPublicKeyInfo)   {
+			unsigned ref = (idx + 1);
+
+			rv = sc_pkcs15emu_vsctpm_pubkeyinfo_add_prvkey(p15card, ref, cmap_guid, mdc.signPublicKeyInfo);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
+
+			rv = sc_pkcs15emu_vsctpm_pubkeyinfo_add_pubkey(p15card, ref, cmap_guid, mdc.signPublicKeyInfo);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
 		}
 
 		if (mdc.exCertContext)   {
@@ -524,18 +700,7 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.exCertContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange certificate error");
 		}
-
-		if (mdc.signRequestContext)   {
-			unsigned ref = (idx + 1);
-
-			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.signRequestContext);
-			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
-
-			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, ref, mdc.signRequestContext);
-			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 sign request error");
-		}
-
-		if (mdc.exRequestContext)   {
+		else if (mdc.exRequestContext)   {
 			unsigned ref = (idx + 1) | 0x80;
 
 			rv = sc_pkcs15emu_vsctpm_container_add_prvkey(p15card, ref, mdc.exRequestContext);
@@ -543,6 +708,15 @@ sc_pkcs15emu_vsctpm_enum_containers (struct sc_pkcs15_card *p15card)
 
 			rv = sc_pkcs15emu_vsctpm_container_add_pubkey(p15card, ref, mdc.exRequestContext);
 			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 key exchange request error");
+		}
+		else if (mdc.exPublicKeyInfo)   {
+			unsigned ref = (idx + 1);
+
+			rv = sc_pkcs15emu_vsctpm_pubkeyinfo_add_prvkey(p15card, ref, cmap_guid, mdc.exPublicKeyInfo);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 exchange pubkey info error");
+
+			rv = sc_pkcs15emu_vsctpm_punkeyinfo_add_pubkey(p15card, ref, cmap_guid, mdc.exPublicKeyInfo);
+			LOG_TEST_RET(ctx, rv, "Cannot parse PKCS#15 exchange pubkey info error");
 		}
 
 		vsctpm_md_free_container(ctx, &mdc);

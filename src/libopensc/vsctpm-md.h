@@ -57,6 +57,7 @@ struct vsctpm_md_container {
 
 	const CERT_CONTEXT *signCertContext, *exCertContext;
 	const CERT_CONTEXT *signRequestContext, *exRequestContext;
+	CERT_PUBLIC_KEY_INFO *signPublicKeyInfo, *exPublicKeyInfo;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
