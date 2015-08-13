@@ -1335,8 +1335,7 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 #endif
 
 int
-vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container *mdc,
-		struct sc_pkcs15_prkey **key)
+vsctpm_md_cmap_create_container(struct sc_card *card, unsigned char **out, size_t *out_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -1349,24 +1348,99 @@ vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	if (!mdc || !key)
+	if (!out || !out_len)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	*out = NULL;
+	*out_len = 0;
 
+	sc_log(ctx, "CryptAcquireContext");
 	if(!CryptAcquireContext(&hCryptProv, NULL, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_NEWKEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
+	sc_log(ctx, "CryptGetProvParam");
 	sz = sizeof(data);
-	if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))
+	if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))   {
 		sc_log(ctx, "New container '%s'(%i)", (char *)data, sz);
 
+		*out = strdup(data);
+		if (*out == NULL)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		*out_len = strlen(data);
+	}
+
+	sc_log(ctx, "CryptReleaseContext");
+	if (!CryptReleaseContext(hCryptProv, 0))   {
+		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+/*
+	sc_log(ctx, "CryptAcquireContext(CRYPT_DELETEKEYSET)");
+	if(!CryptAcquireContext(&hCryptProv, data, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DELETEKEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_DELETEKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+*/
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, size_t key_length)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	DWORD dwFlags;
+	HCRYPTKEY hKey;
+	HRESULT hRes = S_OK;
+	HCRYPTPROV hCryptProv;
+	unsigned char data[2000];
+	size_t sz;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!container)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "CMAP container '%s'", container);
+
+	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	dwFlags = key_length << 16;
+	if (!CryptGenKey(hCryptProv, type, dwFlags, &hKey))   {
+		sc_log(ctx, "CryptGenKey() failed: error %X", GetLastError());
+		rv = SC_ERROR_INTERNAL;
+		goto out;
+	}
+	sc_log(ctx, "Key handle %X", hKey);
+
+	sc_log(ctx, "CryptGetKeyParam");
+	sz = sizeof(data);
+	if (!CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))   {
+		sc_log(ctx, "CryptGetKeyParam() failed: error %X", GetLastError());
+		rv = SC_ERROR_INTERNAL;
+		goto out;
+	}
+	sc_log(ctx, "Key length(%i) %X", sz, (DWORD *)data);
+
+	sc_log(ctx, "CryptGetProvParam");
+	sz = sizeof(data);
+	if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))   {
+		sc_log(ctx, "Container '%s'(%i)", (char *)data, sz);
+	}
+
+	rv = SC_SUCCESS;
+out:
+	sc_log(ctx, "CryptReleaseContext");
 	if (!CryptReleaseContext(hCryptProv, 0))   {
 		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
