@@ -467,7 +467,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->free_space);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE,
-			&caps->free_space, sizeof(caps->free_space), &sz, 0);
+			(PBYTE *)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_FREE_SPACE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -477,7 +477,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->caps);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_CAPABILITIES,
-			&caps->caps, sizeof(caps->caps), &sz, 0);
+			(PBYTE *)(&caps->caps), sizeof(caps->caps), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_CAPABILITIES) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -486,7 +486,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->sign_key_sizes);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
-			&caps->sign_key_sizes, sizeof(caps->sign_key_sizes), &sz, AT_SIGNATURE);
+			(PBYTE *)(&caps->sign_key_sizes), sizeof(caps->sign_key_sizes), &sz, AT_SIGNATURE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_SIGNATURE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -497,7 +497,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->keyexchange_key_sizes);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
-			&caps->keyexchange_key_sizes, sizeof(caps->keyexchange_key_sizes), &sz, AT_KEYEXCHANGE);
+			(PBYTE *)(&caps->keyexchange_key_sizes), sizeof(caps->keyexchange_key_sizes), &sz, AT_KEYEXCHANGE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_KEYEXCHANGE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -508,7 +508,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->key_import);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_KEY_IMPORT_SUPPORT,
-			&caps->key_import, sizeof(caps->key_import), &sz, 0);
+			(PBYTE *)(&caps->key_import), sizeof(caps->key_import), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYIMPORT_SUPPORT) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -517,7 +517,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->list_pins);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_LIST_PINS,
-			&caps->list_pins, sizeof(caps->list_pins), &sz, 0);
+			(PBYTE *)(&caps->list_pins), sizeof(caps->list_pins), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_LIST_PINS) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -571,6 +571,18 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
+	if (hRes == SCARD_W_RESET_CARD)   {
+		int rv;
+
+		sc_log(ctx, "CardAuthenticateEx() failed: RESET-CARD");
+		sc_md_delete_context(card);
+
+		rv = sc_md_acquire_context(card);
+		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+		hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
+	}
+
 	if (hRes == SCARD_W_WRONG_CHV)   {
 		if (tries_left)
 			*tries_left = attempts;
@@ -832,14 +844,10 @@ vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container 
 	struct sc_context *ctx = card->ctx;
         struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
         HCRYPTPROV hCryptProv;
-        HCRYPTKEY hKey;
         HRESULT hRes = S_OK;
-//	DWORD dwKeySpec;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
         unsigned char cmap_guid[256];
-	unsigned char data[10000];
         size_t sz;
-        int rv;
 
         LOG_FUNC_CALLED(ctx);
         if (!vsctpm_cont)
@@ -908,15 +916,13 @@ vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container 
 		}
 	}
 
-        rv = SC_SUCCESS;
-out:
         sc_log(ctx, "CryptReleaseContext");
         if (!CryptReleaseContext(hCryptProv, 0))   {
                 sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
                 LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
         }
 
-        LOG_FUNC_RETURN(ctx, rv);
+        LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -1278,7 +1284,7 @@ vsctpm_md_admin_login(struct sc_card *card, unsigned char *auth, size_t auth_len
 int
 vsctpm_md_user_pin_unblock(struct sc_card *card,
 		unsigned char *auth, size_t auth_len,
-		unsigned char *pin, size_t pin_len)
+		const unsigned char *pin, size_t pin_len)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
@@ -1446,13 +1452,12 @@ vsctpm_md_cmap_create_container(struct sc_card *card, unsigned char **out, size_
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	DWORD dwFlags, dwKeySpec, dwKeySize, dwAuthState = 0;
+	DWORD dwAuthState = 0;
 	HRESULT hRes = S_OK;
 	HCRYPTPROV hCryptProv;
 	unsigned char *key_blob = NULL;
 	unsigned char data[2000];
 	size_t sz;
-	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!out || !out_len)

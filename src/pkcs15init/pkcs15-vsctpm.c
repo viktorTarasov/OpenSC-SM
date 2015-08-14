@@ -73,10 +73,10 @@ static int
 vsctpm_pkcs15_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15card)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_file  *file = NULL;
-	struct sc_path  path;
-	struct sc_pkcs15_df *df;
-	int rv;
+//	struct sc_file  *file = NULL;
+//	struct sc_path  path;
+//	struct sc_pkcs15_df *df;
+//	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 

@@ -788,21 +788,7 @@ vsctpm_md_acquire_context(struct sc_card *card)
 	sc_log(ctx, "MD: card-data pfnCardAuthenticateChallenge %p",	priv->md.card_data.pfnCardAuthenticateChallenge);
 	sc_log(ctx, "MD: card-data pfnCardUnblockPin %p",		priv->md.card_data.pfnCardUnblockPin);
 	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticator %p",	priv->md.card_data.pfnCardChangeAuthenticator);
-/*
-   {
-	unsigned char guid[16];
-	size_t guid_len = sizeof(guid);
-	char guid_str[40];
-	int rv;
 
-	rv = vsctpm_md_get_guid(card, &guid[0], &guid_len);
-	LOG_TEST_RET(ctx, rv, "Cannot get MD GUID");
-	rv = sc_pkcs15_serialize_guid(guid, guid_len, 0, guid_str, sizeof(guid_str));
-	LOG_TEST_RET(ctx, rv, "Failed to serialize MD GUID");
-
-	sc_log(ctx, "MD: card GUID %s", guid_str);
-   }
-*/
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 

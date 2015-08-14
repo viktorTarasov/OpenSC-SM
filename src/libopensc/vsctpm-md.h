@@ -86,6 +86,7 @@ int vsctpm_md_get_card_info(struct sc_card *);
 int vsctpm_md_pin_authentication_state(struct sc_card *, DWORD *);
 int vsctpm_md_pin_authenticate(struct sc_card *, unsigned char *, size_t, int *);
 int vsctpm_md_cmap_delete_container(struct sc_card *, int);
+int vsctpm_md_cmap_create_container(struct sc_card *, unsigned char **, size_t *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -146,7 +147,7 @@ struct vsctpm_private_data {
 #define VSCTPM_USER_PIN_REF 0x80
 #define VSCTPM_ADMIN_PIN_REF 0x82
 
-#define VSCTPM_NOT_USE_APDU
+// #define VSCTPM_NOT_USE_APDU
 
 #ifdef __cplusplus
 }

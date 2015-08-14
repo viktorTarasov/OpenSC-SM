@@ -1038,6 +1038,9 @@ int sc_put_data(struct sc_card *, unsigned int, const u8 *, size_t);
  */
 int sc_get_challenge(struct sc_card *card, u8 * rndout, size_t len);
 
+int sc_md_acquire_context(struct sc_card *);
+int sc_md_delete_context(struct sc_card *);
+
 /********************************************************************/
 /*              ISO 7816-8 related functions                        */
 /********************************************************************/

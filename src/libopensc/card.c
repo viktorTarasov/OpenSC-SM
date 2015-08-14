@@ -309,7 +309,7 @@ sc_disconnect_card(struct sc_card *card)
 	if (card->ops->md_delete_context)   {
 		int r = card->ops->md_delete_context(card);
 		if (r)
-			sc_log(ctx, "Failed to delete MD context");
+			sc_log(ctx, "Failed to delete MD context: %i", r);
 	}
 
 	if (card->ops->finish) {
@@ -333,7 +333,9 @@ sc_disconnect_card(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-int sc_reset(sc_card_t *card, int do_cold_reset)
+
+int
+sc_reset(struct sc_card *card, int do_cold_reset)
 {
 	int r, r2;
 
@@ -809,6 +811,37 @@ int sc_delete_record(sc_card_t *card, unsigned int rec_nr)
 
 	LOG_FUNC_RETURN(card->ctx, r);
 }
+
+
+int sc_md_acquire_context(struct sc_card *card)
+{
+	int r;
+
+	assert(card != NULL);
+	LOG_FUNC_CALLED(card->ctx);
+
+	if (card->ops->md_acquire_context == NULL)
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
+	r = card->ops->md_acquire_context(card);
+
+	LOG_FUNC_RETURN(card->ctx, r);
+}
+
+
+int sc_md_delete_context(struct sc_card *card)
+{
+	int r;
+
+	assert(card != NULL);
+	LOG_FUNC_CALLED(card->ctx);
+
+	if (card->ops->md_delete_context == NULL)
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_SUPPORTED);
+	r = card->ops->md_delete_context(card);
+
+	LOG_FUNC_RETURN(card->ctx, r);
+}
+
 
 int
 sc_card_ctl(sc_card_t *card, unsigned long cmd, void *args)
