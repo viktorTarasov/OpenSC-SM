@@ -263,7 +263,7 @@ sc_pkcs15emu_vsctpm_id_from_cert_context(struct sc_context *ctx, const CERT_CONT
 
 
 static int
-sc_pkcs15emu_vsctpm_prvkey_info_from_cert_context(struct sc_context *ctx, CERT_CONTEXT *cert_ctx,
+sc_pkcs15emu_vsctpm_prvkey_info_from_cert_context(struct sc_context *ctx, const CERT_CONTEXT *cert_ctx,
 		struct vsctpm_md_container *mdc, struct sc_pkcs15_prkey_info *kinfo)
 {
 	struct sc_pkcs15_cert cert;
@@ -447,7 +447,6 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 	struct sc_pkcs15_prkey_info kinfo;
 	struct sc_pkcs15_object kobj;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
-	char cmap_guid[256];
 	int    rv;
 
 	LOG_FUNC_CALLED(ctx);

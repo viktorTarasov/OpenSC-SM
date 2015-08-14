@@ -937,6 +937,9 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 
 	LOG_FUNC_CALLED(ctx);
 
+	if (!vsctpm_cont)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
 	if (!priv->md.card_data.pfnCardGetContainerInfo)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
@@ -945,12 +948,6 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 
 	if ((idx + 1) > rv)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
-
-	if (!vsctpm_cont)   {
-		vsctpm_md_free(card, priv->md.cmap_data.value);
-		priv->md.cmap_data.value = NULL;
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-	}
 
 	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
 	vsctpm_cont->idx = idx;
@@ -1013,6 +1010,46 @@ vsctpm_md_cmap_get_free_index(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, idx);
 }
 
+
+int
+vsctpm_md_cmap_get_empty_container(struct sc_card *card,  unsigned char **out, size_t *out_len)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+        int    idx, nn_cont;
+	char cmap_guid[256];
+
+        LOG_FUNC_CALLED(ctx);
+
+	if (out && out_len)   {
+		*out = NULL;
+		*out_len = 0;
+	}
+
+        nn_cont = vsctpm_md_cmap_size(card);
+        LOG_TEST_RET(ctx, nn_cont, "CMAP cannot get size");
+
+        for (idx=0; idx < nn_cont; idx++)   {
+		CONTAINER_MAP_RECORD *rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + sizeof(CONTAINER_MAP_RECORD)*idx);
+
+                sc_log(ctx, "try cmap-record %i: flags %X, sizes %i/%i", idx, rec->bFlags, rec->wSigKeySizeBits, rec->wKeyExchangeKeySizeBits);
+		if (rec->bFlags & CONTAINER_MAP_VALID_CONTAINER)   {
+			if (!rec->wSigKeySizeBits && !rec->wKeyExchangeKeySizeBits)    {
+				wcstombs(cmap_guid, rec->wszGuid, sizeof(cmap_guid));
+				if (out && out_len)   {
+					*out = strdup(cmap_guid);
+					if (*out == NULL)
+						LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+					*out_len = strlen(cmap_guid) + 1;
+					sc_log(ctx, "returns container(%i) '%s'", *out_len, *out);
+				}
+				LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+			}
+		}
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_RECORD_NOT_FOUND);
+}
 
 
 /*
@@ -1459,12 +1496,19 @@ vsctpm_md_cmap_create_container(struct sc_card *card, unsigned char **out, size_
 	unsigned char *key_blob = NULL;
 	unsigned char data[2000];
 	size_t sz;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!out || !out_len)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 	*out = NULL;
 	*out_len = 0;
+
+	rv = vsctpm_md_cmap_get_empty_container(card,  out, out_len);
+	if (rv == SC_SUCCESS)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	else if (rv != SC_ERROR_RECORD_NOT_FOUND)
+		LOG_TEST_RET(ctx, rv, "Failed to get empty container");
 
 	sc_log(ctx, "CryptAcquireContext");
 	if(!CryptAcquireContext(&hCryptProv, NULL, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_NEWKEYSET))   {
@@ -1500,7 +1544,8 @@ vsctpm_md_cmap_create_container(struct sc_card *card, unsigned char **out, size_
 
 
 int
-vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, size_t key_length)
+vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, size_t key_length, char *pin,
+		struct sc_pkcs15_pubkey *pubkey)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -1511,6 +1556,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	unsigned char data[2000];
 	size_t sz;
 	int rv;
+	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
@@ -1519,6 +1565,13 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 
 	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Context CRYPT_MACHINE_KEYSET acquired on '%s'", container);
+
+	sc_log(ctx, "Set PIN '%s' type %i in crypto provider", pin, type);
+	if(!CryptSetProvParam(hCryptProv, type == AT_KEYEXCHANGE ? PP_KEYEXCHANGE_PIN : PP_SIGNATURE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN/PP_SIGNATURE_PIN) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
@@ -1530,19 +1583,22 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	}
 	sc_log(ctx, "Key handle %X", hKey);
 
-	sc_log(ctx, "CryptGetKeyParam");
-	sz = sizeof(data);
-	if (!CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))   {
-		sc_log(ctx, "CryptGetKeyParam() failed: error %X", GetLastError());
-		rv = SC_ERROR_INTERNAL;
-		goto out;
-	}
-	sc_log(ctx, "Key length(%i) %X", sz, (DWORD *)data);
+	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
+		CERT_PUBLIC_KEY_INFO *pub_info = (CERT_PUBLIC_KEY_INFO *)malloc(sz);
+		if (pub_info == NULL)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-	sc_log(ctx, "CryptGetProvParam");
-	sz = sizeof(data);
-	if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))   {
-		sc_log(ctx, "Container '%s'(%i)", (char *)data, sz);
+		pubkey->algorithm = SC_ALGORITHM_RSA;
+		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, pub_info, &sz))   {
+			rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+			LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+		}
+		else   {
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+		}
+	}
+	else   {
+		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
 	}
 
 	rv = SC_SUCCESS;

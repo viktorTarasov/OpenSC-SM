@@ -135,7 +135,9 @@ static void sc_card_free(sc_card_t *card)
 	free(card);
 }
 
-int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
+
+int
+sc_connect_card(struct sc_reader *reader, struct sc_card **card_out)
 {
 	sc_card_t *card;
 	sc_context_t *ctx;

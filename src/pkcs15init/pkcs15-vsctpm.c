@@ -200,6 +200,7 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	struct sc_pkcs15_object *pin_obj = NULL;
+	char pin[50];
 	unsigned type;
 	int rv;
 
@@ -213,12 +214,19 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
 	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
 
-	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length);
+	if (!pin_obj->content.len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_PIN_LENGTH);
+
+	if (pin_obj->content.len > sizeof(pin) - 1)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	memset(pin, 0, sizeof(pin));
+	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+
+	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, pubkey);
 	LOG_TEST_RET(ctx, rv, "Failed to create container");
 	sc_log(ctx, "New container '%s'", key_info->cmap_record.guid);
 
-
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
