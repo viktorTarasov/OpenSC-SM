@@ -573,10 +573,11 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
 	if (hRes == SCARD_W_RESET_CARD)   {
 		int rv;
-
 		sc_log(ctx, "CardAuthenticateEx() failed: RESET-CARD");
-		sc_md_delete_context(card);
+		rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+		LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
 
+		sc_md_delete_context(card);
 		rv = sc_md_acquire_context(card);
 		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
 

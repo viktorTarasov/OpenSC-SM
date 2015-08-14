@@ -343,7 +343,8 @@ static int check_forced_protocol(sc_context_t *ctx, struct sc_atr *atr, DWORD *p
 }
 
 
-static int pcsc_reconnect(sc_reader_t * reader, DWORD action)
+static int
+pcsc_reconnect(struct sc_reader * reader, DWORD action)
 {
 	DWORD active_proto = opensc_proto_to_pcsc(reader->active_protocol),
 		  tmp, protocol = SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1;
@@ -380,7 +381,9 @@ static int pcsc_reconnect(sc_reader_t * reader, DWORD action)
 	return pcsc_to_opensc_error(rv);
 }
 
-static int pcsc_connect(sc_reader_t *reader)
+
+static int
+pcsc_connect(struct sc_reader *reader)
 {
 	DWORD active_proto, tmp, protocol = SCARD_PROTOCOL_T0 | SCARD_PROTOCOL_T1;
 	SCARDHANDLE card_handle;
@@ -1969,6 +1972,7 @@ struct sc_reader_driver * sc_get_pcsc_driver(void)
 	pcsc_ops.unlock = pcsc_unlock;
 	pcsc_ops.release = pcsc_release;
 	pcsc_ops.connect = pcsc_connect;
+	pcsc_ops.reconnect = pcsc_reconnect;
 	pcsc_ops.disconnect = pcsc_disconnect;
 	pcsc_ops.perform_verify = pcsc_pin_cmd;
 	pcsc_ops.wait_for_event = pcsc_wait_for_event;

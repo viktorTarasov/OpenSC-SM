@@ -388,6 +388,7 @@ struct sc_reader_operations {
 
 	int (*detect_card_presence)(struct sc_reader *reader);
 	int (*connect)(struct sc_reader *reader);
+	int (*reconnect)(struct sc_reader *reader, DWORD);
 	int (*disconnect)(struct sc_reader *reader);
 	int (*transmit)(struct sc_reader *reader, sc_apdu_t *apdu);
 	int (*lock)(struct sc_reader *reader);
