@@ -1614,6 +1614,76 @@ out:
 
 
 int
+vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_t key_length, char *pin,
+		struct sc_pkcs15_prkey *prvkey)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	DWORD dwFlags;
+	HCRYPTKEY hKey;
+	HRESULT hRes = S_OK;
+	HCRYPTPROV hCryptProv;
+	unsigned char data[2000];
+	size_t sz;
+	int rv;
+	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!container)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X", container, type, key_length);
+
+	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "Context CRYPT_MACHINE_KEYSET acquired on '%s'", container);
+
+	sc_log(ctx, "Set PIN '%s' type %i in crypto provider", pin, type);
+	if(!CryptSetProvParam(hCryptProv, type == AT_KEYEXCHANGE ? PP_KEYEXCHANGE_PIN : PP_SIGNATURE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN/PP_SIGNATURE_PIN) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	dwFlags = key_length << 16;
+	if (!CryptGenKey(hCryptProv, type, dwFlags, &hKey))   {
+		sc_log(ctx, "CryptGenKey() failed: error %X", GetLastError());
+		rv = SC_ERROR_INTERNAL;
+		goto out;
+	}
+	sc_log(ctx, "Key handle %X", hKey);
+
+	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
+		CERT_PUBLIC_KEY_INFO *pub_info = (CERT_PUBLIC_KEY_INFO *)malloc(sz);
+		if (pub_info == NULL)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+		pubkey->algorithm = SC_ALGORITHM_RSA;
+		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, pub_info, &sz))   {
+			rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+			LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+		}
+		else   {
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+		}
+	}
+	else   {
+		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+	}
+
+	rv = SC_SUCCESS;
+out:
+	sc_log(ctx, "CryptReleaseContext");
+	if (!CryptReleaseContext(hCryptProv, 0))   {
+		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
 vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
 {
 	struct sc_context *ctx = card->ctx;

@@ -224,8 +224,7 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
 
 	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, pubkey);
-	LOG_TEST_RET(ctx, rv, "Failed to create container");
-	sc_log(ctx, "New container '%s'", key_info->cmap_record.guid);
+	LOG_TEST_RET(ctx, rv, "Failed to generate private key");
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -238,17 +237,38 @@ static int
 vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object, struct sc_pkcs15_prkey *prvkey)
 {
+	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
-	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	size_t keybits = key_info->modulus_length;
 	struct sc_pkcs15_prkey_rsa *rsa = &prvkey->u.rsa;
+	struct sc_pkcs15_object *pin_obj = NULL;
+	char pin[50];
+	unsigned type;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Store key(keybits:%i,AuthID:%s)", keybits, sc_pkcs15_print_id(&object->auth_id));
+	sc_log(ctx, "Store key(keybits:%i,AuthID:%s)", key_info->modulus_length, sc_pkcs15_print_id(&object->auth_id));
+	sc_log(ctx, "Container '%s'", key_info->cmap_record.guid);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+        type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
+
+	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
+	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+
+	if (!pin_obj->content.len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_PIN_LENGTH);
+
+	if (pin_obj->content.len > sizeof(pin) - 1)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	memset(pin, 0, sizeof(pin));
+	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+
+	rv = vsctpm_md_key_import(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, prvkey);
+	LOG_TEST_RET(ctx, rv, "Failed to import private key");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
