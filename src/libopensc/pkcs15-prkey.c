@@ -80,7 +80,7 @@ static const struct sc_asn1_entry c_asn1_com_prkey_attr[C_ASN1_COM_PRKEY_ATTR_SI
 
 #define C_ASN1_RSAKEY_ATTR_SIZE 4
 static const struct sc_asn1_entry c_asn1_rsakey_attr[] = {
-	{ "value",         SC_ASN1_PATH, SC_ASN1_TAG_SEQUENCE | SC_ASN1_CONS, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
+	{ "value",	 SC_ASN1_PATH, SC_ASN1_TAG_SEQUENCE | SC_ASN1_CONS, SC_ASN1_EMPTY_ALLOWED, NULL, NULL },
 	{ "modulusLength", SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
 	{ "keyInfo",	   SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ NULL, 0, 0, 0, NULL, NULL }
@@ -94,7 +94,7 @@ static const struct sc_asn1_entry c_asn1_prk_rsa_attr[C_ASN1_PRK_RSA_ATTR_SIZE] 
 
 #define C_ASN1_GOSTR3410KEY_ATTR_SIZE 5
 static const struct sc_asn1_entry c_asn1_gostr3410key_attr[C_ASN1_GOSTR3410KEY_ATTR_SIZE] = {
-	{ "value",         SC_ASN1_PATH, SC_ASN1_TAG_SEQUENCE | SC_ASN1_CONS, 0, NULL, NULL },
+	{ "value",	 SC_ASN1_PATH, SC_ASN1_TAG_SEQUENCE | SC_ASN1_CONS, 0, NULL, NULL },
 	{ "params_r3410",  SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, 0, NULL, NULL },
 	{ "params_r3411",  SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, SC_ASN1_OPTIONAL, NULL, NULL },
 	{ "params_28147",  SC_ASN1_INTEGER, SC_ASN1_TAG_INTEGER, SC_ASN1_OPTIONAL, NULL, NULL },
@@ -740,3 +740,63 @@ sc_pkcs15_convert_prkey(struct sc_pkcs15_prkey *pkcs15_key, void *evp_key)
 	return SC_ERROR_NOT_IMPLEMENTED;
 #endif
 }
+
+
+
+#define C_ASN1_PRIVATE_KEY_SIZE 2
+static struct sc_asn1_entry c_asn1_private_key[C_ASN1_PRIVATE_KEY_SIZE] = {
+	{ "privateKeyCoefficients", SC_ASN1_STRUCT, SC_ASN1_TAG_SEQUENCE | SC_ASN1_CONS, 0, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+#define C_ASN1_RSA_PRV_COEFFICIENTS_SIZE 10
+static struct sc_asn1_entry c_asn1_rsa_prv_coefficients[C_ASN1_RSA_PRV_COEFFICIENTS_SIZE] = {
+	{ "version",  SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "modulus",  SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "exponent", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "d", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "p", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "q", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "dmp1", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "dmq1", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ "iqmp", SC_ASN1_OCTET_STRING, SC_ASN1_TAG_INTEGER, SC_ASN1_ALLOC|SC_ASN1_UNSIGNED, NULL, NULL },
+	{ NULL, 0, 0, 0, NULL, NULL }
+};
+
+
+int
+sc_pkcs15_encode_prvkey_rsa(struct sc_context *ctx, struct sc_pkcs15_prkey_rsa *key,
+		unsigned char **buf, size_t *buflen)
+{
+	struct sc_asn1_entry asn1_private_key[C_ASN1_PRIVATE_KEY_SIZE];
+	struct sc_asn1_entry asn1_rsa_prv_coefficients[C_ASN1_RSA_PRV_COEFFICIENTS_SIZE];
+	int r;
+	unsigned char ver = 0;
+	size_t ver_len = 1;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!buf || !buflen)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	sc_copy_asn1_entry(c_asn1_private_key, asn1_private_key);
+	sc_format_asn1_entry(asn1_private_key + 0, asn1_rsa_prv_coefficients, NULL, 1);
+
+	sc_copy_asn1_entry(c_asn1_rsa_prv_coefficients, asn1_rsa_prv_coefficients);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 0, &ver, &ver_len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 1, key->modulus.data, &key->modulus.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 2, key->exponent.data, &key->exponent.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 3, key->d.data, &key->d.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 4, key->p.data, &key->p.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 5, key->q.data, &key->q.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 6, key->dmp1.data, &key->dmp1.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 7, key->dmq1.data, &key->dmq1.len, 1);
+	sc_format_asn1_entry(asn1_rsa_prv_coefficients + 8, key->iqmp.data, &key->iqmp.len, 1);
+
+	r = sc_asn1_encode(ctx, asn1_private_key, buf, buflen);
+	LOG_TEST_RET(ctx, r, "ASN.1 encoding failed");
+
+	printf("Encoded private key (%p:%i):\n%s\n", *buf, *buflen, sc_dump_hex(*buf, *buflen));
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+

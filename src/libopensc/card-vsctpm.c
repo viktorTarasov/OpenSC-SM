@@ -87,7 +87,7 @@ vsctpm_init(struct sc_card * card)
 
 	LOG_FUNC_CALLED(ctx);
 
-	vsctpm_md_test(card);
+//	vsctpm_md_test(card);
 
 	card->cla = 0x00;
 
@@ -455,8 +455,9 @@ vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 static int
 vsctpm_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 {
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+#ifdef ENABLE_MINIDRIVER
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	unsigned char challenge[8];
 	struct sc_cardctl_pkcs11_init_pin *params = (struct sc_cardctl_pkcs11_init_pin *)ptr;
 	int rv;
@@ -489,6 +490,9 @@ vsctpm_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -598,8 +602,9 @@ vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int
 static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+#ifdef ENABLE_MINIDRIVER
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_apdu apdu;
 	int rv;
 
@@ -640,6 +645,9 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 
 	priv->user_logged = 1;
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -690,8 +698,9 @@ vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries
 static int
 vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+#ifdef ENABLE_MINIDRIVER
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	unsigned char challenge[8];
 	int rv;
 
@@ -720,6 +729,9 @@ vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tri
 	LOG_TEST_RET(ctx, rv, "MD PIN unblock failed");
 
 	LOG_FUNC_RETURN(ctx, rv);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 

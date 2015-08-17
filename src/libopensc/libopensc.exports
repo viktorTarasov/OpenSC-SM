@@ -165,6 +165,7 @@ sc_pkcs15_encode_df
 sc_pkcs15_encode_dodf_entry
 sc_pkcs15_encode_odf
 sc_pkcs15_encode_prkdf_entry
+sc_pkcs15_encode_prvkey_rsa
 sc_pkcs15_encode_pubkey
 sc_pkcs15_encode_pubkey_dsa
 sc_pkcs15_encode_pubkey_rsa

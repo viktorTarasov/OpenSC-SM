@@ -467,7 +467,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->free_space);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE,
-			(PBYTE *)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
+			(PBYTE)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_FREE_SPACE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -477,7 +477,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->caps);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_CAPABILITIES,
-			(PBYTE *)(&caps->caps), sizeof(caps->caps), &sz, 0);
+			(PBYTE)(&caps->caps), sizeof(caps->caps), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_CAPABILITIES) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -486,7 +486,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->sign_key_sizes);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
-			(PBYTE *)(&caps->sign_key_sizes), sizeof(caps->sign_key_sizes), &sz, AT_SIGNATURE);
+			(PBYTE)(&caps->sign_key_sizes), sizeof(caps->sign_key_sizes), &sz, AT_SIGNATURE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_SIGNATURE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -497,7 +497,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->keyexchange_key_sizes);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_KEYSIZES,
-			(PBYTE *)(&caps->keyexchange_key_sizes), sizeof(caps->keyexchange_key_sizes), &sz, AT_KEYEXCHANGE);
+			(PBYTE)(&caps->keyexchange_key_sizes), sizeof(caps->keyexchange_key_sizes), &sz, AT_KEYEXCHANGE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYSIZES AT_KEYEXCHANGE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -508,7 +508,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->key_import);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_KEY_IMPORT_SUPPORT,
-			(PBYTE *)(&caps->key_import), sizeof(caps->key_import), &sz, 0);
+			(PBYTE)(&caps->key_import), sizeof(caps->key_import), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_KEYIMPORT_SUPPORT) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -517,7 +517,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 	sz = sizeof(caps->list_pins);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_LIST_PINS,
-			(PBYTE *)(&caps->list_pins), sizeof(caps->list_pins), &sz, 0);
+			(PBYTE)(&caps->list_pins), sizeof(caps->list_pins), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_LIST_PINS) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -1545,7 +1545,7 @@ vsctpm_md_cmap_create_container(struct sc_card *card, unsigned char **out, size_
 
 int
 vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, size_t key_length, char *pin,
-		struct sc_pkcs15_pubkey *pubkey)
+		unsigned char **pubkey, size_t *pubkey_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -1588,14 +1588,19 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 		if (pub_info == NULL)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-		pubkey->algorithm = SC_ALGORITHM_RSA;
 		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, pub_info, &sz))   {
-			rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
-			LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+			if (pubkey && pubkey_len)   {
+				*pubkey = malloc(pub_info->PublicKey.cbData);
+				if (*pubkey == NULL)
+					LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+				memcpy(*pubkey, pub_info->PublicKey.pbData, pub_info->PublicKey.cbData);
+				*pubkey_len = pub_info->PublicKey.cbData;
+			}
 		}
 		else   {
 			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
 		}
+		free(pub_info);
 	}
 	else   {
 		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
@@ -1615,7 +1620,7 @@ out:
 
 int
 vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_t key_length, char *pin,
-		struct sc_pkcs15_prkey *prvkey)
+		unsigned char *blob, size_t blob_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -1627,11 +1632,24 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	size_t sz;
 	int rv;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+	DWORD cbKeyBlob = 0;
+	LPBYTE pbKeyBlob = NULL;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X", container, type, key_length);
+	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X, blob(%p,%i)", container, type, key_length, blob, blob_len);
+
+	if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, NULL, &cbKeyBlob))   {
+		sc_log(ctx, "CryptDecodeObjectEx('get size') failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	pbKeyBlob = (LPBYTE) LocalAlloc(0, cbKeyBlob);
+        if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, pbKeyBlob, &cbKeyBlob))   {
+		sc_log(ctx, "CryptDecodeObjectEx('key blob') failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
 
 	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
@@ -1645,34 +1663,17 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	dwFlags = key_length << 16;
-	if (!CryptGenKey(hCryptProv, type, dwFlags, &hKey))   {
-		sc_log(ctx, "CryptGenKey() failed: error %X", GetLastError());
-		rv = SC_ERROR_INTERNAL;
-		goto out;
+	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, NULL, 0, &hKey))   {
+		sc_log(ctx, "CryptImportKey() failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "Key handle %X", hKey);
-
-	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
-		CERT_PUBLIC_KEY_INFO *pub_info = (CERT_PUBLIC_KEY_INFO *)malloc(sz);
-		if (pub_info == NULL)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
-		pubkey->algorithm = SC_ALGORITHM_RSA;
-		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, pub_info, &sz))   {
-			rv = sc_pkcs15_decode_pubkey(ctx, pubkey, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
-			LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
-		}
-		else   {
-			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-		}
-	}
-	else   {
-		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-	}
+	sc_log(ctx, "Key(%p,%i) imported", pbKeyBlob, cbKeyBlob);
 
 	rv = SC_SUCCESS;
 out:
+	if (pbKeyBlob)
+		LocalFree(pbKeyBlob);
+
 	sc_log(ctx, "CryptReleaseContext");
 	if (!CryptReleaseContext(hCryptProv, 0))   {
 		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());

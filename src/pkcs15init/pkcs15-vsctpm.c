@@ -58,7 +58,7 @@ vsctpm_pkcs15_delete_file(struct sc_pkcs15_card *p15card, struct sc_profile *pro
 		struct sc_file *df)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_card *card = p15card->card;
+//	struct sc_card *card = p15card->card;
 
 	LOG_FUNC_CALLED(ctx);
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
@@ -91,6 +91,7 @@ vsctpm_pkcs15_erase_card(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 static int
 vsctpm_md_key_type_from_usage(struct sc_context *ctx, unsigned usage)
 {
+#ifdef ENABLE_MINIDRIVER
 	LOG_FUNC_CALLED(ctx);
 
 	if (usage & SC_PKCS15_PRKEY_USAGE_NONREPUDIATION)
@@ -99,6 +100,9 @@ vsctpm_md_key_type_from_usage(struct sc_context *ctx, unsigned usage)
 		LOG_FUNC_RETURN(ctx, AT_KEYEXCHANGE);
 
 	LOG_FUNC_RETURN(ctx, AT_KEYEXCHANGE);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -110,6 +114,7 @@ vsctpm_pkcs15_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_
 		struct sc_pkcs15_prkey_info *key_info)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_file *file = NULL;
 	int rv = 0, idx, type;
@@ -129,19 +134,9 @@ vsctpm_pkcs15_select_key_reference(struct sc_profile *profile, struct sc_pkcs15_
 
 	sc_log(ctx, "Select key reference, key type %i, index 0x%X", type, key_info->key_reference);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-
-
-static int
-vsctpm_sdo_get_data(struct sc_card *card, struct vsctpm_sdo *sdo)
-{
-	struct sc_context *ctx = card->ctx;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-
+#else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
-	LOG_FUNC_RETURN(ctx, rv);
+#endif
 }
 
 
@@ -149,8 +144,9 @@ static int
 vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object)
 {
+	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
-	struct sc_context *ctx = card->ctx;
 	struct sc_pkcs15_object *pin_obj = NULL;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	struct vsctpm_md_container mdc;
@@ -186,6 +182,9 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	sc_log(ctx, "New container '%s'", key_info->cmap_record.guid);
 
 	LOG_FUNC_RETURN(ctx, rv);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -197,11 +196,14 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 		struct sc_pkcs15_object *object, struct sc_pkcs15_pubkey *pubkey)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	struct sc_pkcs15_object *pin_obj = NULL;
 	char pin[50];
 	unsigned type;
+	unsigned char *blob;
+	size_t blob_len;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -223,10 +225,18 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	memset(pin, 0, sizeof(pin));
 	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
 
-	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, pubkey);
+	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, &blob, &blob_len);
 	LOG_TEST_RET(ctx, rv, "Failed to generate private key");
 
+	rv = sc_pkcs15_decode_pubkey(ctx, pubkey, blob, blob_len);
+	LOG_TEST_RET(ctx, rv, "Cannot get public key from blob");
+
+	free(blob);
+
 	LOG_FUNC_RETURN(ctx, rv);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -238,6 +248,7 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 		struct sc_pkcs15_object *object, struct sc_pkcs15_prkey *prvkey)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	size_t keybits = key_info->modulus_length;
@@ -245,6 +256,8 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	struct sc_pkcs15_object *pin_obj = NULL;
 	char pin[50];
 	unsigned type;
+	unsigned char *blob = NULL;
+	size_t blob_len = 0;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -266,10 +279,17 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	memset(pin, 0, sizeof(pin));
 	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
 
-	rv = vsctpm_md_key_import(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, prvkey);
+	rv = sc_pkcs15_encode_prvkey_rsa(ctx, &prvkey->u.rsa, &blob, &blob_len);
+	LOG_TEST_RET(ctx, rv, "Failed to encode private key");
+	sc_log(ctx, "Private key blob (%p, %i)", blob, blob_len);
+
+	rv = vsctpm_md_key_import(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, blob, blob_len);
 	LOG_TEST_RET(ctx, rv, "Failed to import private key");
 
 	LOG_FUNC_RETURN(ctx, rv);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -277,6 +297,7 @@ static int
 vsctpm_pkcs15_delete_container (struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *key_object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) key_object->data;
 	int rv, idx;
@@ -291,6 +312,9 @@ vsctpm_pkcs15_delete_container (struct sc_pkcs15_card *p15card, struct sc_pkcs15
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
 }
 
 
@@ -402,6 +426,17 @@ vsctpm_emu_store_data(struct sc_pkcs15_card *p15card, struct sc_profile *profile
 }
 
 
+static int
+vsctpm_emu_update_any_df(struct sc_profile *profilr, struct sc_pkcs15_card *p15card,
+		unsigned op, struct sc_pkcs15_object *obj)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+
+	LOG_FUNC_CALLED(ctx);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 static struct sc_pkcs15init_operations
 sc_pkcs15init_vsctpm_operations = {
 	vsctpm_pkcs15_erase_card,
@@ -419,7 +454,7 @@ sc_pkcs15init_vsctpm_operations = {
 	NULL,					/* finalize_card */
 	vsctpm_pkcs15_delete_object,
 	NULL,					/* pkcs15init emulation update_dir */
-	NULL,					/* pkcs15init emulation update_any_df */
+	vsctpm_emu_update_any_df,		/* pkcs15init emulation update_any_df */
 	NULL,					/* pkcs15init emulation update_tokeninfo */
 	NULL,					/* pkcs15init emulation write_info */
 	vsctpm_emu_store_data,

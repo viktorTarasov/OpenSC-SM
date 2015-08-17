@@ -810,6 +810,7 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 	rv = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
 	LOG_TEST_RET(ctx, rv, "Cannot get serial nomber");
 
+#if ENABLE_MINIDRIVER
         rv = vsctpm_md_get_card_info (card);
 	LOG_TEST_RET(ctx, rv, "Cannot get card info");
 
@@ -843,7 +844,6 @@ sc_pkcs15emu_vsctpm_init (struct sc_pkcs15_card *p15card)
 	rv = vsctpm_add_admin_skey (p15card);
 	LOG_TEST_RET(ctx, rv, "Failed to add Admin Key object");
 
-#if ENABLE_MINIDRIVER
 	rv = sc_pkcs15emu_vsctpm_enum_files (p15card);
 	LOG_TEST_RET(ctx, rv, "Cannot enum MD files");
 

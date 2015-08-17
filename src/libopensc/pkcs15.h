@@ -739,6 +739,8 @@ int sc_pkcs15_pubkey_from_spki_fields(struct sc_context *,
 		struct sc_pkcs15_pubkey **, u8 *, size_t, int);
 int sc_pkcs15_encode_prkey(struct sc_context *,
 		struct sc_pkcs15_prkey *, u8 **, size_t *);
+int sc_pkcs15_encode_prvkey_rsa(struct sc_context *, struct sc_pkcs15_prkey_rsa *,
+		        unsigned char **, size_t *);
 void sc_pkcs15_free_prkey(struct sc_pkcs15_prkey *prkey);
 void sc_pkcs15_free_key_params(struct sc_pkcs15_key_params *params);
 

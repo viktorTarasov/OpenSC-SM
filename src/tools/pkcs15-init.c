@@ -905,6 +905,20 @@ do_store_private_key(struct sc_profile *profile)
 	r = sc_pkcs15_convert_prkey(&args.key, pkey);
 	if (r < 0)
 		return r;
+
+#if 0
+	{
+		unsigned char *blob;
+		size_t blob_len;
+		int rv;
+
+
+		rv = sc_pkcs15_encode_prvkey_rsa(ctx, &args.key.u.rsa, &blob, &blob_len);
+	}
+
+	printf("Exit from Store key\n");
+	exit(-1);
+#endif
 	init_gost_params(&args.params.gost, pkey);
 
 	if (ncerts) {
