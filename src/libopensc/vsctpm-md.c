@@ -1629,6 +1629,10 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 	DWORD cbKeyBlob = 0;
 	LPBYTE pbKeyBlob = NULL;
+	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+	size_t sz;
+	HCERTSTORE hCertStore = 0;
+	PCCERT_CONTEXT pCertContext = NULL;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1669,10 +1673,56 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "Key(%p,%i) imported", pbKeyBlob, cbKeyBlob);
 
+	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
+		HRESULT hRes = GetLastError();
+		sc_log(ctx, "CryptExportPublicKeyInfo(get-size) failed: error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
+	}
+	sc_log(ctx, "PublicKeyInfo size %i", sz);
+
+	pub_info = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, sz);
+	if (!pub_info)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
+		HRESULT hRes = GetLastError();
+		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
+	}
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+	if (!hCertStore)   {
+		hRes = GetLastError();
+		sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
+	}
+	sc_log(ctx, "CertOpenStore('MY') hCertStore %X", hCertStore);
+
+	pCertContext = CertFindCertificateInStore(hCertStore, dwEncodingType, 0, CERT_FIND_PUBLIC_KEY, pub_info, NULL);
+	if (pCertContext)   {
+		sc_log(ctx, "Found existing connected certificate");
+	}
+	else   {
+		sc_log(ctx, "No connected certificate");
+	}
+
 	rv = SC_SUCCESS;
 out:
+	if (hCertStore)
+		CertCloseStore(hCertStore, 0);
+
+	if (pub_info)
+		LocalFree(pub_info);
+
 	if (pbKeyBlob)
 		LocalFree(pbKeyBlob);
+
+	if (hKey)
+		CryptDestroyKey(hKey);
 
 	sc_log(ctx, "CryptReleaseContext");
 	if (!CryptReleaseContext(hCryptProv, 0))   {
@@ -1705,10 +1755,10 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 			sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", hRes);
 			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 		}
-		sc_log(ctx, "Acquired '%s' crypto context", container);
+		sc_log(ctx, "Acquired crypto context '%s'", container);
 
 		if (pin && strlen(pin))   {
-			sc_log(ctx, "Set PIN(%i) params", strlen(pin));
+			sc_log(ctx, "Set both PIN(%i) context params", strlen(pin));
 
 			if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))
 				sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed");

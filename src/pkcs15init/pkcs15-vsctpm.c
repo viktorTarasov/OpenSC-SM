@@ -421,8 +421,6 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, data->value, data->len);
 	LOG_TEST_RET(ctx, rv, "Failed to store certificate");
 
-	/* NOT_IMPLEMENTED error code indicates to the upper call to execute the default 'store data' procedure */
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
