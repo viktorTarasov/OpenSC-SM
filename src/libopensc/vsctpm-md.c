@@ -1272,6 +1272,8 @@ vsctpm_md_get_sc_error(HRESULT res)
 	switch (res)   {
 	case SCARD_S_SUCCESS:
 		return SC_SUCCESS;
+	case SCARD_W_RESET_CARD:
+		return SC_ERROR_CARD_RESET;
 	case SCARD_W_WRONG_CHV:
 		return SC_ERROR_PIN_CODE_INCORRECT;
 	case SCARD_E_INVALID_PARAMETER:
@@ -1848,7 +1850,7 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
 
 	sc_log(ctx, "Delete container(idx:%i)", idx);
 	hRes = priv->md.card_data.pfnCardDeleteContainer(&priv->md.card_data, idx, 0);
-	if (hRes != SCARD_S_SUCCESS)   {
+	if (hRes != S_OK)   {
 		sc_log(ctx, "CardDeleteContainer() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}

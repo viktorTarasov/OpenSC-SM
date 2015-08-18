@@ -294,7 +294,8 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 
 
 static int
-vsctpm_pkcs15_delete_container (struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *key_object)
+vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *key_object)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 #ifdef ENABLE_MINIDRIVER
@@ -308,7 +309,26 @@ vsctpm_pkcs15_delete_container (struct sc_pkcs15_card *p15card, struct sc_pkcs15
 	idx = (key_info->key_reference & 0x7F) - 1;
 	sc_log(ctx, "Container index %i", idx);
 
+	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
+	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
+
 	rv = vsctpm_md_cmap_delete_container(card, idx);
+	if (rv == SC_ERROR_CARD_RESET)   {
+		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+
+                sc_log(ctx, "Delete container failed: RESET-CARD");
+                rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+                LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
+
+                sc_md_delete_context(card);
+                rv = sc_md_acquire_context(card);
+                LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+		rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
+		LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
+
+		rv = vsctpm_md_cmap_delete_container(card, idx);
+	}
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -333,7 +353,7 @@ vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 		sc_log(ctx, "Delete Public Key '%s'", object->label);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	case SC_PKCS15_TYPE_PRKEY:
-		rv = vsctpm_pkcs15_delete_container(p15card, object);
+		rv = vsctpm_pkcs15_delete_container(profile, p15card, object);
 		LOG_TEST_RET(ctx, rv, "Cannot delete container");
 	case SC_PKCS15_TYPE_CERT:
 		sc_log(ctx, "Delete Certificate '%s'", object->label);
