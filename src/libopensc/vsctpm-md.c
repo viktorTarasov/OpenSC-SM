@@ -545,7 +545,7 @@ vsctpm_md_pin_authentication_state(struct sc_card *card, DWORD *out)
 
 	sz = sizeof(auth_state);
 	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_AUTHENTICATED_STATE,
-			&auth_state, sizeof(auth_state), &sz, 0);
+			(PBYTE)(&auth_state), sizeof(auth_state), &sz, 0);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_AUTHENTICATED_STATE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
@@ -1553,7 +1553,6 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	HCRYPTKEY hKey;
 	HRESULT hRes = S_OK;
 	HCRYPTPROV hCryptProv;
-	unsigned char data[2000];
 	size_t sz;
 	int rv;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
@@ -1624,16 +1623,13 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	DWORD dwFlags;
 	HCRYPTKEY hKey;
 	HRESULT hRes = S_OK;
 	HCRYPTPROV hCryptProv;
-	unsigned char data[2000];
-	size_t sz;
-	int rv;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 	DWORD cbKeyBlob = 0;
 	LPBYTE pbKeyBlob = NULL;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
@@ -1659,13 +1655,17 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 
 	sc_log(ctx, "Set PIN '%s' type %i in crypto provider", pin, type);
 	if(!CryptSetProvParam(hCryptProv, type == AT_KEYEXCHANGE ? PP_KEYEXCHANGE_PIN : PP_SIGNATURE_PIN, pin, 0))   {
-		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN/PP_SIGNATURE_PIN) failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		HRESULT hRes = GetLastError();
+		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN/PP_SIGNATURE_PIN) failed: error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
 	}
 
-	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, NULL, 0, &hKey))   {
-		sc_log(ctx, "CryptImportKey() failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, 0, &hKey))   {
+		HRESULT hRes = GetLastError();
+		sc_log(ctx, "CryptImportKey() failed: error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
 	}
 	sc_log(ctx, "Key(%p,%i) imported", pbKeyBlob, cbKeyBlob);
 
@@ -1678,6 +1678,106 @@ out:
 	if (!CryptReleaseContext(hCryptProv, 0))   {
 		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+int
+vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
+		unsigned char *blob, size_t blob_len)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	int rv = SC_ERROR_INTERNAL;
+	HRESULT hRes;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (container)   {
+		HCRYPTPROV hCryptProv;
+		HCRYPTKEY hKey = 0;
+		BOOL bRes;
+
+		if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+			hRes = GetLastError();
+			sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", hRes);
+			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+		}
+		sc_log(ctx, "Acquired '%s' crypto context", container);
+
+		if (pin && strlen(pin))   {
+			sc_log(ctx, "Set PIN(%i) params", strlen(pin));
+
+			if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))
+				sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed");
+			if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))
+				sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN) failed");
+		}
+
+		if (!CryptGetUserKey(hCryptProv, AT_SIGNATURE, &hKey))   {
+			hRes = GetLastError();
+			if (hRes == NTE_NO_KEY)
+				if (!CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &hKey))
+					hRes = GetLastError();
+		}
+
+		if (hKey)   {
+			if (!CryptSetKeyParam(hKey, KP_CERTIFICATE, blob, 0))   {
+				hRes = GetLastError();
+				sc_log(ctx, "CryptSetKeyParam(KP_CERTIFICATE) failed: error %X", hRes);
+				rv = vsctpm_md_get_sc_error(hRes);
+			}
+			else   {
+				rv = SC_SUCCESS;
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptGetUserKey() failed: error %X", hRes);
+			rv = vsctpm_md_get_sc_error(hRes);
+		}
+
+		if (!CryptReleaseContext(hCryptProv, 0))
+			sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+	}
+	else   {
+		HCERTSTORE hCertStore;
+		PCCERT_CONTEXT pCertContext = NULL;
+		unsigned char buf[12000];
+		size_t len;
+
+		hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
+				CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+		if (!hCertStore)   {
+			hRes = GetLastError();
+			sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
+			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+		}
+
+		sc_log(ctx, "CertOpenStore() hCertStore %X", hCertStore);
+
+		pCertContext = CertCreateCertificateContext(X509_ASN_ENCODING, blob, blob_len);
+		if (!pCertContext) {
+			hRes = GetLastError();
+			sc_log(ctx, "CertCreateCertificateContext() failed: error %X", hRes);
+			rv = vsctpm_md_get_sc_error(hRes);
+		}
+		else   {
+			if (!CertAddCertificateContextToStore(hCertStore, pCertContext, CERT_STORE_ADD_REPLACE_EXISTING, NULL))   {
+				HRESULT hRes = GetLastError();
+				sc_log(ctx, "CertAddCertificateContextToStore() failed: error %X", hRes);
+				rv = vsctpm_md_get_sc_error(hRes);
+			}
+			else   {
+				sc_log(ctx, "Certificate added to store ");
+				rv = SC_SUCCESS;
+			}
+			CertFreeCertificateContext(pCertContext);
+		}
+
+		if (!CertCloseStore(hCertStore, 0))
+			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);

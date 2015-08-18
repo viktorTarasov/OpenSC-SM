@@ -89,6 +89,7 @@ int vsctpm_md_cmap_delete_container(struct sc_card *, int);
 int vsctpm_md_cmap_create_container(struct sc_card *, unsigned char **, size_t *);
 int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, unsigned char **, size_t *);
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
+int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, size_t);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;

@@ -324,7 +324,7 @@ vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_file *file = NULL;
-	int rv, key_ref;
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -386,9 +386,40 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
+	struct sc_pkcs15_cert_info *cert_info = (struct sc_pkcs15_cert_info *) object->data;
+	struct sc_pkcs15_object *pin_obj = NULL;
+	struct sc_pkcs15_object *prkey_object = NULL;
+	char pin[50], cmap_guid[50];
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "vsctpm_store_cert() authID '%s'", sc_pkcs15_print_id(&object->auth_id));
+	sc_log(ctx, "vsctpm_store_cert() ID '%s', data(%p,%i)", sc_pkcs15_print_id(&cert_info->id), data->value, data->len);
+
+	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
+	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
+
+	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
+	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+
+	memset(pin, 0, sizeof(pin));
+	if (pin_obj->content.len)   {
+		if (pin_obj->content.len > sizeof(pin) - 1)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+		memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+	}
+
+	rv = sc_pkcs15_find_prkey_by_id(p15card, &cert_info->id, &prkey_object);
+	if (prkey_object)   {
+		struct sc_pkcs15_prkey_info *prkey_info = (struct sc_pkcs15_prkey_info *)prkey_object->data;
+
+		sc_log(ctx, "Found corresponding private key object");
+		memset(cmap_guid, 0, sizeof(cmap_guid));
+		memcpy(cmap_guid, prkey_info->cmap_record.guid, prkey_info->cmap_record.guid_len);
+	}
+
+	rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, data->value, data->len);
+	LOG_TEST_RET(ctx, rv, "Failed to store certificate");
 
 	/* NOT_IMPLEMENTED error code indicates to the upper call to execute the default 'store data' procedure */
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
