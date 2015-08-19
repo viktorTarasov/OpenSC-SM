@@ -599,6 +599,36 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 
 
 int
+vsctpm_md_write_file(struct sc_card *card, char *dir_name, char *file_name,
+		unsigned char *out, size_t out_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD sz = -1;
+	unsigned char *ptr = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "called CardReadFile(%s,%s)", dir_name, file_name);
+
+	if (!out || !out_len || !file_name)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (!priv->md.card_data.pfnCardWriteFile)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "MD write file (%s,%s) (%i,'%s')", dir_name, file_name, sz, sc_dump_hex(ptr, sz));
+	hRes = priv->md.card_data.pfnCardWriteFile(&priv->md.card_data, dir_name, file_name, 0, out, out_len);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardWriteFile(%s,%s) failed: hRes %lX", dir_name, file_name, hRes);
+		LOG_FUNC_RETURN(ctx, (vsctpm_md_get_sc_error(hRes)));
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
 vsctpm_md_read_file(struct sc_card *card, char *dir_name, char *file_name,
 		unsigned char **out, size_t *out_len)
 {
@@ -1746,8 +1776,9 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	HRESULT hRes;
 
 	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Store 'MY' certificate; container '%s'", (container ? container : "none"));
 
-	if (container)   {
+	if (container && strlen(container))   {
 		HCRYPTPROV hCryptProv;
 		HCRYPTKEY hKey = 0;
 		BOOL bRes;
@@ -1835,7 +1866,7 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
-
+#if 0
 int
 vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
 {
@@ -1853,6 +1884,30 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
 	if (hRes != S_OK)   {
 		sc_log(ctx, "CardDeleteContainer() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+#endif
+
+int
+vsctpm_md_cmap_delete_container(struct sc_card *card, int idx, char *container)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	HCRYPTPROV hCryptProv;
+	HRESULT hRes = S_OK;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	sc_log(ctx, "CryptAcquireContext(delete '%s')", container);
+	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DELETEKEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_DELETEKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
 	rv = vsctpm_md_cmap_reload(card);

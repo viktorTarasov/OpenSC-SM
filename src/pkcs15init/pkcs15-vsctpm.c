@@ -301,6 +301,7 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 #ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) key_object->data;
+	char pin[50], cmap_guid[50];
 	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
@@ -309,10 +310,13 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 	idx = (key_info->key_reference & 0x7F) - 1;
 	sc_log(ctx, "Container index %i", idx);
 
+	memset(cmap_guid, 0, sizeof(cmap_guid));
+	memcpy(cmap_guid, key_info->cmap_record.guid, key_info->cmap_record.guid_len);
+
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
 
-	rv = vsctpm_md_cmap_delete_container(card, idx);
+	rv = vsctpm_md_cmap_delete_container(card, idx, cmap_guid);
 	if (rv == SC_ERROR_CARD_RESET)   {
 		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 
@@ -327,7 +331,7 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 		rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 		LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
 
-		rv = vsctpm_md_cmap_delete_container(card, idx);
+		rv = vsctpm_md_cmap_delete_container(card, idx, cmap_guid);
 	}
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
@@ -436,9 +440,13 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 		sc_log(ctx, "Found corresponding private key object");
 		memset(cmap_guid, 0, sizeof(cmap_guid));
 		memcpy(cmap_guid, prkey_info->cmap_record.guid, prkey_info->cmap_record.guid_len);
+
+		rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, data->value, data->len);
+	}
+	else   {
+		rv = vsctpm_md_store_my_cert(card, pin, NULL, data->value, data->len);
 	}
 
-	rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, data->value, data->len);
 	LOG_TEST_RET(ctx, rv, "Failed to store certificate");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
