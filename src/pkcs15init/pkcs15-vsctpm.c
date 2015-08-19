@@ -147,10 +147,10 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	struct sc_context *ctx = p15card->card->ctx;
 #ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
-	struct sc_pkcs15_object *pin_obj = NULL;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	struct vsctpm_md_container mdc;
 	struct sc_pkcs15_prkey *priv_key = NULL;
+	char pin[50];
 	unsigned type;
 	int rv;
 
@@ -173,11 +173,10 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 	else
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
-	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
-	rv = vsctpm_md_cmap_create_container(card, &key_info->cmap_record.guid, &key_info->cmap_record.guid_len);
+	rv = vsctpm_md_cmap_create_container(card, pin, &key_info->cmap_record.guid, &key_info->cmap_record.guid_len);
 	LOG_TEST_RET(ctx, rv, "Failed to create container");
 	sc_log(ctx, "New container '%s'", key_info->cmap_record.guid);
 
@@ -185,6 +184,34 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 #endif
+}
+
+
+static int
+vsctpm_get_pin_from_cache(sc_pkcs15_card_t *p15card, char *pin, size_t pin_len)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pkcs15_object *pin_obj = NULL;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!pin || !pin_len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
+	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+
+	if (!pin_obj->content.len)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_REF_DATA_NOT_USABLE);
+
+	if (pin_obj->content.len > pin_len - 1)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	memset(pin, 0, pin_len);
+	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -199,7 +226,6 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 #ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
-	struct sc_pkcs15_object *pin_obj = NULL;
 	char pin[50];
 	unsigned type;
 	unsigned char *blob;
@@ -212,18 +238,8 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 
         type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
 
-	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
-
-	if (!pin_obj->content.len)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_PIN_LENGTH);
-
-	if (pin_obj->content.len > sizeof(pin) - 1)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-
-	memset(pin, 0, sizeof(pin));
-	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
 	rv = vsctpm_md_key_generate(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, &blob, &blob_len);
 	LOG_TEST_RET(ctx, rv, "Failed to generate private key");
@@ -253,7 +269,6 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) object->data;
 	size_t keybits = key_info->modulus_length;
 	struct sc_pkcs15_prkey_rsa *rsa = &prvkey->u.rsa;
-	struct sc_pkcs15_object *pin_obj = NULL;
 	char pin[50];
 	unsigned type;
 	unsigned char *blob = NULL;
@@ -266,18 +281,8 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 
         type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
 
-	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
-
-	if (!pin_obj->content.len)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_PIN_LENGTH);
-
-	if (pin_obj->content.len > sizeof(pin) - 1)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-
-	memset(pin, 0, sizeof(pin));
-	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
 	rv = sc_pkcs15_encode_prvkey_rsa(ctx, &prvkey->u.rsa, &blob, &blob_len);
 	LOG_TEST_RET(ctx, rv, "Failed to encode private key");
@@ -381,7 +386,7 @@ vsctpm_store_prvkey(struct sc_pkcs15_card *p15card, struct sc_profile *profile, 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Private Key id '%s'", sc_pkcs15_print_id(&prkey_info->id));
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 
@@ -398,7 +403,6 @@ vsctpm_store_pubkey(struct sc_pkcs15_card *p15card, struct sc_profile *profile, 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Public Key id '%s'", sc_pkcs15_print_id(&pubkey_info->id));
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -411,7 +415,6 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_cert_info *cert_info = (struct sc_pkcs15_cert_info *) object->data;
-	struct sc_pkcs15_object *pin_obj = NULL;
 	struct sc_pkcs15_object *prkey_object = NULL;
 	char pin[50], cmap_guid[50];
 	int rv;
@@ -422,16 +425,8 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
 
-	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
-
-	memset(pin, 0, sizeof(pin));
-	if (pin_obj->content.len)   {
-		if (pin_obj->content.len > sizeof(pin) - 1)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-		memcpy(pin, pin_obj->content.value, pin_obj->content.len);
-	}
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
 	rv = sc_pkcs15_find_prkey_by_id(p15card, &cert_info->id, &prkey_object);
 	if (prkey_object)   {

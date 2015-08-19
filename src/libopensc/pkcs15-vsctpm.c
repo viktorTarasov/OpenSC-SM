@@ -364,6 +364,7 @@ sc_pkcs15emu_vsctpm_pubkey_info_from_pubkeyinfo(struct sc_context *ctx, CERT_PUB
 		struct sc_pkcs15_pubkey_info *kinfo)
 {
 	struct sc_pkcs15_pubkey *pubkey;
+	struct sc_pkcs15_der der;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -390,6 +391,12 @@ sc_pkcs15emu_vsctpm_pubkey_info_from_pubkeyinfo(struct sc_context *ctx, CERT_PUB
 
         kinfo->usage = SC_PKCS15_PRKEY_USAGE_ENCRYPT | SC_PKCS15_PRKEY_USAGE_VERIFY;
 	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER | SC_PKCS15_PRKEY_USAGE_WRAP;
+
+	kinfo->direct.raw.value = malloc(pubkey_info->PublicKey.cbData);
+	if (!kinfo->direct.raw.value)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+	memcpy(kinfo->direct.raw.value, pubkey_info->PublicKey.pbData, pubkey_info->PublicKey.cbData);
+	kinfo->direct.raw.len = pubkey_info->PublicKey.cbData;
 
 	sc_pkcs15_free_pubkey(pubkey);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -431,6 +438,9 @@ sc_pkcs15emu_vsctpm_pubkey_info_from_cert_context(struct sc_context *ctx,
 
 	kinfo->usage = SC_PKCS15_PRKEY_USAGE_ENCRYPT | SC_PKCS15_PRKEY_USAGE_VERIFY;
 	kinfo->usage |= SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER | SC_PKCS15_PRKEY_USAGE_WRAP;
+
+	rv = sc_pkcs15_encode_pubkey(ctx, cert.key, &kinfo->direct.raw.value, &kinfo->direct.raw.len);
+	LOG_TEST_RET(ctx, rv, "Cannot get public key blob from cert object");
 
 	sc_pkcs15_free_certificate_data(&cert);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -548,7 +558,7 @@ sc_pkcs15emu_vsctpm_pubkeyinfo_add_pubkey(struct sc_pkcs15_card *p15card,
 
 	kinfo.key_reference = idx;
 
-	kobj.flags = SC_PKCS15_CO_FLAG_PRIVATE | SC_PKCS15_CO_FLAG_MODIFIABLE;
+	kobj.flags = SC_PKCS15_CO_FLAG_MODIFIABLE;
 	kobj.auth_id.len = 1;
 	kobj.auth_id.value[0] = VSCTPM_PKCS15_PIN_AUTH_ID;
 
