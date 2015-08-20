@@ -1117,33 +1117,11 @@ vsctpm_md_cmap_get_empty_container(struct sc_card *card,  unsigned char **out, s
                 sc_log(ctx, "try cmap-record %i: flags %X, sizes %i/%i", idx, rec->bFlags, rec->wSigKeySizeBits, rec->wKeyExchangeKeySizeBits);
 		if ((rec->bFlags & CONTAINER_MAP_VALID_CONTAINER) && ((rec->wSigKeySizeBits != 0) || (rec->wKeyExchangeKeySizeBits != 0)))
 			continue;
+
 		wcstombs(cmap_guid, rec->wszGuid, sizeof(cmap_guid));
-#if 0
-		if ((strlen(cmap_guid) == 0) || ((rec->bFlags & CONTAINER_MAP_VALID_CONTAINER) == 0))   {
-			struct sc_lv_data *cdata = &priv->md.cmap_data;
-			CONTAINER_MAP_RECORD *rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + (idx * sizeof(CONTAINER_MAP_RECORD)));
-			unsigned char buf[16];
-			int rv, ii;
-
-			if (strlen(cmap_guid) == 0)   {
-				srand((unsigned)time(NULL));
-				for (ii=0; ii<sizeof(buf); ii++)
-					*(buf + ii) = (unsigned char)(rand() & 0xFF);
-				sc_log(ctx, "binary guid '%s'", sc_dump_hex(buf, sizeof(buf)));
-
-				rv = sc_pkcs15_serialize_guid(buf, sizeof(buf), 1, cmap_guid, sizeof(cmap_guid));
-				LOG_TEST_RET(ctx, rv, "Cannot serialize GUID");
-				sc_log(ctx, "Generated guid '%s'", cmap_guid);
-				mbstowcs(rec->wszGuid, cmap_guid, MAX_CONTAINER_NAME_LEN + 1);
-			}
-			rec->bFlags |= CONTAINER_MAP_VALID_CONTAINER;
-			rv = vsctpm_md_write_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, priv->md.cmap_data.value, priv->md.cmap_data.len);
-			LOG_TEST_RET(ctx, rv, "Cannot write CMAP file");
-		}
-#else
 		if (strlen(cmap_guid) == 0)
 			continue;
-#endif
+
 		if (out && out_len)   {
 			*out = strdup(cmap_guid);
 			if (*out == NULL)
@@ -1545,53 +1523,6 @@ vsctpm_md_free_container (struct sc_context *ctx, struct vsctpm_md_container *md
         LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-#if 0
-int
-vsctpm_md_cmap_create_container(struct sc_card *card, struct vsctpm_md_container *mdc,
-		struct sc_pkcs15_prkey **key)
-{
-	struct sc_context *ctx = card->ctx;
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	DWORD dwFlags, dwKeySpec, dwKeySize, dwAuthState = 0;
-	HRESULT hRes = S_OK;
-	unsigned char *key_blob = NULL;
-	int rv, idx;
-
-	LOG_FUNC_CALLED(ctx);
-	if (!mdc || !key)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	// if (!priv->md.card_data.pfnCardCreateContainerEx)
-	if (!priv->md.card_data.pfnCardCreateContainer)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
-	dwFlags = (*key) ? CARD_CREATE_CONTAINER_KEY_IMPORT : CARD_CREATE_CONTAINER_KEY_GEN;
-	dwKeySpec = mdc->rec.wSigKeySizeBits ? AT_SIGNATURE : AT_KEYEXCHANGE;
-	dwKeySize = mdc->rec.wSigKeySizeBits ? mdc->rec.wSigKeySizeBits : mdc->rec.wKeyExchangeKeySizeBits;
-	idx = mdc->idx;
-	sc_log(ctx, "Create container(idx:%i,flags:0x%X,KeySpec:0x%X,KeySize:0x%X)", idx, dwFlags, dwKeySpec, dwKeySize);
-
-	//hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob, ROLE_USER);
-	hRes = priv->md.card_data.pfnCardCreateContainer(&priv->md.card_data, idx, dwFlags, dwKeySpec, dwKeySize, key_blob);
-	if (hRes != SCARD_S_SUCCESS)   {
-		sc_log(ctx, "CardCreateContainerEx() failed: hRes %lX", hRes);
-		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
-	}
-
-	rv = vsctpm_md_cmap_reload(card);
-	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
-
-	rv = vsctpm_md_free_container (ctx, mdc);
-	LOG_TEST_RET(ctx, rv, "Failed to free  CMAP container");
-
-	rv = vsctpm_md_cmap_init_container(card, idx, mdc);
-	LOG_TEST_RET(ctx, rv, "Failed to init CMAP container");
-
-	sc_log(ctx, "Container(%i) context %p %p %p %p", idx, mdc->signCertContext, mdc->exCertContext,
-			mdc->signRequestContext, mdc->exRequestContext);
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-#endif
 
 int
 vsctpm_md_cmap_create_container(struct sc_card *card, char *pin, unsigned char **out, size_t *out_len)
@@ -2003,8 +1934,9 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
 }
 #endif
 
+#if 0
 int
-vsctpm_md_cmap_delete_container(struct sc_card *card, int idx, char *container)
+vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
@@ -2022,6 +1954,54 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, int idx, char *container)
 
 	rv = vsctpm_md_cmap_reload(card);
 	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+#endif
+
+int
+vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	HCRYPTPROV hCryptProv;
+        char path[200];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!container)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
+	sc_log(ctx, "CryptAcquireContext('%s',DEFAULT_CONTAINER_OPTIONAL|SILENT)", path);
+	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DEFAULT_CONTAINER_OPTIONAL | CRYPT_SILENT))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN)");
+	if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN)");
+	if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptReleaseContext('%s')", card->reader->name);
+	if (!CryptReleaseContext(hCryptProv, 0))   {
+		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptAcquireContext('%s',CRYPT_DELETEKEYSET)", path);
+	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DELETEKEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }

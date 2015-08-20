@@ -321,7 +321,11 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
 
-	rv = vsctpm_md_cmap_delete_container(card, idx, cmap_guid);
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
+
+	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
+#if 0
 	if (rv == SC_ERROR_CARD_RESET)   {
 		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 
@@ -338,6 +342,7 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 
 		rv = vsctpm_md_cmap_delete_container(card, idx, cmap_guid);
 	}
+#endif
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

@@ -43,7 +43,6 @@ struct vsctpm_md_data   {
 	struct vsctpm_md_card_capabilities info;
 
 	struct sc_lv_data cmap_data;
-
 };
 
 struct vsctpm_pkcs15_container {
@@ -85,7 +84,7 @@ int vsctpm_md_free_container (struct sc_context *, struct vsctpm_md_container *)
 int vsctpm_md_get_card_info(struct sc_card *);
 int vsctpm_md_pin_authentication_state(struct sc_card *, DWORD *);
 int vsctpm_md_pin_authenticate(struct sc_card *, unsigned char *, size_t, int *);
-int vsctpm_md_cmap_delete_container(struct sc_card *, int, char *);
+int vsctpm_md_cmap_delete_container(struct sc_card *, char *, char *);
 int vsctpm_md_cmap_create_container(struct sc_card *, unsigned char **, size_t *);
 int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, unsigned char **, size_t *);
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
