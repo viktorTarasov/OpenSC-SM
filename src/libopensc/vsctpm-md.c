@@ -1650,7 +1650,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 		if (pub_info == NULL)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, pub_info, &sz))   {
+		if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
 			if (pubkey && pubkey_len)   {
 				*pubkey = malloc(pub_info->PublicKey.cbData);
 				if (*pubkey == NULL)
@@ -1665,7 +1665,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 		free(pub_info);
 	}
 	else   {
-		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+		sc_log(ctx, "CryptExportPublicKeyInfo(get-size) failed: error %X", GetLastError());
 	}
 
 	rv = SC_SUCCESS;
