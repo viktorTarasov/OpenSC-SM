@@ -353,6 +353,45 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 
 
 static int
+vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p15card,
+		struct sc_pkcs15_object *obj)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+#ifdef ENABLE_MINIDRIVER
+	struct sc_card *card = p15card->card;
+	struct sc_pkcs15_cert_info *cert_info = (struct sc_pkcs15_cert_info *) obj->data;
+	struct sc_pkcs15_cert *p15cert = NULL;
+	char pin[50], cmap_guid[50];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Delete Cert '%s', ref 0x%X", key_object->label, key_info->key_reference);
+
+	memset(cmap_guid, 0, sizeof(cmap_guid));
+	memcpy(cmap_guid, key_info->cmap_record.guid, key_info->cmap_record.guid_len);
+
+	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
+	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
+
+	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
+
+	rv = sc_pkcs15_read_certificate(p15card, cert_info, &p15cert);
+	LOG_TEST_RET(ctx, rv, "Read certificate failed");
+
+	rv = vsctpm_md_cmap_delete_certificate(card, pin, p15cert);
+	LOG_TEST_RET(ctx, rv, "Cannot delete container");
+
+	sc_pkcs15_free_certificate(p15cert);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#else
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
+#endif
+}
+
+
+static int
 vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *p15card,
 		struct sc_pkcs15_object *object, const struct sc_path *path)
 {
@@ -371,7 +410,8 @@ vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 		LOG_TEST_RET(ctx, rv, "Cannot delete container");
 	case SC_PKCS15_TYPE_CERT:
 		sc_log(ctx, "Delete Certificate '%s'", object->label);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+		rv = vsctpm_pkcs15_delete_cert(profile, p15card, object);
+		LOG_TEST_RET(ctx, rv, "Cannot delete certificate");
 		break;
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);

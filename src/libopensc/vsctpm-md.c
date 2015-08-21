@@ -77,41 +77,6 @@ Callback_CertEnumSystemStoreLocation(LPCWSTR pvszStoreLocations, DWORD dwFlags, 
 }
 
 
-/*
-static BOOL
-GetSystemName( const void *pvSystemStore, DWORD dwFlags, PENUM_ARG pEnumArg, LPCWSTR *ppwszSystemName)
-{
-//-------------------------------------------------------------------
-// Declare local variables.
-
-        *ppwszSystemName = NULL;
-
-        if (pEnumArg->hKeyBase && 0 == (dwFlags & CERT_SYSTEM_STORE_RELOCATE_FLAG))   {
-                printf("Failed => RELOCATE_FLAG not set in callback. \n");
-                return FALSE;
-        }
-        else  {
-                if (dwFlags & CERT_SYSTEM_STORE_RELOCATE_FLAG)   {
-                        PCERT_SYSTEM_STORE_RELOCATE_PARA pRelocatePara;
-                        if (!pEnumArg->hKeyBase) {
-                                MyHandleError("Failed => RELOCATE_FLAG is set in callback");
-                        }
-                        pRelocatePara = (PCERT_SYSTEM_STORE_RELOCATE_PARA) pvSystemStore;
-                        if (pRelocatePara->hKeyBase != pEnumArg->hKeyBase)   {
-                                MyHandleError("Wrong hKeyBase passed to callback");
-                        }
-
-                        *ppwszSystemName = pRelocatePara->pwszSystemStore;
-                }
-                else   {
-                        *ppwszSystemName = (LPCWSTR) pvSystemStore;
-                }
-        }
-
-        return TRUE;
-}
-*/
-
 BOOL WINAPI
 Callback_CertEnumSystemStore(const void *pvSystemStore, DWORD dwFlags,
 		PCERT_SYSTEM_STORE_INFO pStoreInfo, void *pvReserved, void *pvArg)
@@ -1095,47 +1060,6 @@ vsctpm_md_cmap_get_empty_container(struct sc_card *card,  unsigned char **out, s
 }
 
 
-#if 0
-int
-vsctpm_md_cmap_size(struct sc_card *card)
-{
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_context *ctx = card->ctx;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-
-	if (priv->md.cmap_data.value == NULL)   {
-		rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
-		LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-	}
-
-	return (priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD));
-}
-
-
-int
-vsctpm_md_cmap_reload(struct sc_card *card)
-{
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_context *ctx = card->ctx;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-
-	if (priv->md.cmap_data.value)   {
-		vsctpm_md_free(card, priv->md.cmap_data.value);
-		priv->md.cmap_data.value = NULL;
-		priv->md.cmap_data.len = 0;
-	}
-
-	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
-	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-#endif
-
 int
 vsctpm_md_cmap_size(struct sc_card *card)
 {
@@ -1905,57 +1829,6 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
-#if 0
-int
-vsctpm_md_cmap_delete_container(struct sc_card *card, int idx)
-{
-	struct sc_context *ctx = card->ctx;
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	HRESULT hRes = S_OK;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-	if (!priv->md.card_data.pfnCardDeleteContainer)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
-	sc_log(ctx, "Delete container(idx:%i)", idx);
-	hRes = priv->md.card_data.pfnCardDeleteContainer(&priv->md.card_data, idx, 0);
-	if (hRes != S_OK)   {
-		sc_log(ctx, "CardDeleteContainer() failed: hRes %lX", hRes);
-		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
-	}
-
-	rv = vsctpm_md_cmap_reload(card);
-	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-#endif
-
-#if 0
-int
-vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container)
-{
-	struct sc_context *ctx = card->ctx;
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	HCRYPTPROV hCryptProv;
-	HRESULT hRes = S_OK;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-
-	sc_log(ctx, "CryptAcquireContext(delete '%s')", container);
-	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DELETEKEYSET))   {
-		sc_log(ctx, "CryptAcquireContext(CRYPT_DELETEKEYSET) failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-
-	rv = vsctpm_md_cmap_reload(card);
-	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP");
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-#endif
 
 int
 vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container)
@@ -2004,5 +1877,77 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+
+int
+vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkcs15_cert *p15cert)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	HCRYPTPROV hCryptProv;
+	HCERTSTORE hCertStore;
+	PCCERT_CONTEXT pCertContext = NULL;
+	DWORD dwFlags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER;
+        char path[200];
+	int rv;
+	unsigned char buf[12000];
+	size_t len;
+
+	LOG_FUNC_CALLED(ctx);
+
+	sc_log(ctx, "Serial '%s'", sc_dump_hex(p15cert->serial, p15cert->serial_len));
+	sc_log(ctx, "Subject '%s'", sc_dump_hex(p15cert->subject, p15cert->subject_len));
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL, dwFlags, L"MY");
+	if (!hCertStore)   {
+		hRes = GetLastError();
+		sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+		goto out;
+	}
+	sc_log(ctx, "CertOpenStore('MY') hCertStore %X", hCertStore);
+
+#if 0
+	pCertContext = CertFindCertificateInStore(hCertStore, dwEncodingType, 0, CERT_FIND_PUBLIC_KEY, pub_info, NULL);
+	if (pCertContext)   {
+		sc_log(ctx, "Found connected certificate type 0x%X, blob(%i) '%s'", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded,
+				sc_dump_hex(pCertContext->pbCertEncoded,  pCertContext->cbCertEncoded));
+
+		if (!CryptSetKeyParam(hKey, KP_CERTIFICATE, pCertContext->pbCertEncoded, 0))   {
+			hRes = GetLastError();
+			sc_log(ctx, "CryptSetKeyParam(KP_CERTIFICATE) failed: error %X", hRes);
+			rv = vsctpm_md_get_sc_error(hRes);
+		}
+		else   {
+			rv = SC_SUCCESS;
+		}
+	}
+	else   {
+		sc_log(ctx, "No connected certificate");
+	}
+#else
+	sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
+	while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
+		char pszNameString[256];
+
+		if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
+			sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+			continue;
+		}
+		sc_log(ctx, "Certificate for '%s', pCertContext %p", pszNameString, pCertContext);
+		sc_log(ctx, "type 0x%X, data(%i) %p", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded, pCertContext->pbCertEncoded);
+		// sc_log(ctx, "cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+		sc_log(ctx, "cert serial '%s'", sc_dump_hex(pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData));
+
+		len = sizeof(buf);
+		if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_IDENTIFIER_PROP_ID, buf, &len))
+			sc_log(ctx, "KeyID (%i) %s", len, sc_dump_hex(buf, len));
+	}
+#endif
+
+	if (hCertStore)
+		CertCloseStore(hCertStore, 0);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
