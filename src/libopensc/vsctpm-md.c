@@ -403,7 +403,7 @@ vsctpm_md_reset_card_data(struct sc_card *card)
 	LOG_FUNC_CALLED(ctx);
 
 	if (priv->md.cmap_data.value)
-		vsctpm_md_free(card, priv->md.cmap_data.value);
+		free(priv->md.cmap_data.value);
 
 	if (priv->md.hmd)
 		FreeLibrary(priv->md.hmd);
@@ -539,16 +539,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 	sc_log(ctx, "List PINs 0x%X", caps->list_pins);
 
 	for (ii=0; ii<6 && hRes!=SCARD_E_NO_KEY_CONTAINER; ii++)   {
-		CONTAINER_INFO cont;
 		DWORD pin_id;
-
-		hRes = priv->md.card_data.pfnCardGetContainerInfo(&priv->md.card_data, ii, 0, &cont);
-		if (hRes == SCARD_E_NO_KEY_CONTAINER)
-			break;
-		if (hRes != SCARD_S_SUCCESS)
-			sc_log(ctx, "CardGetContainerInfo() failed: hRes %lX", hRes);
-		else
-			sc_log(ctx, "%i: found container", ii);
 
 		sz = sizeof(pin_id);
 		hRes = priv->md.card_data.pfnCardGetContainerProperty(&priv->md.card_data, ii, CCP_PIN_IDENTIFIER, (PBYTE)(&pin_id), sz, &sz, 0);
@@ -558,7 +549,7 @@ vsctpm_md_get_card_info(struct sc_card *card)
 			sc_log(ctx, "%i: PIN ID 0x%X", ii, pin_id);
 	}
 
-	vsctpm_md_test(card);
+	// vsctpm_md_test(card);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -1085,7 +1076,7 @@ vsctpm_md_new_guid(struct sc_context *ctx, char *guid, size_t guid_len)
 	for (ii=0; ii<sizeof(buf); ii++)
 		*(buf + ii) = (unsigned char)(rand() & 0xFF);
 
-	rv = sc_pkcs15_serialize_guid(buf, sizeof(buf), 0, guid, guid_len);
+	rv = sc_pkcs15_serialize_guid(buf, sizeof(buf), 1, guid, guid_len);
 	LOG_TEST_RET(ctx, rv, "Cannot serialize GUID");
 	sc_log(ctx, "Generated guid '%s'", guid);
 
@@ -1218,6 +1209,8 @@ __vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_c
 }
 */
 
+
+#if 0
 int
 vsctpm_md_cmap_size(struct sc_card *card)
 {
@@ -1252,6 +1245,126 @@ vsctpm_md_cmap_reload(struct sc_card *card)
 	}
 
 	rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
+	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+#endif
+
+int
+vsctpm_md_cmap_size(struct sc_card *card)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv, ii, nn_cont = 0;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.cmap_data.value == NULL)   {
+		HCRYPTPROV hCryptProv;
+		HRESULT hRes = S_OK;
+		char path[200], default_cont[200];
+		unsigned char data[2000];
+		size_t sz;
+
+		sprintf(path, "\\\\.\\%s\\", card->reader->name);
+		sc_log(ctx, "CryptAcquireContext('%s',DEFAULT_CONTAINER_OPTIONAL|SILENT)", path);
+		if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_DEFAULT_CONTAINER_OPTIONAL | CRYPT_SILENT))   {
+			sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		}
+
+		sz = sizeof(data);
+		if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))   {
+			strcpy(default_cont, (char *)data);
+			sc_log(ctx, "Default container '%s'", default_cont);
+		}
+
+		sz = sizeof(data);
+		if (CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_FIRST))   {
+			CONTAINER_MAP_RECORD rec;
+
+			do   {
+				sc_log(ctx, "Container(%i) '%s'", nn_cont, (char *)data);
+				memset(&rec, 0, sizeof(CONTAINER_MAP_RECORD));
+				mbstowcs(rec.wszGuid, data, MAX_CONTAINER_NAME_LEN + 1);
+
+				if (!strcmp(data, default_cont))
+					rec.bFlags |= CONTAINER_MAP_DEFAULT_CONTAINER;
+
+				sc_log(ctx, "Container(%i) priv->md.cmap_data.value %p", nn_cont, priv->md.cmap_data.value);
+				priv->md.cmap_data.value = (char *) realloc(priv->md.cmap_data.value, (nn_cont + 1) * sizeof(CONTAINER_MAP_RECORD));
+				if (priv->md.cmap_data.value == NULL)
+					LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+				sc_log(ctx, "Container(%i) priv->md.cmap_data.value %p", nn_cont, priv->md.cmap_data.value);
+				rec.bFlags |= CONTAINER_MAP_VALID_CONTAINER;
+
+				memcpy(priv->md.cmap_data.value + nn_cont*sizeof(CONTAINER_MAP_RECORD), &rec, sizeof(CONTAINER_MAP_RECORD));
+				nn_cont++;
+
+				sz = sizeof(data);
+				hRes = CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_NEXT);
+				sc_log(ctx, "HRES '%X'", hRes);
+			} while(hRes);
+			priv->md.cmap_data.len = nn_cont * sizeof(CONTAINER_MAP_RECORD);
+		}
+
+		hRes = CryptReleaseContext(hCryptProv, 0);
+		sc_log(ctx, "CryptReleaseContext() %s", hRes ? "released" : "failed");
+
+		for (ii=0; ii<nn_cont; ii++)   {
+			CONTAINER_MAP_RECORD *rec = NULL;
+			HCRYPTKEY  hKey;
+			char cont_guid[255];
+
+			rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + ii * sizeof(CONTAINER_MAP_RECORD));
+			wcstombs(cont_guid, rec->wszGuid, sizeof(cont_guid));
+
+			sprintf(path, "\\\\.\\%s\\%s", card->reader->name, cont_guid);
+			sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET)", path);
+			if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+				sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+				LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+			}
+
+			if (CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &hKey))   {
+				sz = sizeof(data);
+				if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
+					rec->wKeyExchangeKeySizeBits = *((DWORD *)data);
+			}
+
+			if (CryptGetUserKey(hCryptProv, AT_SIGNATURE, &hKey))   {
+				sz = sizeof(data);
+				if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
+					rec->wSigKeySizeBits = *((DWORD *)data);
+			}
+
+			hRes = CryptReleaseContext(hCryptProv, 0);
+			sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
+		}
+	}
+
+	nn_cont = priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD);
+	LOG_FUNC_RETURN(ctx, nn_cont);
+}
+
+
+int
+vsctpm_md_cmap_reload(struct sc_card *card)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (priv->md.cmap_data.value)   {
+		free(priv->md.cmap_data.value);
+		priv->md.cmap_data.value = NULL;
+		priv->md.cmap_data.len = 0;
+	}
+
+	rv = vsctpm_md_cmap_size(card);
 	LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -2008,4 +2121,3 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container
 
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
-
