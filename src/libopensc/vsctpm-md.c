@@ -729,38 +729,6 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-/*
-static int
-vsctpm_md_pkcs15_container_init(struct sc_card *card, struct vsctpm_publickeublob *pubkey_hd, struct vsctpm_pkcs15_container *p15cont)
-{
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_context *ctx = card->ctx;
-	HRESULT hRes = S_OK;
-	DWORD sz = -1;
-	unsigned char *modulus;
-
-	LOG_FUNC_CALLED(ctx);
-	if (!pubkey_hd || !p15cont)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-
-	if (pubkey_hd->publickeystruc.bType != PUBLICKEYBLOB)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-
-	if (pubkey_hd->publickeystruc.aiKeyAlg != CALG_RSA_KEYX && pubkey_hd->publickeystruc.aiKeyAlg != CALG_RSA_SIGN)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-
-	if (pubkey_hd->rsapubkey.magic != 0x31415352)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-
-	memset(p15cont, 0, sizeof(p15cont));
-
-	vsctpm_md_test(card);
-
- * TODO ..........................;
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-*/
 
 static int
 vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container *vsctpm_cont)
@@ -1125,89 +1093,6 @@ vsctpm_md_cmap_get_empty_container(struct sc_card *card,  unsigned char **out, s
 
 	LOG_FUNC_RETURN(ctx, SC_ERROR_RECORD_NOT_FOUND);
 }
-
-
-/*
-int
-__vsctpm_md_cmap_get_container(struct sc_card *card, int idx, struct vsctpm_md_container *vsctpm_cont)
-{
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_context *ctx = card->ctx;
-	HRESULT hRes = S_OK;
-	DWORD sz = -1;
-	CONTAINER_INFO cinfo;
-	CONTAINER_MAP_RECORD *cmap_record = NULL;
-	char cmap_guid[256];
-	struct vsctpm_publickeublob *pubkey_hdr = NULL;
-	struct vsctpm_pkcs15_container p15cont;
-	int rv, nn_cont;
-
-	LOG_FUNC_CALLED(ctx);
-
-	if (!priv->md.card_data.pfnCardGetContainerInfo)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
-	if (priv->md.cmap_data.value == NULL)   {
-		rv = vsctpm_md_read_file(card, szBASE_CSP_DIR, szCONTAINER_MAP_FILE, &priv->md.cmap_data.value, &priv->md.cmap_data.len);
-		LOG_TEST_RET(ctx, rv, "Cannot read CMAP file");
-	}
-
-	nn_cont = priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD);
-	if ((idx + 1) > nn_cont)   {
-		vsctpm_md_free(card, priv->md.cmap_data.value);
-		priv->md.cmap_data.value = NULL;
-		LOG_FUNC_RETURN(ctx, SC_ERROR_OBJECT_NOT_FOUND);
-	}
-
-	cmap_record = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value);
-	sc_log(ctx, "SignKey size %i, ExKey size %i", (cmap_record + idx)->wSigKeySizeBits, (cmap_record + idx)->wKeyExchangeKeySizeBits);
-	if (wcstombs(cmap_guid, (cmap_record + idx)->wszGuid, sizeof(cmap_guid)))
-		sc_log(ctx, "Container: %s", cmap_guid);
-
-	memset(&cinfo, 0, sizeof(cinfo));
-	cinfo.dwVersion = CONTAINER_INFO_CURRENT_VERSION;
-
-	hRes = priv->md.card_data.pfnCardGetContainerInfo(&priv->md.card_data, idx, 0, &cinfo);
-	if (hRes != SCARD_S_SUCCESS)   {
-		sc_log(ctx, "pfhCardGetContainerInfo(%i) failed: hRes %lX", idx, hRes);
-		rv = (hRes == SCARD_E_NO_KEY_CONTAINER) ? SC_ERROR_OBJECT_NOT_FOUND : SC_ERROR_INTERNAL;
-		LOG_FUNC_RETURN(ctx, rv);
-	}
-	sc_log(ctx, "md-cont %i: sign %i, key-ex %i", idx, cinfo.cbSigPublicKey, cinfo.cbKeyExPublicKey);
-
-	if (!vsctpm_cont)   {
-		vsctpm_md_free(card, priv->md.cmap_data.value);
-		priv->md.cmap_data.value = NULL;
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-	}
-
-	if (cinfo.pbKeyExPublicKey && cinfo.pbSigPublicKey)   {
-		sc_log(ctx, "Two keys (Sign and KeyEx) in one container not yet supported");
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-	}
-
-	if (cinfo.pbKeyExPublicKey && cinfo.cbKeyExPublicKey)
-		pubkey_hdr = (struct vsctpm_publickeublob *)cinfo.pbKeyExPublicKey;
-	else if (cinfo.pbSigPublicKey && cinfo.cbSigPublicKey)
-		pubkey_hdr = (struct vsctpm_publickeublob *)cinfo.pbSigPublicKey;
-	else
-		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
-
-	rv = vsctpm_md_pkcs15_container_init(card, pubkey_hdr, &p15cont);
-	LOG_TEST_RET(ctx, rv, "Failed to parse pubkeyblob");
-
-	rv = vsctpm_md_pkcs15_container_get_cert(card, &p15cont, vsctpm_cont);
-	LOG_TEST_RET(ctx, rv, "Failes to get certificate for container");
-
-	memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
-	vsctpm_cont->idx = idx;
-	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)priv->md.cmap_data.value + idx);
-	vsctpm_cont->info = cinfo;
-	vsctpm_cont->p15cont = p15cont;
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-}
-*/
 
 
 #if 0
