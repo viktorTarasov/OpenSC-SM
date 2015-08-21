@@ -19,6 +19,8 @@ extern "C" {
 #include <string.h>
 #include <time.h>
 
+#include <openssl/x509v3.h>
+
 #if ENABLE_MINIDRIVER
 #include <windows.h>
 #include "cardmod.h"

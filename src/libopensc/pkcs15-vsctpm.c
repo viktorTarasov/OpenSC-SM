@@ -364,7 +364,6 @@ sc_pkcs15emu_vsctpm_pubkey_info_from_pubkeyinfo(struct sc_context *ctx, CERT_PUB
 		struct sc_pkcs15_pubkey_info *kinfo)
 {
 	struct sc_pkcs15_pubkey *pubkey;
-	struct sc_pkcs15_der der;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);

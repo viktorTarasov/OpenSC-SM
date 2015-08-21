@@ -361,14 +361,11 @@ vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p1
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_cert_info *cert_info = (struct sc_pkcs15_cert_info *) obj->data;
 	struct sc_pkcs15_cert *p15cert = NULL;
-	char pin[50], cmap_guid[50];
+	char pin[50];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Delete Cert '%s', ref 0x%X", key_object->label, key_info->key_reference);
-
-	memset(cmap_guid, 0, sizeof(cmap_guid));
-	memcpy(cmap_guid, key_info->cmap_record.guid, key_info->cmap_record.guid_len);
+	sc_log(ctx, "Delete Cert '%s'", obj->label);
 
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
@@ -384,6 +381,7 @@ vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p1
 
 	sc_pkcs15_free_certificate(p15cert);
 
+	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);

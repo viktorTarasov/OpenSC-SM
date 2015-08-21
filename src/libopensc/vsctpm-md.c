@@ -1065,7 +1065,7 @@ vsctpm_md_cmap_size(struct sc_card *card)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-	int rv, ii, nn_cont = 0;
+	int ii, nn_cont = 0;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1744,7 +1744,6 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	if (container && strlen(container))   {
 		HCRYPTPROV hCryptProv;
 		HCRYPTKEY hKey = 0;
-		BOOL bRes;
 
 		if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 			hRes = GetLastError();
@@ -1790,8 +1789,6 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	else   {
 		HCERTSTORE hCertStore;
 		PCCERT_CONTEXT pCertContext = NULL;
-		unsigned char buf[12000];
-		size_t len;
 
 		hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 				CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
@@ -1896,16 +1893,40 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 
 	sc_log(ctx, "Serial '%s'", sc_dump_hex(p15cert->serial, p15cert->serial_len));
 	sc_log(ctx, "Subject '%s'", sc_dump_hex(p15cert->subject, p15cert->subject_len));
+	sc_log(ctx, "data(%i) '%p'", p15cert->data.len, p15cert->data.value);
+	{
+		BIO *mem = NULL;
+		X509 *x = NULL;
+
+		mem = BIO_new_mem_buf(p15cert->data.value, p15cert->data.len);
+		if (!mem)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+
+		x = d2i_X509_bio(mem, NULL);
+		if (x)   {
+			int loc;
+			X509_EXTENSION *ext = NULL;
+
+			loc = X509_get_ext_by_NID(x, NID_subject_key_identifier,-1);
+			ext = X509_get_ext(x, loc);
+			if (ext) {
+				sc_log(ctx, "Object '%p'", ext->object);
+				sc_log(ctx, "Value '%p'", ext->value);
+				sc_log(ctx, "value '%s'", sc_dump_hex(ext->value->data, ext->value->length));
+			}
+		}
+
+		if (x)
+			X509_free(x);
+	}
 
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL, dwFlags, L"MY");
 	if (!hCertStore)   {
-		hRes = GetLastError();
+		HRESULT hRes = GetLastError();
 		sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
-		rv = vsctpm_md_get_sc_error(hRes);
-		goto out;
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 	sc_log(ctx, "CertOpenStore('MY') hCertStore %X", hCertStore);
-
 #if 0
 	pCertContext = CertFindCertificateInStore(hCertStore, dwEncodingType, 0, CERT_FIND_PUBLIC_KEY, pub_info, NULL);
 	if (pCertContext)   {
@@ -1925,7 +1946,6 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 		sc_log(ctx, "No connected certificate");
 	}
 #else
-	sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
 	while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
 		char pszNameString[256];
 
