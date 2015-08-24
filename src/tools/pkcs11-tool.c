@@ -844,12 +844,15 @@ int main(int argc, char * argv[])
 
 	if (do_init_pin) {
 		init_pin(opt_slot, session);
+		printf("After InitPin()\n");
 
 		rv = p11->C_Logout(session);
+		printf("C_Logout() rv %i\n", rv);
 		if (rv != CKR_OK)
 			p11_fatal("C_Logout", rv);
 
 		r = login(session, CKU_USER);
+		printf("C_Login(CKU_USER) r %i\n", r);
 		if (r != 0)
 			return r;
 
