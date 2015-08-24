@@ -488,6 +488,9 @@ int sc_pkcs15_compute_signature(struct sc_pkcs15_card *p15card,
 	}
 
 	r = sc_set_security_env(p15card->card, &senv, 0);
+	if (r == SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)
+		if (!sc_pkcs15_pincache_revalidate(p15card, obj))
+			r = sc_set_security_env(p15card->card, &senv, 0);
 	if (r < 0) {
 		sc_unlock(p15card->card);
 		LOG_TEST_RET(ctx, r, "sc_set_security_env() failed");
@@ -495,7 +498,7 @@ int sc_pkcs15_compute_signature(struct sc_pkcs15_card *p15card,
 
 	r = sc_compute_signature(p15card->card, tmp, inlen, out, outlen);
 	if (r == SC_ERROR_SECURITY_STATUS_NOT_SATISFIED)
-		if (sc_pkcs15_pincache_revalidate(p15card, obj) == SC_SUCCESS)
+		if (!sc_pkcs15_pincache_revalidate(p15card, obj))
 			r = sc_compute_signature(p15card->card, tmp, inlen, out, outlen);
 
 	sc_mem_clear(buf, sizeof(buf));
