@@ -561,7 +561,7 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	sc_log(ctx, "vsctpm_md_pin_authenticate(%i:'%s')", pin_size, pin ? sc_dump_hex(pin, pin_size) : "null");
-	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
+	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, pin_size, NULL, NULL, &attempts);
 	if (hRes == SCARD_W_RESET_CARD)   {
 		int rv;
 		sc_log(ctx, "CardAuthenticateEx() failed: RESET-CARD");
@@ -572,7 +572,7 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 		rv = sc_md_acquire_context(card);
 		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
 
-		hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, strlen(pin), NULL, NULL, &attempts);
+		hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, pin_size, NULL, NULL, &attempts);
 	}
 
 	if (hRes == SCARD_W_WRONG_CHV)   {
