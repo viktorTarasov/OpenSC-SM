@@ -325,24 +325,6 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
 	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
-#if 0
-	if (rv == SC_ERROR_CARD_RESET)   {
-		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-
-                sc_log(ctx, "Delete container failed: RESET-CARD");
-                rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
-                LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
-
-                sc_md_delete_context(card);
-                rv = sc_md_acquire_context(card);
-                LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
-
-		rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
-		LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
-
-		rv = vsctpm_md_cmap_delete_container(card, idx, cmap_guid);
-	}
-#endif
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
@@ -405,6 +387,7 @@ vsctpm_pkcs15_delete_object (struct sc_profile *profile, struct sc_pkcs15_card *
 	case SC_PKCS15_TYPE_PRKEY:
 		rv = vsctpm_pkcs15_delete_container(profile, p15card, object);
 		LOG_TEST_RET(ctx, rv, "Cannot delete container");
+		break;
 	case SC_PKCS15_TYPE_CERT:
 		sc_log(ctx, "Delete Certificate '%s'", object->label);
 		rv = vsctpm_pkcs15_delete_cert(profile, p15card, object);
