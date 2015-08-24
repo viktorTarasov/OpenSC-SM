@@ -381,7 +381,6 @@ vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p1
 
 	sc_pkcs15_free_certificate(p15cert);
 
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
