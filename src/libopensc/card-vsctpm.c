@@ -736,6 +736,24 @@ vsctpm_pin_reset(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tri
 
 
 static int
+vsctpm_pin_get_policy (struct sc_card *card, struct sc_pin_cmd_data *data)
+{
+	LOG_FUNC_CALLED(card->ctx);
+	if (data)   {
+		data->pin1.encoding = SC_PIN_ENCODING_ASCII;
+		data->pin1.offset = 5;
+		data->pin1.pad_char = 0xFF;
+		data->pin1.pad_length = 8;
+		data->pin1.max_length = 8;
+		data->pin1.min_length = 8;
+		data->pin1.max_tries = 5;
+		data->pin1.tries_left = -1;
+	}
+	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
+}
+
+
+static int
 vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
@@ -757,6 +775,8 @@ vsctpm_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 		rv = vsctpm_pin_reset(card, data, tries_left);
 		break;
 	case SC_PIN_CMD_GET_INFO:
+		rv = vsctpm_pin_get_policy(card, data);
+		break;
 	default:
 		sc_log(ctx, "Other pin commands not supported yet: 0x%X", data->cmd);
 		rv = SC_ERROR_NOT_SUPPORTED;

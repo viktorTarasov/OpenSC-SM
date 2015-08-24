@@ -1173,8 +1173,7 @@ _add_pin_related_objects(struct sc_pkcs11_slot *slot, struct sc_pkcs15_object *p
 		 * not private. Just ignore those... */
 		if (!(obj->p15_object->flags & SC_PKCS15_CO_FLAG_PRIVATE))
 			continue;
-		sc_log(context, "ObjID(%p,%s,%x):%s", obj, obj->p15_object->label,
-				obj->p15_object->type, sc_pkcs15_print_id(&obj->p15_object->auth_id));
+		sc_log(context, "ObjID(%p,%s,%x):%s", obj, obj->p15_object->label, obj->p15_object->type, sc_pkcs15_print_id(&obj->p15_object->auth_id));
 		if (!sc_pkcs15_compare_id(&pin_info->auth_id, &obj->p15_object->auth_id))   {
 			sc_log(context, "Ignoring object %d", i);
 			continue;
@@ -1281,7 +1280,10 @@ pkcs15_create_tokens(struct sc_pkcs11_card *p11card, struct sc_app_info *app_inf
 	auth_user_pin = _get_auth_object_by_name(fw_data->p15_card, "UserPIN");
 	if (sc_pkcs11_conf.create_slots_flags & SC_PKCS11_SLOT_FOR_PIN_SIGN)
 		auth_sign_pin = _get_auth_object_by_name(fw_data->p15_card, "SignPIN");
+
 	sc_log(context, "Flags:0x%X; Auth User/Sign PINs %p/%p", sc_pkcs11_conf.create_slots_flags, auth_user_pin, auth_sign_pin);
+	sc_log(context, "User PIN '%s'", auth_user_pin ? auth_user_pin->label : "<null>");
+	sc_log(context, "Sign PIN '%s'", auth_sign_pin ? auth_sign_pin->label : "<null>");
 
 	/* Add PKCS#15 objects of the known types to the framework data */
 	rv = _pkcs15_create_typed_objects(fw_data);
@@ -1297,6 +1299,7 @@ pkcs15_create_tokens(struct sc_pkcs11_card *p11card, struct sc_app_info *app_inf
 		struct sc_pkcs15_object *auths[MAX_OBJECTS];
 		int auth_count;
 
+		sc_log(context, "pkcs15_create_tokens() auth_user_pin %p, create_slots_flags %X", auth_user_pin, sc_pkcs11_conf.create_slots_flags);
 		memset(auths, 0, sizeof(auths));
 		/* Get authentication PKCS#15 objects present in the associated on-card application */
 		rv = sc_pkcs15_get_objects(fw_data->p15_card, SC_PKCS15_TYPE_AUTH_PIN, auths, SC_PKCS15_MAX_PINS);
@@ -1331,6 +1334,7 @@ pkcs15_create_tokens(struct sc_pkcs11_card *p11card, struct sc_app_info *app_inf
 		/* If there is no need to create slot for each PIN or for each application,
 		 * the objets from the non-first application and protected by the same (global) PIN
 		 * are added to the framework data of the first slot .*/
+		sc_log(context, "pkcs15_create_tokens() line %i", __LINE__);
 		if (!(sc_pkcs11_conf.create_slots_flags & SC_PKCS11_SLOT_FOR_APPLICATION))   {
 			if (first_slot && *first_slot)   {
 				/* Initialize variables related to the first created slot */
@@ -1340,16 +1344,16 @@ pkcs15_create_tokens(struct sc_pkcs11_card *p11card, struct sc_app_info *app_inf
 			}
 		}
 
-		sc_log(context, "User/Sign PINs %p/%p", auth_user_pin, auth_sign_pin);
+		sc_log(context, "pkcs15_create_tokens() User/Sign PINs %p/%p", auth_user_pin, auth_sign_pin);
 		if (fauo && auth_user_pin && !memcmp(fauo->data, auth_user_pin->data, sizeof(struct sc_pkcs15_auth_info)))   {
 			/* Add objects from the non-first application to the FW data of the first slot */
-			sc_log(context, "Add objects to existing slot created for PIN '%s'", fauo->label);
+			sc_log(context, "pkcs15_create_tokens() add objects to existing slot created for PIN '%s'", fauo->label);
 			_add_pin_related_objects(*first_slot, fauo, fw_data, ffda);
 			slot = *first_slot;
 		}
 		else  if (auth_user_pin) {
 			/* For the UserPIN of the first slot create slot */
-			sc_log(context, "Create slot for User PIN '%s'", auth_user_pin->label);
+			sc_log(context, "pkcs15_create_tokens() create slot for User PIN '%s'", auth_user_pin->label);
 			rv = pkcs15_create_slot(p11card, fw_data, auth_user_pin, app_info, &slot);
 			if (rv != CKR_OK)
 				return CKR_OK; /* no more slots available for this card */
@@ -1361,7 +1365,7 @@ pkcs15_create_tokens(struct sc_pkcs11_card *p11card, struct sc_app_info *app_inf
 		if (auth_sign_pin && auth_user_pin)   {
 			struct sc_pkcs11_slot *sign_slot = NULL;
 
-			sc_log(context, "Create slot for Sign PIN '%s'", auth_sign_pin->label);
+			sc_log(context, "pkcs15_create_tokens() create slot for Sign PIN '%s'", auth_sign_pin->label);
 			rv = pkcs15_create_slot(p11card, fw_data, auth_sign_pin, app_info, &sign_slot);
 			if (rv != CKR_OK)
 				return CKR_OK; /* no more slots available for this card */
@@ -1420,6 +1424,7 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 	sc_log(context, "pkcs15-login: userType 0x%lX, PIN length %li", userType, ulPinLen);
 	switch (userType) {
 	case CKU_USER:
+		sc_log(context, "pkcs15-login: using PIN '%s'", auth_object->label);
 		auth_object = slot_data_auth(slot->fw_data);
 		if (auth_object == NULL)
 			return CKR_USER_PIN_NOT_INITIALIZED;

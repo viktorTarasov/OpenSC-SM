@@ -844,6 +844,15 @@ int main(int argc, char * argv[])
 
 	if (do_init_pin) {
 		init_pin(opt_slot, session);
+
+		rv = p11->C_Logout(session);
+		if (rv != CKR_OK)
+			p11_fatal("C_Logout", rv);
+
+		r = login(session, CKU_USER);
+		if (r != 0)
+			return r;
+
 		/* We logged in as a CKU_SO user just to initialize
 		* the User PIN, we now have to exit. */
 		goto end;
