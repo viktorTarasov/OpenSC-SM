@@ -1882,8 +1882,9 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	HCRYPTPROV hCryptProv;
 	HCERTSTORE hCertStore;
-	PCCERT_CONTEXT pCertContext = NULL;
+	PCCERT_CONTEXT pCertContext = NULL, pCContext = NULL;
 	DWORD dwFlags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER;
+	CRYPT_DATA_BLOB blob;
         char path[200];
 	int rv;
 	unsigned char buf[12000];
@@ -1895,29 +1896,29 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 	sc_log(ctx, "Subject '%s'", sc_dump_hex(p15cert->subject, p15cert->subject_len));
 	sc_log(ctx, "data(%i) '%p'", p15cert->data.len, p15cert->data.value);
 	{
-		BIO *mem = NULL;
-		X509 *x = NULL;
-
-		mem = BIO_new_mem_buf(p15cert->data.value, p15cert->data.len);
-		if (!mem)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-
-		x = d2i_X509_bio(mem, NULL);
-		if (x)   {
-			int loc;
-			X509_EXTENSION *ext = NULL;
-
-			loc = X509_get_ext_by_NID(x, NID_subject_key_identifier,-1);
-			ext = X509_get_ext(x, loc);
-			if (ext) {
-				sc_log(ctx, "Object '%p'", ext->object);
-				sc_log(ctx, "Value '%p'", ext->value);
-				sc_log(ctx, "value '%s'", sc_dump_hex(ext->value->data, ext->value->length));
+		blob.cbData = p15cert->data.len;
+		blob.pbData = p15cert->data.value;
+		len = sizeof(buf);
+		if (CryptQueryObject (CERT_QUERY_OBJECT_BLOB, &blob,
+						CERT_QUERY_CONTENT_FLAG_ALL, CERT_QUERY_FORMAT_FLAG_ALL,
+						0, NULL, NULL, NULL, NULL, NULL, (const void **)&pCContext))   {
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCContext, CERT_KEY_IDENTIFIER_PROP_ID, buf, &len))   {
+				sc_log(ctx, "PCCERT_CONTEXT KeyID (%i) %s", len, sc_dump_hex(buf, len));
+				blob.cbData = len;
+				blob.pbData = buf;
+				sc_log(ctx, "Blob %p:%i", buf, len);
 			}
-		}
+			else   {
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_IDENTIFIER_PROP_ID) failed, error %X", GetLastError());
+			}
 
-		if (x)
-			X509_free(x);
+			if (pCContext)
+				CertFreeCertificateContext(pCContext);
+		}
+		else   {
+			sc_log(ctx, "CryptQueryObject() failed, error %X", GetLastError());
+		}
 	}
 
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL, dwFlags, L"MY");
@@ -1927,23 +1928,23 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 	sc_log(ctx, "CertOpenStore('MY') hCertStore %X", hCertStore);
-#if 0
-	pCertContext = CertFindCertificateInStore(hCertStore, dwEncodingType, 0, CERT_FIND_PUBLIC_KEY, pub_info, NULL);
-	if (pCertContext)   {
-		sc_log(ctx, "Found connected certificate type 0x%X, blob(%i) '%s'", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded,
-				sc_dump_hex(pCertContext->pbCertEncoded,  pCertContext->cbCertEncoded));
+#if 1
+	{
+		DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 
-		if (!CryptSetKeyParam(hKey, KP_CERTIFICATE, pCertContext->pbCertEncoded, 0))   {
-			hRes = GetLastError();
-			sc_log(ctx, "CryptSetKeyParam(KP_CERTIFICATE) failed: error %X", hRes);
-			rv = vsctpm_md_get_sc_error(hRes);
+		sc_log(ctx, "Key Identifier Blob %p:%i", buf, len);
+		pCertContext = CertFindCertificateInStore(hCertStore, dwEncodingType, 0, CERT_FIND_KEY_IDENTIFIER, &blob, NULL);
+		if (pCertContext)   {
+			sc_log(ctx, "Found connected certificate type 0x%X, blob(%i) '%s'", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded,
+					sc_dump_hex(pCertContext->pbCertEncoded,  pCertContext->cbCertEncoded));
+
+			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_IDENTIFIER_PROP_ID, buf, &len))
+				sc_log(ctx, "KeyID (%i) %s", len, sc_dump_hex(buf, len));
 		}
 		else   {
-			rv = SC_SUCCESS;
+			sc_log(ctx, "No connected certificate found");
 		}
-	}
-	else   {
-		sc_log(ctx, "No connected certificate");
 	}
 #else
 	while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
