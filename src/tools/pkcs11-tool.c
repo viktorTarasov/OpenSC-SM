@@ -843,11 +843,14 @@ int main(int argc, char * argv[])
 	}
 
 	if (do_init_pin) {
+		CK_RV	rv;
+		int r;
+
 		init_pin(opt_slot, session);
 		printf("After InitPin()\n");
 
 		rv = p11->C_Logout(session);
-		printf("C_Logout() rv %i\n", rv);
+		printf("C_Logout() rv 0x%X\n", rv);
 		if (rv != CKR_OK)
 			p11_fatal("C_Logout", rv);
 

@@ -1694,17 +1694,23 @@ int
 sc_pkcs15_find_so_pin(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object **out)
 {
 	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_pkcs15_search_key sk;
 	int rv;
+#if 0
+	struct sc_pkcs15_search_key sk;
 
+	LOG_FUNC_CALLED(ctx);
 	memset(&sk, 0, sizeof(sk));
 	sk.flags_mask = sk.flags_value = SC_PKCS15_PIN_FLAG_SO_PIN;
 
 	rv = find_by_key(p15card, SC_PKCS15_TYPE_AUTH_PIN, &sk, out);
+	sc_log(ctx, "sc_pkcs15_find_so_pin() rv %i", rv);
 	if (rv != SC_ERROR_OBJECT_NOT_FOUND)
 		return rv;
 	rv = find_by_key(p15card, SC_PKCS15_TYPE_AUTH_AUTHKEY, &sk, out);
-	return rv;
+#else
+	rv = sc_pkcs15_find_pin_by_flags(p15card, SC_PKCS15_PIN_TYPE_FLAGS_SOPIN, SC_PKCS15_PIN_TYPE_FLAGS_SOPIN, NULL, out);
+#endif
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 
@@ -1723,18 +1729,35 @@ sc_pkcs15_find_pin_by_flags(struct sc_pkcs15_card *p15card,
 		idx = *index;
 	/* Get authentication PKCS#15 objects that are present in the given application */
 	r = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_AUTH_PIN, auths, SC_PKCS15_MAX_PINS);
+	sc_log(ctx, "Get PIN objects rv %i", r);
 	if (r < 0)
-		return r;
+		LOG_FUNC_RETURN(ctx, r);
 	num = r;
+	r = sc_pkcs15_get_objects(p15card, SC_PKCS15_TYPE_AUTH_AUTHKEY, auths + num, SC_PKCS15_MAX_PINS - num);
+	sc_log(ctx, "Get AUTHKEY objects rv %i", r);
+	if (r > 0)
+		num += r;
 
 	for (i=idx; i<num; i++)   {
 		struct sc_pkcs15_auth_info *pin_info = (struct sc_pkcs15_auth_info *)(*(auths + i))->data;
 
-		if (!pin_info || pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
+		sc_log(ctx, "Try auth object '%s', pin_info->auth_type %X", (*(auths + i))->label, pin_info->auth_type);
+		if (!pin_info)
 			continue;
 
-		if ((pin_info->attrs.pin.flags & mask) != flags)
+		if (pin_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+			sc_log(ctx, "Flags PIN %X %X %X'", pin_info->attrs.pin.flags, mask, flags);
+			if ((pin_info->attrs.pin.flags & mask) != flags)
+				continue;
+		}
+		else if (pin_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+			sc_log(ctx, "Flags AUTHKEY %X %X %X'", pin_info->attrs.authkey.flags, mask, flags);
+			if ((pin_info->attrs.authkey.flags & mask) != flags)
+				continue;
+		}
+		else   {
 			continue;
+		}
 
 		if (out)
 			*out = *(auths + i);

@@ -1008,6 +1008,11 @@ pkcs15_create_slot(struct sc_pkcs11_card *p11card, struct pkcs15_fw_data *fw_dat
 	int rv;
 
 	sc_log(context, "Create slot (p11card %p, fw_data %p, auth %p, app_info %p)", p11card, fw_data, auth, app_info);
+	if (auth)   {
+		struct sc_pkcs15_auth_info *info = (struct sc_pkcs15_auth_info *)auth->data;
+		sc_log(context, "Create slot (auth '%s', type:%X, method:%X)", auth->label, info->auth_type, info->auth_method);
+	}
+
 	rv = slot_allocate(&slot, p11card);
 	if (rv != CKR_OK)
 		return rv;
@@ -1018,6 +1023,11 @@ pkcs15_create_slot(struct sc_pkcs11_card *p11card, struct pkcs15_fw_data *fw_dat
 	/* Fill in the slot/token info from pkcs15 data */
 	if (fw_data)
 		pkcs15_init_slot(fw_data->p15_card, slot, auth, app_info);
+
+	if (auth)   {
+		struct sc_pkcs15_auth_info *info = (struct sc_pkcs15_auth_info *)auth->data;
+		sc_log(context, "Created slot (auth '%s', type:%X, method:%X)", auth->label, info->auth_type, info->auth_method);
+	}
 
 	*out = slot;
 	return CKR_OK;
@@ -1422,19 +1432,41 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 	p15card = fw_data->p15_card;
 
 	sc_log(context, "pkcs15-login: userType 0x%lX, PIN length %li", userType, ulPinLen);
+	{
+		struct sc_pkcs15_auth_info *info;
+		struct sc_pkcs15_object *obj = slot_data_auth(slot->fw_data);
+
+		info = (struct sc_pkcs15_auth_info *)obj->data;
+		sc_log(context, "pkcs15-login: UserPIN('%s',type:%X,method:%X)", obj->label, info->auth_type, info->auth_method);
+	}
+
 	switch (userType) {
 	case CKU_USER:
-		sc_log(context, "pkcs15-login: using PIN '%s'", auth_object->label);
 		auth_object = slot_data_auth(slot->fw_data);
 		if (auth_object == NULL)
 			return CKR_USER_PIN_NOT_INITIALIZED;
+		sc_log(context, "pkcs15-login: using PIN(%p) '%s'", auth_object, auth_object->label);
 		break;
 	case CKU_SO:
 		/* A card with no SO PIN is treated as if no SO login
 		 * is required */
+	{
+		struct sc_pkcs15_auth_info *info;
+		struct sc_pkcs15_object *obj = slot_data_auth(slot->fw_data);
+
+		info = (struct sc_pkcs15_auth_info *)obj->data;
+		sc_log(context, "pkcs15-login.. UserPIN('%s',type:%X,method:%X)", obj->label, info->auth_type, info->auth_method);
+	}
 		rc = sc_pkcs15_find_so_pin(p15card, &auth_object);
 		sc_log(context, "pkcs15-login: find SO PIN: rc %i", rc);
 
+	{
+		struct sc_pkcs15_auth_info *info;
+		struct sc_pkcs15_object *obj = slot_data_auth(slot->fw_data);
+
+		info = (struct sc_pkcs15_auth_info *)obj->data;
+		sc_log(context, "pkcs15-login,, UserPIN('%s',type:%X,method:%X)", obj->label, info->auth_type, info->auth_method);
+	}
 		/* If there's no SO PIN on the card, silently
 		 * accept any PIN, and lock the card if required */
 		if (rc == SC_ERROR_OBJECT_NOT_FOUND)   {
@@ -1455,6 +1487,8 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 		else if (rc < 0)   {
 			return sc_to_cryptoki_error(rc, "C_Login");
 		}
+
+		sc_log(context, "pkcs15-login: using SoPIN(%p) '%s'", auth_object, auth_object->label);
 
 		break;
 	case CKU_CONTEXT_SPECIFIC:
@@ -1484,6 +1518,7 @@ pkcs15_login(struct sc_pkcs11_slot *slot, CK_USER_TYPE userType,
 	default:
 		return CKR_USER_TYPE_INVALID;
 	}
+
 	pin_info = (struct sc_pkcs15_auth_info *) auth_object->data;
 	if (pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN && pin_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
 		sc_log(context, "Login rejected for PIN type %X", pin_info->auth_type);
