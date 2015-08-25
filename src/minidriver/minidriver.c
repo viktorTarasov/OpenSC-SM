@@ -3471,7 +3471,7 @@ DWORD WINAPI CardSignData(__in PCARD_DATA pCardData, __inout PCARD_SIGNING_INFO 
 			logprintf(pCardData, 0, "unsupported paddingtype\n");
 			return SCARD_E_INVALID_PARAMETER;
 		}
-			
+
 		if (!pinf->pszAlgId)   {
 			/* hashAlg = CALG_SSL3_SHAMD5; */
 			logprintf(pCardData, 3, "Using CALG_SSL3_SHAMD5  hashAlg\n");
@@ -3526,7 +3526,7 @@ DWORD WINAPI CardSignData(__in PCARD_DATA pCardData, __inout PCARD_SIGNING_INFO 
 		else if (hashAlg !=0)
 			return SCARD_E_UNSUPPORTED_FEATURE;
 	}
-	
+
 	if (pInfo->dwSigningFlags & CARD_PADDING_NONE)
 	{
 		/* do not add the digest info when called from CryptSignHash(CRYPT_NOHASHOID)

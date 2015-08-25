@@ -92,6 +92,7 @@ int vsctpm_md_cmap_create_container(struct sc_card *, unsigned char **, size_t *
 int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, unsigned char **, size_t *);
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
 int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, size_t);
+int vsctpm_get_pin_from_cache(struct sc_pkcs15_card *, char *, size_t);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -131,14 +132,17 @@ struct vsctpm_private_data {
 #if ENABLE_MINIDRIVER
         struct vsctpm_md_data md;
 #endif
+	struct sc_security_env sec_env;
 };
 
 #ifndef CKM_DES3_CBC
 #define CKM_DES3_CBC (0x133UL)
 #endif
 
-#define VSCTPM_ALGORITHM_RSA_PKCS1 0x57
-#define VSCTPM_ALGORITHM_RSA_PKCS2 0x47
+#define VSCTPM_ALGORITHM_RSA_PKCS1_2048 0x57
+#define VSCTPM_ALGORITHM_RSA_PKCS1_1024 0x56
+#define VSCTPM_ALGORITHM_RSA_PKCS2_2048 0x47
+#define VSCTPM_ALGORITHM_RSA_PKCS2_1024 0x46
 
 #define VSCTPM_CRT_TAG_AT       0xA4
 #define VSCTPM_CRT_TAG_CT       0xB8

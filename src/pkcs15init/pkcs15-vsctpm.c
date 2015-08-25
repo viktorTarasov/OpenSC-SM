@@ -186,35 +186,6 @@ vsctpm_pkcs15_create_key(struct sc_profile *profile, struct sc_pkcs15_card *p15c
 #endif
 }
 
-
-static int
-vsctpm_get_pin_from_cache(sc_pkcs15_card_t *p15card, char *pin, size_t pin_len)
-{
-	struct sc_context *ctx = p15card->card->ctx;
-	struct sc_pkcs15_object *pin_obj = NULL;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-	if (!pin || !pin_len)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-
-	rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-	sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
-
-	if (!pin_obj->content.len)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_REF_DATA_NOT_USABLE);
-
-	if (pin_obj->content.len > pin_len - 1)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-
-	memset(pin, 0, pin_len);
-	memcpy(pin, pin_obj->content.value, pin_obj->content.len);
-
-	LOG_FUNC_RETURN(ctx, rv);
-}
-
-
 /*
  * RSA key generation
  */

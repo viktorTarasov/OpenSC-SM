@@ -1184,6 +1184,136 @@ vsctpm_md_cmap_reload(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
+#if 0
+int
+vsctpm_md_compute_signature(struct sc_card *card, int idx,
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	CARD_SIGNING_INFO sign_info;
+	HRESULT hRes = S_OK;
+	PBYTE pbBinChallenge = NULL;
+	DWORD cBinChallenge = 0;
+	unsigned char *ptr = NULL;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardSignData)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	memset(&sign_info, 0, sizeof(CARD_SIGNING_INFO));
+
+	hRes = priv->md.card_data.pfnCardSignData(&priv->md.card_data, );
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardSignData() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	sc_log(ctx, "Generated challenge(%i) %s", cBinChallenge, sc_dump_hex(pbBinChallenge, cBinChallenge));
+	if (!rnd)
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+
+	if (len < cBinChallenge)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	len = cBinChallenge;
+	memcpy(rnd, pbBinChallenge, len);
+	LocalFree(pbBinChallenge);
+
+	LOG_FUNC_RETURN(ctx, len);
+}
+#endif
+
+int
+vsctpm_md_compute_signature(struct sc_card *card, int idx,
+		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	CONTAINER_MAP_RECORD *rec = NULL;
+	HCRYPTPROV hCryptProv = 0;
+	HRESULT hRes = S_OK;
+	HCRYPTKEY  hKey;
+	HCRYPTHASH hHash;
+	unsigned char data[2000];
+	size_t sz;
+	unsigned char *ptr = NULL;
+	char cont_guid[255], path[200];
+	char *pin = "12345678";
+
+	LOG_FUNC_CALLED(ctx);
+
+	sc_log(ctx, "vsctpm_md_compute_signature() idx:%i, in(%i):%s", idx, in_len, sc_dump_hex(in, in_len));
+
+	rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + idx * sizeof(CONTAINER_MAP_RECORD));
+	wcstombs(cont_guid, rec->wszGuid, sizeof(cont_guid));
+
+	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, cont_guid);
+	sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET)", path);
+	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN)");
+	if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN)");
+	if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed: error %X", GetLastError());
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	sc_log(ctx, "CryptGetUserKey(AT_KEYEXCHANGE)");
+	if (CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &hKey))   {
+		sz = sizeof(data);
+		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
+			rec->wKeyExchangeKeySizeBits = *((DWORD *)data);
+		if (CryptCreateHash(hCryptProv, CALG_SSL3_SHAMD5, 0, 0, &hHash))   {
+			sc_log(ctx, "CryptCreateHash() hHash:%X", hHash);
+
+			sz = sizeof(data);
+			if (CryptGetHashParam(hHash, HP_HASHSIZE, data, &sz, 0))
+				sc_log(ctx, "CryptGetHashParam(HP_HASHSIZE) size %i", *((DWORD *)data));
+
+			if (CryptSetHashParam(hHash, HP_HASHVAL, in, 0))   {
+				sc_log(ctx, "CryptSetHashParam(HP_HASHVAL) success");
+				sz = sizeof(data);
+				if (CryptSignHash(hHash, AT_KEYEXCHANGE, NULL, 0, &data, &sz))
+					sc_log(ctx, "CryptSignHash() signature %s, %i", sc_dump_hex(data, sz));
+				else
+					sc_log(ctx, "CryptSignHash() failed: error %X", GetLastError());
+			}
+			else   {
+				sc_log(ctx, "CryptSetHashParam() failed: error %X", GetLastError());
+			}
+
+			CryptDestroyHash(hHash);
+		}
+		else   {
+			sc_log(ctx, "CryptCreateHash() failed: error %X", GetLastError());
+		}
+
+		CryptDestroyKey(hKey);
+	}
+
+	sc_log(ctx, "CryptGetUserKey(AT_SIGNATURE)");
+	if (CryptGetUserKey(hCryptProv, AT_SIGNATURE, &hKey))   {
+		sz = sizeof(data);
+		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
+			rec->wSigKeySizeBits = *((DWORD *)data);
+
+		CryptDestroyKey(hKey);
+	}
+
+	hRes = CryptReleaseContext(hCryptProv, 0);
+	sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
 
 int
 vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
@@ -1981,5 +2111,34 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
+
+
+int
+vsctpm_get_pin_from_cache(struct sc_pkcs15_card *p15card, char *pin, size_t pin_len)
+{
+        struct sc_context *ctx = p15card->card->ctx;
+        struct sc_pkcs15_object *pin_obj = NULL;
+        int rv;
+
+        LOG_FUNC_CALLED(ctx);
+        if (!pin || !pin_len)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+        rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
+        LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
+        sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+
+        if (!pin_obj->content.len)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_REF_DATA_NOT_USABLE);
+
+        if (pin_obj->content.len > pin_len - 1)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+        memset(pin, 0, pin_len);
+        memcpy(pin, pin_obj->content.value, pin_obj->content.len);
+
+        LOG_FUNC_RETURN(ctx, rv);
+}
+
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */

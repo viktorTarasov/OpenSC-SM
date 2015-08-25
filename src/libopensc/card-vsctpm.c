@@ -871,24 +871,46 @@ vsctpm_set_security_env(struct sc_card *card,
 	struct sc_apdu apdu;
 	unsigned char vsctpm_crt_at[] = {
 		0x84, 0x01, env->key_ref[0],
-		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS1
+		0x80, 0x01, 0xFF
 	};
 	unsigned char vsctpm_crt_dec[] = {
 		0x84, 0x01, env->key_ref[0],
-		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2
+		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2_2048
 	};
-	int rv;
+	int rv, cmap_idx, key_size = 0;
 
-	sc_log(ctx, "set security env, operation: Ox%X", env->operation);
+	sc_log(ctx, "set security env, operation: Ox%X, key-ref %i", env->operation, env->key_ref[0]);
+	cmap_idx = (env->key_ref[0] & 0x7F) - 1;
+
+	if (((CONTAINER_MAP_RECORD *)(prv_data->md.cmap_data.value) + cmap_idx)->wSigKeySizeBits)
+		key_size = ((CONTAINER_MAP_RECORD *)(prv_data->md.cmap_data.value) + cmap_idx)->wSigKeySizeBits;
+	else if (((CONTAINER_MAP_RECORD *)(prv_data->md.cmap_data.value) + cmap_idx)->wKeyExchangeKeySizeBits)
+		key_size = ((CONTAINER_MAP_RECORD *)(prv_data->md.cmap_data.value) + cmap_idx)->wKeyExchangeKeySizeBits;
+	else
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
 	switch (env->operation)  {
 	case SC_SEC_OPERATION_SIGN:
+		if (key_size == 2048)
+			vsctpm_crt_at[5] = VSCTPM_ALGORITHM_RSA_PKCS1_2048;
+		else if (key_size == 1024)
+			vsctpm_crt_at[5] = VSCTPM_ALGORITHM_RSA_PKCS1_1024;
+		else
+			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
 		apdu.data = vsctpm_crt_at;
 		apdu.datalen = sizeof(vsctpm_crt_at);
 		apdu.lc = sizeof(vsctpm_crt_at);
 		break;
 	case SC_SEC_OPERATION_DECIPHER:
+		if (key_size == 2048)
+			vsctpm_crt_dec[5] = VSCTPM_ALGORITHM_RSA_PKCS2_2048;
+		else if (key_size == 1024)
+			vsctpm_crt_dec[5] = VSCTPM_ALGORITHM_RSA_PKCS2_1024;
+		else
+			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
 		apdu.data = vsctpm_crt_dec;
 		apdu.datalen = sizeof(vsctpm_crt_dec);
@@ -903,6 +925,8 @@ vsctpm_set_security_env(struct sc_card *card,
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "MSE restore error");
 
+	prv_data->sec_env = *env;
+
 	LOG_FUNC_RETURN(ctx, 0);
 
 }
@@ -913,19 +937,26 @@ vsctpm_compute_signature(struct sc_card *card,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
-	int rv;
+	int rv, cmap_idx;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
 	if (!card || !in || !out)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
 
+	cmap_idx = (prv_data->sec_env.key_ref[0] & 0x7F) - 1;
+	sc_log(ctx, "CMAP index %i", cmap_idx);
+
 	rv = iso_drv->ops->compute_signature(card, in, in_len, out,  out_len);
 	LOG_TEST_RET(ctx, rv, "Compute signature failed");
 
 	out_len = rv;
 	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
+
+	rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, NULL, 0);
+	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
 
 	LOG_FUNC_RETURN(ctx, out_len);
 }
