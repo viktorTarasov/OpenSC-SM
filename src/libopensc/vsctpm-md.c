@@ -1148,6 +1148,9 @@ vsctpm_md_cmap_size(struct sc_card *card)
 					rec->wSigKeySizeBits = *((DWORD *)data);
 			}
 
+			if (hKey)
+				CryptDestroyKey(hKey);
+
 			hRes = CryptReleaseContext(hCryptProv, 0);
 			sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
 		}
@@ -1524,6 +1527,9 @@ vsctpm_md_cmap_create_container(struct sc_card *card, char *pin, unsigned char *
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -1592,11 +1598,17 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 
 	rv = SC_SUCCESS;
 out:
+	if (hKey)
+		CryptDestroyKey(hKey);
+
 	sc_log(ctx, "CryptReleaseContext");
 	if (!CryptReleaseContext(hCryptProv, 0))   {
 		sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
+
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
@@ -1725,6 +1737,9 @@ out:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
+
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -1777,6 +1792,8 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 			else   {
 				rv = SC_SUCCESS;
 			}
+
+			CryptDestroyKey(hKey);
 		}
 		else   {
 			sc_log(ctx, "CryptGetUserKey() failed: error %X", hRes);
@@ -1960,7 +1977,7 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 	rv = vsctpm_md_cmap_reload(card);
 	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
 
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 #endif /* ENABLE_MINIDRIVER */
 #endif   /* ENABLE_PCSC */
