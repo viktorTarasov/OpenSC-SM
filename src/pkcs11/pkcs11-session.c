@@ -95,7 +95,7 @@ static CK_RV sc_pkcs11_close_session(CK_SESSION_HANDLE hSession)
 	struct sc_pkcs11_slot *slot;
 	struct sc_pkcs11_session *session;
 
-	sc_log(context, "real C_CloseSession(0x%lx)", hSession);
+	sc_log_session(context, "real C_CloseSession(0x%lx)", hSession);
 
 	session = list_seek(&sessions, &hSession);
 	if (!session)
@@ -123,7 +123,7 @@ CK_RV sc_pkcs11_close_all_sessions(CK_SLOT_ID slotID)
 	CK_RV rv = CKR_OK, error;
 	struct sc_pkcs11_session *session;
 	unsigned int i;
-	sc_log(context, "real C_CloseAllSessions(0x%lx) %d", slotID, list_size(&sessions));
+	sc_log_session(context, "real C_CloseAllSessions(0x%lx) %d", slotID, list_size(&sessions));
 	for (i = 0; i < list_size(&sessions); i++) {
 		session = list_get_at(&sessions, i);
 		if (session->slot->id == slotID)
@@ -184,7 +184,7 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession,	/* the session's handle */
 	if (rv != CKR_OK)
 		return rv;
 
-	sc_log(context, "C_GetSessionInfo(hSession:0x%lx)", hSession);
+	sc_log_session(context, "C_GetSessionInfo(hSession:0x%lx)", hSession);
 
 	session = list_seek(&sessions, &hSession);
 	if (!session) {
@@ -192,7 +192,7 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession,	/* the session's handle */
 		goto out;
 	}
 
-	sc_log(context, "C_GetSessionInfo(slot:0x%lx)", session->slot->id);
+	sc_log_session(context, "C_GetSessionInfo(slot:0x%lx)", session->slot->id);
 	pInfo->slotID = session->slot->id;
 	pInfo->flags = session->flags;
 	pInfo->ulDeviceError = 0;
@@ -209,7 +209,7 @@ CK_RV C_GetSessionInfo(CK_SESSION_HANDLE hSession,	/* the session's handle */
 	}
 
 out:
-	sc_log(context, "C_GetSessionInfo(0x%lx) = %s", hSession, lookup_enum(RV_T, rv));
+	sc_log_session(context, "C_GetSessionInfo(0x%lx) = %s", hSession, lookup_enum(RV_T, rv));
 	sc_pkcs11_unlock();
 	return rv;
 }

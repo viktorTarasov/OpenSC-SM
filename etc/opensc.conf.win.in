@@ -12,7 +12,7 @@ app default {
 	# A greater value means more debug info.
 	# Default: 0
 	#
-	debug = 8;
+	debug = 4;
 
 	# The file to which debug output will be written
 	#

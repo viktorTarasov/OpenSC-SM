@@ -37,6 +37,7 @@ enum {
 	SC_LOG_DEBUG_RFU2,		/* RFU */
 	SC_LOG_DEBUG_ASN1,		/* asn1.c only */
 	SC_LOG_DEBUG_MATCH,		/* card matching only */
+	SC_LOG_DEBUG_SESSION,		/* session */
 };
 
 /* You can't do #ifndef __FUNCTION__ */
@@ -47,12 +48,14 @@ enum {
 #if defined(__GNUC__)
 #define sc_debug(ctx, level, format, args...)	sc_do_log(ctx, level, __FILE__, __LINE__, __FUNCTION__, format , ## args)
 #define sc_log(ctx, format, args...)   sc_do_log(ctx, SC_LOG_DEBUG_NORMAL, __FILE__, __LINE__, __FUNCTION__, format , ## args)
+#define sc_log_session(ctx, format, args...)   sc_do_log(ctx, SC_LOG_DEBUG_SESSION, __FILE__, __LINE__, __FUNCTION__, format , ## args)
 #else
 #define sc_debug _sc_debug
 #define sc_log _sc_log
+#define sc_log_session _sc_log_session
 #endif
 
-void sc_do_log(struct sc_context *ctx, int level, const char *file, int line, const char *func, 
+void sc_do_log(struct sc_context *ctx, int level, const char *file, int line, const char *func,
 		const char *format, ...);
 void sc_do_log_noframe(sc_context_t *ctx, int level, const char *format, va_list args);
 void _sc_debug(struct sc_context *ctx, int level, const char *format, ...);

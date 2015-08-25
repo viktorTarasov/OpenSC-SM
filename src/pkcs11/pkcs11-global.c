@@ -376,7 +376,7 @@ CK_RV C_GetSlotList(CK_BBOOL       tokenPresent,  /* only slots with token prese
 	if (rv != CKR_OK)
 		return rv;
 
-	sc_log(context, "C_GetSlotList(token=%d, %s)", tokenPresent,
+	sc_log_session(context, "C_GetSlotList(token=%d, %s)", tokenPresent,
 		 (pSlotList==NULL_PTR && sc_pkcs11_conf.plug_and_play)? "plug-n-play":"refresh");
 
 	/* Slot list can only change in v2.20 */
@@ -413,14 +413,12 @@ CK_RV C_GetSlotList(CK_BBOOL       tokenPresent,  /* only slots with token prese
 	}
 
 	if (pSlotList == NULL_PTR) {
-		sc_log(context, "was only a size inquiry (%d)\n", numMatches);
 		*pulCount = numMatches;
 		rv = CKR_OK;
 		goto out;
 	}
 
 	if (*pulCount < numMatches) {
-		sc_log(context, "buffer was too small (needed %d)\n", numMatches);
 		*pulCount = numMatches;
 		rv = CKR_BUFFER_TOO_SMALL;
 		goto out;
@@ -430,7 +428,7 @@ CK_RV C_GetSlotList(CK_BBOOL       tokenPresent,  /* only slots with token prese
 	*pulCount = numMatches;
 	rv = CKR_OK;
 
-	sc_log(context, "returned %d slots\n", numMatches);
+	sc_log(context, "C_GetSlotList() returned %d slots", numMatches);
 
 out:
 	if (found != NULL) {
@@ -481,10 +479,9 @@ CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo)
 	if (rv != CKR_OK)
 		return rv;
 
-	sc_log(context, "C_GetSlotInfo(0x%lx)", slotID);
+	sc_log_session(context, "C_GetSlotInfo(0x%lx)", slotID);
 
 	rv = slot_get_slot(slotID, &slot);
-	sc_log(context, "C_GetSlotInfo() get slot rv %i", rv);
 	if (rv == CKR_OK)   {
 		if (slot->reader == NULL)   {
 			rv = CKR_TOKEN_NOT_PRESENT;
@@ -494,8 +491,6 @@ CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo)
 			if (now >= slot->slot_state_expires || now == 0) {
 				/* Update slot status */
 				rv = card_detect(slot->reader);
-				sc_log(context, "C_GetSlotInfo() card detect rv 0x%X", rv);
-
 				if (rv == CKR_TOKEN_NOT_RECOGNIZED || rv == CKR_OK)
 					slot->slot_info.flags |= CKF_TOKEN_PRESENT;
 
@@ -511,8 +506,8 @@ CK_RV C_GetSlotInfo(CK_SLOT_ID slotID, CK_SLOT_INFO_PTR pInfo)
 	if (rv == CKR_OK)
 		memcpy(pInfo, &slot->slot_info, sizeof(CK_SLOT_INFO));
 
-	sc_log(context, "C_GetSlotInfo() flags 0x%X", pInfo->flags);
-	sc_log(context, "C_GetSlotInfo(0x%lx) = %s", slotID, lookup_enum( RV_T, rv));
+	sc_log_session(context, "C_GetSlotInfo() flags 0x%X", pInfo->flags);
+	sc_log_session(context, "C_GetSlotInfo(0x%lx) = %s", slotID, lookup_enum( RV_T, rv));
 	sc_pkcs11_unlock();
 	return rv;
 }

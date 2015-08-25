@@ -221,7 +221,7 @@ static int refresh_attributes(sc_reader_t *reader)
 	DWORD state, prev_state;
 	LONG rv;
 
-	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "%s check", reader->name);
+	sc_log_session(reader->ctx, "refresh_attributes('%s') called", reader->name);
 
 	if (priv->reader_state.szReader == NULL) {
 		priv->reader_state.szReader = reader->name;
@@ -237,7 +237,8 @@ static int refresh_attributes(sc_reader_t *reader)
 		if (rv == (LONG)SCARD_E_TIMEOUT) {
 			/* Timeout, no change from previous recorded state. Make sure that changed flag is not set. */
 			reader->flags &= ~SC_READER_CARD_CHANGED;
-			SC_FUNC_RETURN(reader->ctx, SC_LOG_DEBUG_VERBOSE, SC_SUCCESS);
+			sc_log_session(reader->ctx, "refresh_attributes('%s') returns", reader->name);
+			return SC_SUCCESS;
 		}
 		PCSC_TRACE(reader, "SCardGetStatusChange failed", rv);
 		return pcsc_to_opensc_error(rv);
@@ -245,8 +246,8 @@ static int refresh_attributes(sc_reader_t *reader)
 	state = priv->reader_state.dwEventState;
 	prev_state = priv->reader_state.dwCurrentState;
 
-	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "current  state: 0x%08X", state);
-	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "previous state: 0x%08X", prev_state);
+	sc_log_session(reader->ctx, "current  state: 0x%08X", state);
+	sc_log_session(reader->ctx, "previous state: 0x%08X", prev_state);
 
 	if (state & SCARD_STATE_UNKNOWN) {
 		/* State means "reader unknown", but we have listed it at least once.
@@ -298,7 +299,7 @@ static int refresh_attributes(sc_reader_t *reader)
 		if (old_flags & SC_READER_CARD_PRESENT)
 			reader->flags |= SC_READER_CARD_CHANGED;
 	}
-	sc_debug(reader->ctx, SC_LOG_DEBUG_NORMAL, "card %s%s",
+	sc_log_session(reader->ctx, "card %s%s",
 	         reader->flags & SC_READER_CARD_PRESENT ? "present" : "absent",
 	         reader->flags & SC_READER_CARD_CHANGED ? ", changed": "");
 
@@ -308,12 +309,15 @@ static int refresh_attributes(sc_reader_t *reader)
 static int pcsc_detect_card_presence(sc_reader_t *reader)
 {
 	int rv;
-	SC_FUNC_CALLED(reader->ctx, SC_LOG_DEBUG_NORMAL);
 
+	sc_log_session(reader->ctx, "%i: pcsc_detect_card_presence() called", __LINE__);
 	rv = refresh_attributes(reader);
-	if (rv != SC_SUCCESS)
-		SC_FUNC_RETURN(reader->ctx, SC_LOG_DEBUG_VERBOSE, rv);
-	SC_FUNC_RETURN(reader->ctx, SC_LOG_DEBUG_VERBOSE, reader->flags);
+	if (rv != SC_SUCCESS)   {
+		sc_log_session(reader->ctx, "%i: pcsc_detect_card_presence() error %i", __LINE__, rv);
+		return rv;
+	}
+	sc_log_session(reader->ctx, "%i: pcsc_detect_card_presence() returns %i", __LINE__, reader->flags);
+	return reader->flags;
 }
 
 static int check_forced_protocol(sc_context_t *ctx, struct sc_atr *atr, DWORD *protocol)

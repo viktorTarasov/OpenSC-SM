@@ -508,7 +508,9 @@ vsctpm_md_get_card_info(struct sc_card *card)
 
 		sz = sizeof(pin_id);
 		hRes = priv->md.card_data.pfnCardGetContainerProperty(&priv->md.card_data, ii, CCP_PIN_IDENTIFIER, (PBYTE)(&pin_id), sz, &sz, 0);
-		if (hRes != SCARD_S_SUCCESS)
+		if (hRes == SCARD_E_NO_KEY_CONTAINER)
+			break;
+		else if (hRes != SCARD_S_SUCCESS)
 			sc_log(ctx, "CardGetContainerProperty(CCP_PIN_IDENTIFIER) failed: hRes %lX", hRes);
 		else
 			sc_log(ctx, "%i: PIN ID 0x%X", ii, pin_id);

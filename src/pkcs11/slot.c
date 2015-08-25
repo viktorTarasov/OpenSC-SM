@@ -154,7 +154,7 @@ CK_RV card_removed(sc_reader_t * reader)
 	unsigned int i;
 	struct sc_pkcs11_card *p11card = NULL;
 	/* Mark all slots as "token not present" */
-	sc_log(context, "%s: card removed", reader->name);
+	sc_log_session(context, "%s: card removed", reader->name);
 
 
 	for (i=0; i < list_size(&virtual_slots); i++) {
@@ -194,7 +194,7 @@ CK_RV card_detect(sc_reader_t *reader)
 
 	rv = CKR_OK;
 
-	sc_log(context, "%s: Detecting smart card", reader->name);
+	sc_log_session(context, "%s: Detecting smart card", reader->name);
 	/* Check if someone inserted a card */
 again:
 	rc = sc_detect_card_presence(reader);
@@ -203,7 +203,7 @@ again:
 		return sc_to_cryptoki_error(rc, NULL);
 	}
 	if (rc == 0) {
-		sc_log(context, "%s: card absent", reader->name);
+		sc_log_session(context, "%s: card absent", reader->name);
 		card_removed(reader);	/* Release all resources */
 		return CKR_TOKEN_NOT_PRESENT;
 	}
@@ -320,7 +320,7 @@ again:
 		}
 	}
 
-	sc_log(context, "%s: Detection ended", reader->name);
+	sc_log_session(context, "%s: Detection ended", reader->name);
 	return CKR_OK;
 }
 
@@ -330,7 +330,7 @@ card_detect_all(void)
 {
 	unsigned int i;
 
-	sc_log(context, "Detect all cards");
+	sc_log_session(context, "Detect all cards");
 	/* Detect cards in all initialized readers */
 	for (i=0; i< sc_ctx_get_reader_count(context); i++) {
 		sc_reader_t *reader = sc_ctx_get_reader(context, i);
@@ -348,7 +348,7 @@ card_detect_all(void)
 			card_detect(sc_ctx_get_reader(context, i));
 		}
 	}
-	sc_log(context, "All cards detected");
+	sc_log_session(context, "All cards detected");
 	return CKR_OK;
 }
 
@@ -416,7 +416,7 @@ CK_RV slot_token_removed(CK_SLOT_ID id)
 	struct sc_pkcs11_slot *slot;
 	struct sc_pkcs11_object *object;
 
-	sc_log(context, "slot_token_removed(0x%lx)", id);
+	sc_log_session(context, "slot_token_removed(0x%lx)", id);
 	rv = slot_get_slot(id, &slot);
 	if (rv != CKR_OK)
 		return rv;

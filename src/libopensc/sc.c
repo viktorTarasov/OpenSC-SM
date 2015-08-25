@@ -248,12 +248,16 @@ int sc_valid_oid(const struct sc_object_id *oid)
 int sc_detect_card_presence(sc_reader_t *reader)
 {
 	int r;
-	LOG_FUNC_CALLED(reader->ctx);
-	if (reader->ops->detect_card_presence == NULL)
-		LOG_FUNC_RETURN(reader->ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log_session(reader->ctx, "sc_detect_card_presence() called");
+	if (reader->ops->detect_card_presence == NULL)   {
+		sc_log_session(reader->ctx, "sc_detect_card_presence() not supported");
+		return SC_ERROR_NOT_SUPPORTED;
+	}
 
 	r = reader->ops->detect_card_presence(reader);
-	LOG_FUNC_RETURN(reader->ctx, r);
+	sc_log_session(reader->ctx, "sc_detect_card_presence() return %i", r);
+	return r;
 }
 
 int sc_path_set(sc_path_t *path, int type, const u8 *id, size_t id_len,
