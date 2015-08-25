@@ -1871,6 +1871,9 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -1953,6 +1956,9 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 
 	if (hCertStore)
 		CertCloseStore(hCertStore, 0);
+
+	rv = vsctpm_md_cmap_reload(card);
+	LOG_TEST_RET(ctx, rv, "Failed to reload CMAP content");
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
