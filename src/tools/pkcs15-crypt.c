@@ -198,7 +198,7 @@ static int write_output(const u8 *buf, int len)
 
 static int sign(struct sc_pkcs15_object *obj)
 {
-	u8 buf[1024], out[1024];
+	u8 buf[1024], out[1024], out_hex[3072];
 	struct sc_pkcs15_prkey_info *key = (struct sc_pkcs15_prkey_info *) obj->data;
 	int r, c, len;
 
@@ -247,7 +247,8 @@ static int sign(struct sc_pkcs15_object *obj)
 		}
 	}
 
-	r = write_output(out, len);
+	sc_bin_to_hex(out, len, out_hex, sizeof(out_hex), 0);
+	r = write_output(out_hex, strlen(out_hex));
 
 	return r;
 }
