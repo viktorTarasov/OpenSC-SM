@@ -1683,7 +1683,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X", container, type, key_length);
+	sc_log(ctx, "vsctpm_md_key_generate(): CMAP container '%s', type %X, key-size 0x%X", container, type, key_length);
 
 	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
@@ -1758,16 +1758,17 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 	DWORD cbKeyBlob = 0;
 	LPBYTE pbKeyBlob = NULL;
-	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
-	size_t sz;
 	HCERTSTORE hCertStore = 0;
 	PCCERT_CONTEXT pCertContext = NULL;
+	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+	size_t sz;
+	char path[200];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
-	sc_log(ctx, "CMAP container '%s', type %X, key-size 0x%X, blob(%p,%i)", container, type, key_length, blob, blob_len);
+	sc_log(ctx, "vsctpm_md_key_import(): CMAP container '%s', type %X, key-size 0x%X, blob(%p,%i)", container, type, key_length, blob, blob_len);
 
 	if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, NULL, &cbKeyBlob))   {
 		sc_log(ctx, "CryptDecodeObjectEx('get size') failed: error %X", GetLastError());
@@ -1780,11 +1781,14 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
 
-	if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+	// if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
+	sc_log(ctx, "CryptAcquireContext('%s',0)", path);
+	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, 0))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
-	sc_log(ctx, "Context CRYPT_MACHINE_KEYSET acquired on '%s'", container);
+	sc_log(ctx, "Context acquired on '%s'", path);
 
 	sc_log(ctx, "Set PIN '%s' type %i in crypto provider", pin, type);
 	if(!CryptSetProvParam(hCryptProv, type == AT_KEYEXCHANGE ? PP_KEYEXCHANGE_PIN : PP_SIGNATURE_PIN, pin, 0))   {
@@ -1891,16 +1895,19 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 	if (container && strlen(container))   {
 		HCRYPTPROV hCryptProv;
 		HCRYPTKEY hKey = 0;
+		char path[200];
 
-		if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
+		sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
+		sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET)", path);
+		if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 			hRes = GetLastError();
 			sc_log(ctx, "CryptAcquireContext(CRYPT_MACHINE_KEYSET) failed: error %X", hRes);
 			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 		}
-		sc_log(ctx, "Acquired crypto context '%s'", container);
+		sc_log(ctx, "Acquired crypto context '%s'", path);
 
 		if (pin && strlen(pin))   {
-			sc_log(ctx, "Set both PIN(%i) context params", strlen(pin));
+			sc_log(ctx, "Set both PIN context params, pin length %i", strlen(pin));
 
 			if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))
 				sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed");
