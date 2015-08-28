@@ -1772,13 +1772,32 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
 	size_t sz;
 	char path[200];
-	int rv;
+	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 	sc_log(ctx, "vsctpm_md_key_import(): CMAP container '%s', type %X, key-size 0x%X, blob(%p,%i)", container, type, key_length, blob, blob_len);
 
+#if 0
+	{
+		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+		struct sc_context *ctx = card->ctx;
+		HRESULT hRes = S_OK;
+		DWORD len = sizeof(PIN_INFO);
+		int idx;
+
+		sc_log(ctx, "CardCreateContainerEx(CARD_CREATE_CONTAINER_KEY_IMPORT)");
+		hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, 1, CARD_CREATE_CONTAINER_KEY_IMPORT, AT_KEYEXCHANGE, key_length, blob, ROLE_USER);
+		if (hRes != SCARD_S_SUCCESS)   {
+			sc_log(ctx, "CardCreateContainerEx() failed: hRes %lX", hRes);
+			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+		}
+
+		sc_log(ctx, "CardCreateContainerEx() success %X", hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+#endif
 	if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, NULL, &cbKeyBlob))   {
 		sc_log(ctx, "CryptDecodeObjectEx('get size') failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -1790,7 +1809,6 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
 
-	// if(!CryptAcquireContext(&hCryptProv, container, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
 	sc_log(ctx, "CryptAcquireContext('%s',0)", path);
 	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, 0))   {
@@ -1807,7 +1825,9 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 		goto out;
 	}
 
-	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, 0, &hKey))   {
+	// if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, 0, &hKey))   {
+	// if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, CRYPT_EXPORTABLE | CRYPT_USER_PROTECTED, &hKey))   {
+	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, CRYPT_USER_PROTECTED, &hKey))   {
 		HRESULT hRes = GetLastError();
 		sc_log(ctx, "CryptImportKey() failed: error %X", hRes);
 		rv = vsctpm_md_get_sc_error(hRes);
