@@ -41,7 +41,7 @@
 
 static const char *app_name = "pkcs15-crypt";
 
-static int verbose = 0, opt_wait = 0, opt_raw = 0;
+static int verbose = 0, opt_wait = 0, opt_raw = 0, opt_output_hex = 0;
 static char * opt_reader;
 static char * opt_pincode = NULL, * opt_key_id = NULL;
 static char * opt_input = NULL, * opt_output = NULL;
@@ -58,6 +58,7 @@ enum {
 	OPT_MD5,
 	OPT_PKCS1,
 	OPT_BIND_TO_AID,
+	OPT_OUTPUT_HEX,
 };
 
 static const struct option options[] = {
@@ -68,6 +69,7 @@ static const struct option options[] = {
 	{ "input",		1, NULL,		'i' },
 	{ "output",		1, NULL,		'o' },
 	{ "signature-format",	1, NULL,		'f' },
+	{ "output-hex",		0, NULL,		OPT_OUTPUT_HEX },
 	{ "raw",		0, NULL,		'R' },
 	{ "sha-1",		0, NULL,		OPT_SHA1 },
 	{ "sha-256",		0, NULL,		OPT_SHA256 },
@@ -91,6 +93,7 @@ static const char *option_help[] = {
 	"Selects the input file to use",
 	"Outputs to file <arg>",
 	"Format for ECDSA signature <arg>: 'rs' (default), 'sequence', 'openssl'",
+	"Output format",
 	"Outputs raw 8 bit data",
 	"Input file is a SHA-1 hash",
 	"Input file is a SHA-256 hash",
@@ -247,8 +250,13 @@ static int sign(struct sc_pkcs15_object *obj)
 		}
 	}
 
-	sc_bin_to_hex(out, len, out_hex, sizeof(out_hex), 0);
-	r = write_output(out_hex, strlen(out_hex));
+	if (opt_output_hex)   {
+		sc_bin_to_hex(out, len, out_hex, sizeof(out_hex), 0);
+		r = write_output(out_hex, strlen(out_hex));
+	}
+	else   {
+		r = write_output(out, len);
+	}
 
 	return r;
 }
@@ -409,6 +417,9 @@ int main(int argc, char * const argv[])
 			break;
 		case OPT_PKCS1:
 			opt_crypt_flags |= SC_ALGORITHM_RSA_PAD_PKCS1;
+			break;
+		case OPT_OUTPUT_HEX:
+			opt_output_hex = 1;
 			break;
 		case 'v':
 			verbose++;
