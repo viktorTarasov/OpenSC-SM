@@ -1234,11 +1234,12 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	HRESULT hRes = S_OK;
 	HCRYPTKEY  hKey;
 	HCRYPTHASH hHash;
+	WORD type = 0;
 	unsigned char data[2000];
 	size_t sz;
 	unsigned char *ptr = NULL;
-	char cont_guid[255], path[200];
-	char *pin = "12345678";
+	char cont_guid[255], path[200], *pin = "12345678";
+	int rv = SC_ERROR_INTERNAL;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -1246,9 +1247,17 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 
 	rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + idx * sizeof(CONTAINER_MAP_RECORD));
 	wcstombs(cont_guid, rec->wszGuid, sizeof(cont_guid));
+	sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
+
+	if (rec->wKeyExchangeKeySizeBits)
+		type = AT_KEYEXCHANGE;
+	if (rec->wSigKeySizeBits)
+		type = AT_SIGNATURE;
+	if (!type)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
 
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, cont_guid);
-	sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET)", path);
+	sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET), container type %i", path, type);
 	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
 		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -1266,8 +1275,8 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	sc_log(ctx, "CryptGetUserKey(AT_KEYEXCHANGE)");
-	if (CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &hKey))   {
+	sc_log(ctx, "CryptGetUserKey(%i)", type);
+	if (CryptGetUserKey(hCryptProv, type, &hKey))   {
 		sz = sizeof(data);
 		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
 			rec->wKeyExchangeKeySizeBits = *((DWORD *)data);
@@ -1281,10 +1290,20 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 			if (CryptSetHashParam(hHash, HP_HASHVAL, in, 0))   {
 				sc_log(ctx, "CryptSetHashParam(HP_HASHVAL) success");
 				sz = sizeof(data);
-				if (CryptSignHash(hHash, AT_KEYEXCHANGE, NULL, 0, &data, &sz))
-					sc_log(ctx, "CryptSignHash() signature %s, %i", sc_dump_hex(data, sz));
-				else
+				if (CryptSignHash(hHash, type, NULL, 0, &data, &sz))   {
+					sc_mem_reverse(data, sz);
+					sc_log(ctx, "CryptSignHash() signature %s", sc_dump_hex(data, sz));
+					if (sz > out_len)   {
+						rv = SC_ERROR_BUFFER_TOO_SMALL;
+					}
+					else   {
+						memcpy(out, data, sz);
+						rv = sz;
+					}
+				}
+				else   {
 					sc_log(ctx, "CryptSignHash() failed: error %X", GetLastError());
+				}
 			}
 			else   {
 				sc_log(ctx, "CryptSetHashParam() failed: error %X", GetLastError());
@@ -1299,19 +1318,9 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		CryptDestroyKey(hKey);
 	}
 
-	sc_log(ctx, "CryptGetUserKey(AT_SIGNATURE)");
-	if (CryptGetUserKey(hCryptProv, AT_SIGNATURE, &hKey))   {
-		sz = sizeof(data);
-		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
-			rec->wSigKeySizeBits = *((DWORD *)data);
+	CryptReleaseContext(hCryptProv, 0);
 
-		CryptDestroyKey(hKey);
-	}
-
-	hRes = CryptReleaseContext(hCryptProv, 0);
-	sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
-
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 

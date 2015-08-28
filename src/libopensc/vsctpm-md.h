@@ -133,6 +133,8 @@ struct vsctpm_private_data {
         struct vsctpm_md_data md;
 #endif
 	struct sc_security_env sec_env;
+	unsigned char sec_data[6];
+	unsigned char crt_tag;
 };
 
 #ifndef CKM_DES3_CBC
@@ -157,6 +159,8 @@ struct vsctpm_private_data {
 #define VSCTPM_ADMIN_PIN_REF 0x82
 
 #define VSCTPM_NOT_USE_APDU
+
+#define HASH_SIZE_CALG_SSL3_SHAMD5 36
 
 #ifdef __cplusplus
 }

@@ -863,8 +863,7 @@ vsctpm_finish(struct sc_card *card)
 
 
 static int
-vsctpm_set_security_env(struct sc_card *card,
-		const struct sc_security_env *env, int se_num)
+vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env, int se_num)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
@@ -897,11 +896,15 @@ vsctpm_set_security_env(struct sc_card *card,
 			vsctpm_crt_at[5] = VSCTPM_ALGORITHM_RSA_PKCS1_1024;
 		else
 			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+		memcpy(prv_data->sec_data, vsctpm_crt_at, sizeof(prv_data->sec_data));
+		prv_data->crt_tag = VSCTPM_CRT_TAG_DST;
 
+/*
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
 		apdu.data = vsctpm_crt_at;
 		apdu.datalen = sizeof(vsctpm_crt_at);
 		apdu.lc = sizeof(vsctpm_crt_at);
+*/
 		break;
 	case SC_SEC_OPERATION_DECIPHER:
 		if (key_size == 2048)
@@ -910,25 +913,26 @@ vsctpm_set_security_env(struct sc_card *card,
 			vsctpm_crt_dec[5] = VSCTPM_ALGORITHM_RSA_PKCS2_1024;
 		else
 			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-
+		memcpy(prv_data->sec_data, vsctpm_crt_dec, sizeof(prv_data->sec_data));
+		prv_data->crt_tag = VSCTPM_CRT_TAG_CT;
+/*
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
 		apdu.data = vsctpm_crt_dec;
 		apdu.datalen = sizeof(vsctpm_crt_dec);
 		apdu.lc = sizeof(vsctpm_crt_dec);
+*/
 		break;
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
-
+/*
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
 	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
 	LOG_TEST_RET(ctx, rv, "MSE restore error");
-
+*/
 	prv_data->sec_env = *env;
-
 	LOG_FUNC_RETURN(ctx, 0);
-
 }
 
 
@@ -949,13 +953,31 @@ vsctpm_compute_signature(struct sc_card *card,
 	cmap_idx = (prv_data->sec_env.key_ref[0] & 0x7F) - 1;
 	sc_log(ctx, "CMAP index %i", cmap_idx);
 
-	rv = iso_drv->ops->compute_signature(card, in, in_len, out,  out_len);
+	if (in_len == HASH_SIZE_CALG_SSL3_SHAMD5)   {
+		sc_log(ctx, "Use Crypto API, in-len %i", in_len);
+		rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, out, out_len);
+	}
+	else   {
+		struct sc_apdu apdu;
+
+		sc_log(ctx, "Use ISO-7816, in-len %i", in_len);
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, prv_data->crt_tag);
+		apdu.data = prv_data->sec_data;
+		apdu.datalen = sizeof(prv_data->sec_data);
+		apdu.lc = sizeof(prv_data->sec_data);
+
+		rv = sc_transmit_apdu(card, &apdu);
+		LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+		rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+		LOG_TEST_RET(ctx, rv, "MSE restore error");
+
+		rv = iso_drv->ops->compute_signature(card, in, in_len, out, out_len);
+	}
 	LOG_TEST_RET(ctx, rv, "Compute signature failed");
 
 	out_len = rv;
 	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
 
-	rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, NULL, 0);
 	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
 
 	LOG_FUNC_RETURN(ctx, out_len);
