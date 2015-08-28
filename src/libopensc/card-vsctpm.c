@@ -32,7 +32,9 @@
 #include "vsctpm-md.h"
 
 static struct sc_atr_table vsctpm_atrs[] = {
-	{"3b:8d:01:80:fb:a0:00:00:03:97:42:54:46:59:03:01:c8", NULL, NULL, SC_CARD_TYPE_VSCTPM_GENERIC, 0, NULL},
+	{"3b:8d:01:80:fb:a0:00:00:03:97:42:54:46:59:03:01:c8",
+	 "FF:FF:FF:FF:FF:FF:FF:FE:FF:FF:00:00:FF:FF:F0:FF:F0",
+	 NULL, SC_CARD_TYPE_VSCTPM_GENERIC, 0, NULL},
 	{NULL, NULL, NULL, 0, 0, NULL}
 };
 
