@@ -35,6 +35,10 @@
 #include "pkcs15.h"
 #include "vsctpm-md.h"
 
+#include "ncrypt.h"
+
+#pragma comment(lib, "ncrypt")
+
 static int vsctpm_md_get_sc_error(HRESULT);
 
 /**
@@ -1769,46 +1773,242 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	LPBYTE pbKeyBlob = NULL;
 	HCERTSTORE hCertStore = 0;
 	PCCERT_CONTEXT pCertContext = NULL;
-	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+	CERT_PUBLIC_KEY_INFO *pbPubKeyInfo = NULL, *pub_info = NULL;
+	DWORD cbPubKeyInfo;
 	size_t sz;
 	char path[200];
 	int rv, idx;
+	LPBYTE pbData = NULL;
+	DWORD cbData = 0;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 	sc_log(ctx, "vsctpm_md_key_import(): CMAP container '%s', type %X, key-size 0x%X, blob(%p,%i)", container, type, key_length, blob, blob_len);
 
-#if 0
-	{
-		struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-		struct sc_context *ctx = card->ctx;
-		HRESULT hRes = S_OK;
-		DWORD len = sizeof(PIN_INFO);
-		int idx;
-
-		sc_log(ctx, "CardCreateContainerEx(CARD_CREATE_CONTAINER_KEY_IMPORT)");
-		hRes = priv->md.card_data.pfnCardCreateContainerEx(&priv->md.card_data, 1, CARD_CREATE_CONTAINER_KEY_IMPORT, AT_KEYEXCHANGE, key_length, blob, ROLE_USER);
-		if (hRes != SCARD_S_SUCCESS)   {
-			sc_log(ctx, "CardCreateContainerEx() failed: hRes %lX", hRes);
-			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
-		}
-
-		sc_log(ctx, "CardCreateContainerEx() success %X", hRes);
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-#endif
 	if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, NULL, &cbKeyBlob))   {
 		sc_log(ctx, "CryptDecodeObjectEx('get size') failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 	pbKeyBlob = (LPBYTE) LocalAlloc(0, cbKeyBlob);
+	if (!pbKeyBlob)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
         if (!CryptDecodeObjectEx(dwEncodingType, PKCS_RSA_PRIVATE_KEY, blob, blob_len, 0, NULL, pbKeyBlob, &cbKeyBlob))   {
 		sc_log(ctx, "CryptDecodeObjectEx('key blob') failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
+#if 1
+{
+	NCRYPT_PROV_HANDLE hProvider = 0;
 
+	do   {
+		LPCWSTR pszProperty = NULL;
+		NCRYPT_KEY_HANDLE hKey;
+		NTSTATUS ntStatus;
+		DWORD key_size = key_length;
+		char size_str[24], cont_guid[255];
+		WCHAR wszPin [32], wszContainer[MAX_CONTAINER_NAME_LEN + 1];
+		LPBYTE pbPubKeyBlob = NULL;
+		DWORD cbPubKeyBlob = 0;
+		CERT_PUBLIC_KEY_INFO *pub_key = NULL;
+		size_t count;
+
+		rv = vsctpm_md_new_guid(ctx, cont_guid, sizeof(cont_guid));
+		LOG_TEST_RET(ctx, rv, "Failed to get new guid");
+
+		ntStatus = NCryptOpenStorageProvider(&hProvider, MS_SMART_CARD_KEY_STORAGE_PROVIDER, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot open storage provider : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptOpenStorageProvider() hProvider 0x%X", hProvider);
+		}
+
+		memset(wszContainer, 0, sizeof(wszContainer));
+		count = mbstowcs(wszContainer, cont_guid, sizeof(wszContainer)/sizeof(wszContainer[0]));
+		ntStatus = NCryptCreatePersistedKey(hProvider, &hKey, BCRYPT_RSA_ALGORITHM, wszContainer, type, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot create persisted key : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptCreatePersistedKey() hKey 0x%X", hKey);
+		}
+
+		memset(wszPin, 0, sizeof(wszPin));
+		count = mbstowcs(wszPin, pin, sizeof(wszPin)/sizeof(wszPin[0]));
+		sc_log(ctx, "converted count %i", count);
+		ntStatus = NCryptSetProperty(hKey, NCRYPT_PIN_PROPERTY, (PBYTE)wszPin, (ULONG)wcslen(wszPin)*sizeof(WCHAR), 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptSetProperty(NCRYPT_PIN_PROPERTY) error : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptSetProperty(NCRYPT_PIN_PROPERTY) ntStatus 0x%X", ntStatus);
+		}
+
+		sprintf(size_str, "%i", key_length);
+		ntStatus = NCryptSetProperty(hKey, NCRYPT_LENGTH_PROPERTY, (PBYTE)(size_str), strlen(size_str), NCRYPT_PERSIST_FLAG | NCRYPT_SILENT_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot set key size property : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptSetProperty(NCRYPT_LENGTH_PROPERTY: '%s') ntStatus 0x%X", size_str, ntStatus);
+		}
+
+		ntStatus = NCryptSetProperty(hKey, LEGACY_RSAPRIVATE_BLOB, (PBYTE)pbKeyBlob, cbKeyBlob, NCRYPT_PERSIST_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot set key blob property : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptSetProperty(LEGACY_RSAPRIVATE_BLOB) ntStatus 0x%X", ntStatus);
+		}
+
+		ntStatus = NCryptFinalizeKey(hKey, NCRYPT_SILENT_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot finalize key : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptFinalizeKey() ntStatus 0x%X", ntStatus);
+		}
+
+		ntStatus = NCryptOpenKey( hProvider, &hKey, wszContainer, type, NCRYPT_SILENT_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptOpenKey(%s) : 0x%x", cont_guid, ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptOpenKey(%s) ntStatus 0x%X", cont_guid, ntStatus);
+		}
+
+
+
+		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_RSAPUBLIC_BLOB, NULL, NULL, 0, &cbPubKeyBlob, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_RSAPUBLIC_BLOB) get size : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_RSAPUBLIC_BLOB) need %i bytes to allocate", cbPubKeyBlob);
+		}
+		pbPubKeyBlob = LocalAlloc(0, cbPubKeyBlob);
+		if (!pbPubKeyBlob)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_RSAPUBLIC_BLOB, NULL, pbPubKeyBlob, cbPubKeyBlob, &cbPubKeyBlob, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_RSAPUBLIC_BLOB) : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_RSAPUBLIC_BLOB) ntStatus 0x%X", ntStatus);
+		}
+		sc_log(ctx, "BCRYPT_RSAPUBLIC_BLOB '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
+
+
+
+		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_PUBLIC_KEY_BLOB, NULL, NULL, 0, &cbPubKeyBlob, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) get size : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) need %i bytes to allocate", cbPubKeyBlob);
+		}
+		pbPubKeyBlob = LocalAlloc(0, cbPubKeyBlob);
+		if (!pbPubKeyBlob)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_PUBLIC_KEY_BLOB, NULL, pbPubKeyBlob, cbPubKeyBlob, &cbPubKeyBlob, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) ntStatus 0x%X", ntStatus);
+		}
+		sc_log(ctx, "BCRYPT_PUBLIC_KEY_BLOB '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
+
+
+
+		sc_log(ctx, "CryptDecodeObject(RSA_CSP_PUBLICKEYBLOB)");
+		if (CryptDecodeObject(dwEncodingType, RSA_CSP_PUBLICKEYBLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, &sz))   {
+			LPBYTE data = NULL;
+
+			sc_log(ctx, "Buffer size for RSAPublicKey: %d", sz);
+			data = (BYTE *)malloc(sz);
+			if(!data)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+			if (CryptDecodeObject(dwEncodingType, RSA_CSP_PUBLICKEYBLOB, pbPubKeyBlob, cbPubKeyBlob, 0, data, &sz))   {
+				sc_log(ctx, "RSA_CSP_PUBLICKEYBLOB '%s'", sc_dump_hex(data, sz));
+				LocalFree(data);
+			}
+			else   {
+				sc_log(ctx, "CryptDecodeObject(RSA_CSP_PUBLICKEYBLOB) failed: error %X", GetLastError());
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptDecodeObject(RSA_CSP_PUBLICKEYBLOB) failed: error %X", GetLastError());
+		}
+
+/*
+		pszProperty = NCRYPT_CERTIFICATE_PROPERTY;
+		ntStatus = NCryptGetProperty(hKey, pszProperty, NULL, 0, &cbPubKeyBlob, NCRYPT_PERSIST_ONLY_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptGetProperty(pszProperty) get size : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptGetProperty(pszProperty) need %i bytes to allocate", cbPubKeyBlob);
+		}
+		pbPubKeyBlob = LocalAlloc(0, cbPubKeyBlob);
+		if (!pbPubKeyBlob)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		ntStatus = NCryptGetProperty(hKey, pszProperty, pbPubKeyBlob, cbPubKeyBlob, &cbPubKeyBlob, NCRYPT_PERSIST_ONLY_FLAG);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "NCryptGetProperty(pszProperty) : error 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptGetProperty(pszProperty) ntStatus 0x%X", ntStatus);
+		}
+		sc_log(ctx, "NCRYPT_READER_PROPERTY '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
+*/
+
+		if (CryptDecodeObjectEx(dwEncodingType, CNG_RSA_PUBLIC_KEY_BLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, NULL, &cbPubKeyInfo))   {
+			pbPubKeyInfo = (LPBYTE) LocalAlloc(0, cbPubKeyInfo);
+			if (!pbPubKeyInfo)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+			if (!CryptDecodeObjectEx(dwEncodingType, CNG_RSA_PUBLIC_KEY_BLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, pbPubKeyInfo, &cbPubKeyInfo))   {
+				sc_log(ctx, "CryptDecodeObjectEx(CNG_RSA_PUBLIC_KEY_BLOB) failed: error %X", GetLastError());
+				LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+			}
+			sc_log(ctx, "CNG_RSA_PUBLIC_KEY_BLOB(%i): %s", cbPubKeyInfo, sc_dump_hex(pbPubKeyInfo, cbPubKeyInfo));
+		}
+		else   {
+			sc_log(ctx, "CryptDecodeObjectEx(CNG_RSA_PUBLIC_KEY_BLOB) error %X", GetLastError());
+		}
+
+
+		ntStatus = NCryptFinalizeKey(hKey, 0);
+		if (!BCRYPT_SUCCESS(ntStatus)) {
+			sc_log(ctx, "Cannot finalize key : 0x%x", ntStatus);
+			break;
+		}
+		else   {
+			sc_log(ctx, "NCryptFinalizeKey() ntStatus 0x%X", ntStatus);
+		}
+
+		if (pbPubKeyBlob)
+			LocalFree(pbPubKeyBlob);
+	} while (0);
+
+	NCryptFreeObject(hProvider);
+}
+#endif
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
 	sc_log(ctx, "CryptAcquireContext('%s',0)", path);
 	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, 0))   {
@@ -1825,8 +2025,6 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 		goto out;
 	}
 
-	// if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, 0, &hKey))   {
-	// if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, CRYPT_EXPORTABLE | CRYPT_USER_PROTECTED, &hKey))   {
 	if (!CryptImportKey(hCryptProv, pbKeyBlob, cbKeyBlob, 0, CRYPT_USER_PROTECTED, &hKey))   {
 		HRESULT hRes = GetLastError();
 		sc_log(ctx, "CryptImportKey() failed: error %X", hRes);
@@ -1847,12 +2045,23 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	if (!pub_info)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 
-	if (!CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
-		HRESULT hRes = GetLastError();
-		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", hRes);
-		rv = vsctpm_md_get_sc_error(hRes);
-		goto out;
+
+	if (CryptGetUserKey(hCryptProv, type, &hKey))   {
+		if (CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, NULL, &cbData))   {
+			pbData = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, cbData);
+			if (CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, pbData, &cbData))   {
+				sc_log(ctx, "Exported PubKey '%s'", sc_dump_hex(pbData, cbData));
+				LocalFree(pbData);
+			}
+		}
+		else   {
+			sc_log(ctx, "CryptExportKey() failed: error %X", GetLastError());
+		}
 	}
+	else   {
+		sc_log(ctx, "CryptGetUserKey() failed: error %X", GetLastError());
+	}
+
 
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
