@@ -2031,19 +2031,25 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "Key(%p,%i) imported", pbKeyBlob, cbKeyBlob);
 
-	if (!CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
+	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
+		pub_info = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, sz);
+		if (!pub_info)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		if (!CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
+			HRESULT hRes = GetLastError();
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", hRes);
+			rv = vsctpm_md_get_sc_error(hRes);
+			goto out;
+		}
+		sc_log(ctx, "Exported PubKey Info '%s'", sc_dump_hex(pub_info, sz));
+	}
+	else   {
 		HRESULT hRes = GetLastError();
 		sc_log(ctx, "CryptExportPublicKeyInfo(get-size) failed: error %X", hRes);
 		rv = vsctpm_md_get_sc_error(hRes);
 		goto out;
 	}
-	sc_log(ctx, "PublicKeyInfo size %i", sz);
-
-	pub_info = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, sz);
-	if (!pub_info)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
-
+/*
 	if (CryptGetUserKey(hCryptProv, type, &hKey))   {
 		if (CryptExportKey(hKey, 0, PUBLICKEYBLOB, 0, NULL, &cbData))   {
 			pbData = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, cbData);
@@ -2059,8 +2065,7 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	else   {
 		sc_log(ctx, "CryptGetUserKey() failed: error %X", GetLastError());
 	}
-
-
+*/
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
 	if (!hCertStore)   {
