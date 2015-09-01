@@ -822,6 +822,7 @@ vsctpm_md_acquire_context(struct sc_card *card)
 	sc_log(ctx, "MD: card-data pfnCardAuthenticateChallenge %p",	priv->md.card_data.pfnCardAuthenticateChallenge);
 	sc_log(ctx, "MD: card-data pfnCardUnblockPin %p",		priv->md.card_data.pfnCardUnblockPin);
 	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticator %p",	priv->md.card_data.pfnCardChangeAuthenticator);
+	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticatorEx %p",	priv->md.card_data.pfnCardChangeAuthenticatorEx);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
@@ -869,7 +870,6 @@ vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env,
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_apdu apdu;
 	unsigned char vsctpm_crt_at[] = {
 		0x84, 0x01, env->key_ref[0],
 		0x80, 0x01, 0xFF
@@ -878,7 +878,7 @@ vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env,
 		0x84, 0x01, env->key_ref[0],
 		0x80, 0x01, VSCTPM_ALGORITHM_RSA_PKCS2_2048
 	};
-	int rv, cmap_idx, key_size = 0;
+	int cmap_idx, key_size = 0;
 
 	sc_log(ctx, "set security env, operation: Ox%X, key-ref %i", env->operation, env->key_ref[0]);
 	cmap_idx = (env->key_ref[0] & 0x7F) - 1;
@@ -901,12 +901,6 @@ vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env,
 		memcpy(prv_data->sec_data, vsctpm_crt_at, sizeof(prv_data->sec_data));
 		prv_data->crt_tag = VSCTPM_CRT_TAG_DST;
 
-/*
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_DST);
-		apdu.data = vsctpm_crt_at;
-		apdu.datalen = sizeof(vsctpm_crt_at);
-		apdu.lc = sizeof(vsctpm_crt_at);
-*/
 		break;
 	case SC_SEC_OPERATION_DECIPHER:
 		if (key_size == 2048)
@@ -917,30 +911,19 @@ vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env,
 			LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 		memcpy(prv_data->sec_data, vsctpm_crt_dec, sizeof(prv_data->sec_data));
 		prv_data->crt_tag = VSCTPM_CRT_TAG_CT;
-/*
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, VSCTPM_CRT_TAG_CT);
-		apdu.data = vsctpm_crt_dec;
-		apdu.datalen = sizeof(vsctpm_crt_dec);
-		apdu.lc = sizeof(vsctpm_crt_dec);
-*/
 		break;
 	default:
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 	}
-/*
-	rv = sc_transmit_apdu(card, &apdu);
-	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
-	LOG_TEST_RET(ctx, rv, "MSE restore error");
-*/
+
 	prv_data->sec_env = *env;
 	LOG_FUNC_RETURN(ctx, 0);
 }
 
 
 static int
-vsctpm_compute_signature(struct sc_card *card,
-		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
+vsctpm_compute_signature(struct sc_card *card, const unsigned char *in, size_t in_len,
+		unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;

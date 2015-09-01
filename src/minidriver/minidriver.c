@@ -2867,7 +2867,10 @@ DWORD WINAPI CardChangeAuthenticator(__in PCARD_DATA  pCardData,
 	else
 		pinid = ROLE_ADMIN;
 
-	return CardChangeAuthenticatorEx(pCardData, PIN_CHANGE_FLAG_CHANGEPIN | CARD_PIN_SILENT_CONTEXT, pinid, pbCurrentAuthenticator, cbCurrentAuthenticator, pinid, pbNewAuthenticator, cbNewAuthenticator, cRetryCount, pcAttemptsRemaining);
+	return CardChangeAuthenticatorEx(pCardData, PIN_CHANGE_FLAG_CHANGEPIN | CARD_PIN_SILENT_CONTEXT,
+			pinid, pbCurrentAuthenticator, cbCurrentAuthenticator,
+			pinid, pbNewAuthenticator, cbNewAuthenticator,
+			cRetryCount, pcAttemptsRemaining);
 }
 
 /* this function is not called on purpose.
@@ -3813,7 +3816,6 @@ DWORD WINAPI CardChangeAuthenticatorEx(__in PCARD_DATA pCardData,
 
 	logprintf(pCardData, 2, "CardChangeAuthenticatorEx: AuthenticatingPinId=%u, dwFlags=0x%08X, cbAuthenticatingPinData=%u, TargetPinId=%u, cbTargetData=%u, Attempts %s\n",
 		dwAuthenticatingPinId, dwFlags, cbAuthenticatingPinData, dwTargetPinId, cbTargetData, pcAttemptsRemaining ? "YES" : "NO");
-
 
 	check_reader_status(pCardData);
 

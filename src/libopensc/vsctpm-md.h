@@ -77,7 +77,7 @@ int vsctpm_md_cmap_init_container(struct sc_card *, int, struct vsctpm_md_contai
 int vsctpm_md_get_challenge(struct sc_card *, unsigned char *, size_t);
 int vsctpm_md_user_pin_unblock(struct sc_card *, unsigned char *, size_t, const unsigned char *, size_t);
 int vsctpm_md_admin_login(struct sc_card *, unsigned char *, size_t, int *);
-int vsctpm_md_cbc_encrypt(struct sc_card *, unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_cbc_encrypt(struct sc_card *, const unsigned char *, size_t, unsigned char *, size_t);
 int vsctpm_md_get_property(struct sc_card *, LPCWSTR, void *, unsigned char *);
 int vsctpm_md_get_pin_info(struct sc_card *, DWORD, PIN_INFO *);
 int vsctpm_md_logout(struct sc_card *, DWORD);
@@ -88,7 +88,7 @@ int vsctpm_md_pin_authentication_state(struct sc_card *, DWORD *);
 int vsctpm_md_pin_authenticate(struct sc_card *, unsigned char *, size_t, int *);
 int vsctpm_md_cmap_delete_container(struct sc_card *, char *, char *);
 int vsctpm_md_cmap_delete_certificate(struct sc_card *, char *, struct sc_pkcs15_cert *);
-int vsctpm_md_cmap_create_container(struct sc_card *, unsigned char **, size_t *);
+int vsctpm_md_cmap_create_container(struct sc_card *, char *, unsigned char **, size_t *);
 int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, unsigned char **, size_t *);
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
 int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, size_t);

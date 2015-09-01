@@ -40,6 +40,7 @@
 #pragma comment(lib, "ncrypt")
 
 static int vsctpm_md_get_sc_error(HRESULT);
+static int vsctpm_md_new_guid(struct sc_context *ctx, char *guid, size_t guid_len);
 
 /**
  * CSP management functions and cache context, needed by minidrivers'
@@ -98,11 +99,23 @@ Callback_CertEnumSystemStore(const void *pvSystemStore, DWORD dwFlags,
 }
 
 
-static int
-vsctpm_md_test_ncrypt(struct sc_card *card)
+int
+vsctpm_md_test_ncrypt(struct sc_card *card, char *container, unsigned type, size_t key_length, char *pin,
+		unsigned char *blob, size_t blob_len)
 {
 	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	HRESULT hRes = S_OK;
+	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+	DWORD cbKeyBlob = 0;
+	LPBYTE pbKeyBlob = NULL;
+	HCERTSTORE hCertStore = 0;
+	PCCERT_CONTEXT pCertContext = NULL;
+	CERT_PUBLIC_KEY_INFO *pbPubKeyInfo = NULL, *pub_info = NULL;
+	DWORD cbPubKeyInfo;
 	NCRYPT_PROV_HANDLE hProvider = 0;
+	size_t sz;
+	int rv;
 
 	do   {
 		LPCWSTR pszProperty = NULL;
@@ -189,7 +202,6 @@ vsctpm_md_test_ncrypt(struct sc_card *card)
 		}
 
 
-
 		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_RSAPUBLIC_BLOB, NULL, NULL, 0, &cbPubKeyBlob, 0);
 		if (!BCRYPT_SUCCESS(ntStatus)) {
 			sc_log(ctx, "NCryptExportKey(BCRYPT_RSAPUBLIC_BLOB) get size : error 0x%x", ntStatus);
@@ -212,7 +224,6 @@ vsctpm_md_test_ncrypt(struct sc_card *card)
 		sc_log(ctx, "BCRYPT_RSAPUBLIC_BLOB '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
 
 
-
 		ntStatus = NCryptExportKey(hKey, 0, BCRYPT_PUBLIC_KEY_BLOB, NULL, NULL, 0, &cbPubKeyBlob, 0);
 		if (!BCRYPT_SUCCESS(ntStatus)) {
 			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) get size : error 0x%x", ntStatus);
@@ -233,7 +244,6 @@ vsctpm_md_test_ncrypt(struct sc_card *card)
 			sc_log(ctx, "NCryptExportKey(BCRYPT_PUBLIC_KEY_BLOB) ntStatus 0x%X", ntStatus);
 		}
 		sc_log(ctx, "BCRYPT_PUBLIC_KEY_BLOB '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
-
 
 
 		if (CryptDecodeObject(dwEncodingType, RSA_CSP_PUBLICKEYBLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, &sz))   {
@@ -280,14 +290,14 @@ vsctpm_md_test_ncrypt(struct sc_card *card)
 */
 
 		if (CryptDecodeObjectEx(dwEncodingType, CNG_RSA_PUBLIC_KEY_BLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, NULL, &cbPubKeyInfo))   {
-			pbPubKeyInfo = (LPBYTE) LocalAlloc(0, cbPubKeyInfo);
+			pbPubKeyInfo = (CERT_PUBLIC_KEY_INFO *) LocalAlloc(0, cbPubKeyInfo);
 			if (!pbPubKeyInfo)
 				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 			if (!CryptDecodeObjectEx(dwEncodingType, CNG_RSA_PUBLIC_KEY_BLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, pbPubKeyInfo, &cbPubKeyInfo))   {
 				sc_log(ctx, "CryptDecodeObjectEx(CNG_RSA_PUBLIC_KEY_BLOB) failed: error %X", GetLastError());
 				LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 			}
-			sc_log(ctx, "CNG_RSA_PUBLIC_KEY_BLOB(%i): %s", cbPubKeyInfo, sc_dump_hex(pbPubKeyInfo, cbPubKeyInfo));
+			sc_log(ctx, "CNG_RSA_PUBLIC_KEY_BLOB %s", sc_dump_hex((unsigned char *)pbPubKeyInfo, cbPubKeyInfo));
 		}
 		else   {
 			sc_log(ctx, "CryptDecodeObjectEx(CNG_RSA_PUBLIC_KEY_BLOB) error %X", GetLastError());
@@ -308,6 +318,8 @@ vsctpm_md_test_ncrypt(struct sc_card *card)
 	} while (0);
 
 	NCryptFreeObject(hProvider);
+
+	return 0;
 }
 
 
@@ -876,7 +888,7 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
-	DWORD sz = -1;
+	DWORD sz;
 	unsigned char *buf = NULL, *ptr;
 
 	LOG_FUNC_CALLED(ctx);
@@ -897,7 +909,7 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	}
 	sc_log(ctx, "MD files in %li bytes: '%s': '%s'", sz, dir_name, sc_dump_hex(buf, sz));
 
-	for(ptr=buf; strlen(ptr) && (ptr-buf) < sz; )   {
+	for(ptr=buf; strlen(ptr) && (unsigned)(ptr-buf) < sz; )   {
 		sc_log(ctx, "file in %s: %s", dir_name, ptr);
 		ptr += strlen(ptr) + 1;
 	}
@@ -1218,7 +1230,7 @@ vsctpm_md_cmap_get_free_index(struct sc_card *card)
 }
 
 
-int
+static int
 vsctpm_md_new_guid(struct sc_context *ctx, char *guid, size_t guid_len)
 {
 	unsigned char buf[16];
@@ -1357,13 +1369,13 @@ vsctpm_md_cmap_size(struct sc_card *card)
 			if (CryptGetUserKey(hCryptProv, AT_KEYEXCHANGE, &hKey))   {
 				sz = sizeof(data);
 				if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
-					rec->wKeyExchangeKeySizeBits = *((DWORD *)data);
+					rec->wKeyExchangeKeySizeBits = (WORD)(*((DWORD *)data));
 			}
 
 			if (CryptGetUserKey(hCryptProv, AT_SIGNATURE, &hKey))   {
 				sz = sizeof(data);
 				if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
-					rec->wSigKeySizeBits = *((DWORD *)data);
+					rec->wSigKeySizeBits = (WORD)(*((DWORD *)data));
 			}
 
 			if (hKey)
@@ -1495,7 +1507,7 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	if (CryptGetUserKey(hCryptProv, type, &hKey))   {
 		sz = sizeof(data);
 		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
-			rec->wKeyExchangeKeySizeBits = *((DWORD *)data);
+			rec->wKeyExchangeKeySizeBits = (WORD)(*((DWORD *)data));
 		if (CryptCreateHash(hCryptProv, CALG_SSL3_SHAMD5, 0, 0, &hHash))   {
 			sc_log(ctx, "CryptCreateHash() hHash:%X", hHash);
 
@@ -1506,7 +1518,7 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 			if (CryptSetHashParam(hHash, HP_HASHVAL, in, 0))   {
 				sc_log(ctx, "CryptSetHashParam(HP_HASHVAL) success");
 				sz = sizeof(data);
-				if (CryptSignHash(hHash, type, NULL, 0, &data, &sz))   {
+				if (CryptSignHash(hHash, type, NULL, 0, &data[0], &sz))   {
 					sc_mem_reverse(data, sz);
 					sc_log(ctx, "CryptSignHash() signature %s", sc_dump_hex(data, sz));
 					if (sz > out_len)   {
@@ -1575,9 +1587,7 @@ vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 
 
 int
-vsctpm_md_cbc_encrypt(struct sc_card *card,
-		unsigned char *key, size_t key_len,
-		unsigned char *data, size_t data_len)
+vsctpm_md_cbc_encrypt(struct sc_card *card, const unsigned char *key, size_t key_len, unsigned char *data, size_t data_len)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
@@ -1694,7 +1704,6 @@ vsctpm_md_user_pin_unblock(struct sc_card *card,
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-	// DWORD tries_left = VSCTPM_USER_PIN_RETRY_COUNT;
 	DWORD tries_left = 0;
 	HRESULT hRes = S_OK;
 
@@ -1705,8 +1714,7 @@ vsctpm_md_user_pin_unblock(struct sc_card *card,
 	sc_log(ctx, "Auth Data(%i)'%s'", auth_len, sc_dump_hex(auth, auth_len));
 	sc_log(ctx, "NewPIN(%i)'%s'", pin_len, sc_dump_hex(pin, pin_len));
 	hRes = priv->md.card_data.pfnCardUnblockPin(&priv->md.card_data, wszCARD_USER_USER,
-			auth, auth_len,
-			pin, pin_len,
+			auth, auth_len, pin, pin_len,
 			tries_left, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardUnblockPin(%p,%i %p,%i) failed: hRes %lX", auth, auth_len, pin, pin_len, hRes);
@@ -1986,10 +1994,9 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	HCERTSTORE hCertStore = 0;
 	PCCERT_CONTEXT pCertContext = NULL;
 	CERT_PUBLIC_KEY_INFO *pbPubKeyInfo = NULL, *pub_info = NULL;
-	DWORD cbPubKeyInfo;
 	size_t sz;
 	char path[200];
-	int rv, idx;
+	int rv;
 	LPBYTE pbData = NULL;
 	DWORD cbData = 0;
 
@@ -2011,8 +2018,7 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
 
-
-	// rv = vsctpm_md_test_ncrypt(card);
+	// rv = vsctpm_md_test_ncrypt(card, container, type, key_length, pin, blob, blob_len);
 
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
 	sc_log(ctx, "CryptAcquireContext('%s',0)", path);
@@ -2048,7 +2054,7 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 			rv = vsctpm_md_get_sc_error(hRes);
 			goto out;
 		}
-		sc_log(ctx, "Exported PubKey Info '%s'", sc_dump_hex(pub_info, sz));
+		sc_log(ctx, "Exported PubKey Info '%s'", sc_dump_hex((unsigned char *)pub_info, sz));
 	}
 	else   {
 		HRESULT hRes = GetLastError();
@@ -2271,14 +2277,12 @@ vsctpm_md_cmap_delete_certificate(struct sc_card *card, char *pin, struct sc_pkc
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	HCRYPTPROV hCryptProv;
 	HCERTSTORE hCertStore;
 	PCCERT_CONTEXT pCertContext = NULL, pCContext = NULL;
 	DWORD dwFlags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
 	CRYPT_DATA_BLOB blob, key_id;
 	HRESULT hRes;
-        char path[200];
 	int rv = SC_SUCCESS;
 	unsigned char buf[12000];
 	size_t len;
