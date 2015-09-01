@@ -93,6 +93,7 @@ int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, u
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
 int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, size_t);
 int vsctpm_get_pin_from_cache(struct sc_pkcs15_card *, char *, size_t);
+int vsctpm_md_pin_change(struct sc_card *, int, const unsigned char *, size_t, const unsigned char *, size_t, int *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;
@@ -154,6 +155,7 @@ struct vsctpm_private_data {
 #define VSCTPM_CRT_TAG_KAT      0xA6
 
 #define VSCTPM_USER_PIN_RETRY_COUNT 3
+#define VSCTPM_ADMIN_PIN_RETRY_COUNT 5
 
 #define VSCTPM_USER_PIN_REF 0x80
 #define VSCTPM_ADMIN_PIN_REF 0x82

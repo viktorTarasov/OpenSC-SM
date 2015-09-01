@@ -1634,7 +1634,13 @@ int
 sc_pkcs15_find_pin_by_auth_id(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_id *id,
 		struct sc_pkcs15_object **out)
 {
-	return sc_pkcs15_find_object_by_id(p15card, SC_PKCS15_TYPE_AUTH, id, out);
+	struct sc_context *ctx = p15card->card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Auth ID '%s'", sc_pkcs15_print_id(id));
+	rv = sc_pkcs15_find_object_by_id(p15card, SC_PKCS15_TYPE_AUTH, id, out);
+	LOG_FUNC_RETURN(ctx, rv);
 }
 
 

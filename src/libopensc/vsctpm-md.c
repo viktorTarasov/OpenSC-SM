@@ -822,6 +822,43 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 
 
 int
+vsctpm_md_pin_change(struct sc_card *card, int pin_role,
+		const unsigned char *cur_pin, size_t cur_pin_size,
+		const unsigned char *new_pin, size_t new_pin_size,
+		int *tries_left)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD attempts = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "vsctpm_md_pin_change(cur:'%s' new:'%s')", sc_dump_hex(cur_pin, cur_pin_size), sc_dump_hex(new_pin, new_pin_size));
+	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data,
+			PIN_CHANGE_FLAG_CHANGEPIN,
+			pin_role, cur_pin, cur_pin_size,
+			pin_role, new_pin, new_pin_size,
+			pin_role == ROLE_USER ? VSCTPM_USER_PIN_RETRY_COUNT : VSCTPM_ADMIN_PIN_RETRY_COUNT,
+			&attempts);
+	if (hRes == SCARD_W_WRONG_CHV)   {
+		if (tries_left)
+			*tries_left = attempts;
+		sc_log(ctx, "attempts left %i", attempts);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	else if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardAuthenticateEx() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
 vsctpm_md_write_file(struct sc_card *card, char *dir_name, char *file_name,
 		unsigned char *out, size_t out_len)
 {

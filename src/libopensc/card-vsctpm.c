@@ -601,6 +601,7 @@ vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int
 }
 
 
+#if 0
 static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
 {
@@ -622,15 +623,10 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
 	}
 	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
-#ifdef VSCTPM_NOT_USE_APDU
-		rv = vsctpm_md_pin_authenticate(card,  pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
-		LOG_FUNC_RETURN(ctx, rv);
-#else
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
 		apdu.data = pin_cmd->pin1.data;
 		apdu.datalen = pin_cmd->pin1.len;
 		apdu.lc = pin_cmd->pin1.len;
-#endif
 	}
 	else   {
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
@@ -651,8 +647,43 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
 #endif
 }
+#endif
 
 
+#ifdef ENABLE_MINIDRIVER
+static int
+vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	int rv = SC_ERROR_NOT_SUPPORTED;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Verify PIN(type:%X,ref:%i,len:%i)", pin_cmd->pin_type, pin_cmd->pin_reference, pin_cmd->pin1.len);
+
+	if (pin_cmd->pin_type == SC_AC_AUT)   {
+		rv = vsctpm_authkey_verify(card, pin_cmd, tries_left);
+	}
+	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
+		rv = vsctpm_md_pin_authenticate(card,  pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
+		LOG_TEST_RET(ctx, rv, "PIN authenticate failed");
+
+		priv->user_logged = 1;
+	}
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+#else
+static int
+vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
+{
+	LOG_FUNC_RETURN(card->ctx, SC_ERROR_NOT_IMPLEMENTED);
+}
+#endif
+
+
+#if 0
 static int
 vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
@@ -695,6 +726,78 @@ vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
+#else
+static int
+vsctpm_authkey_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", data->pin_reference, data->pin_type, data->pin1.len, data->pin2.len);
+
+	if (!data->pin1.data && data->pin1.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
+
+	if (!data->pin2.data && data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
+
+	rv = vsctpm_md_pin_change(card, ROLE_ADMIN, data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len, tries_left);
+	LOG_TEST_RET(ctx, rv, "Failed to change ADMIN PIN");
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+
+
+static int
+vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
+{
+	struct sc_context *ctx = card->ctx;
+	struct sc_apdu apdu;
+	unsigned reference = data->pin_reference;
+	unsigned char pin_data[0x100];
+	int rv;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", reference, data->pin_type, data->pin1.len, data->pin2.len);
+
+	if (!data->pin1.data && data->pin1.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
+
+	if (!data->pin2.data && data->pin2.len)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
+
+	if (data->pin_type == SC_AC_AUT)   {
+		rv = vsctpm_authkey_change(card, data, tries_left);
+		LOG_TEST_RET(ctx, rv, "vsctpm_authkey_change() failed");
+	}
+	else   {
+		rv = vsctpm_pin_verify(card, data, tries_left);
+		sc_log(ctx, "pin_cmd(SC_PIN_CMD_CHANGE) pin_verify returned %i", rv);
+		LOG_TEST_RET(ctx, rv, "PIN verification error");
+
+		if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
+			LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
+
+		if (data->pin1.data)
+			memcpy(pin_data, data->pin1.data, data->pin1.len);
+		if (data->pin2.data)
+			memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
+
+		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, reference);
+		apdu.data = pin_data;
+		apdu.datalen = data->pin1.len + data->pin2.len;
+		apdu.lc = apdu.datalen;
+
+		rv = sc_transmit_apdu(card, &apdu);
+		LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+		rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+		LOG_TEST_RET(ctx, rv, "PIN cmd failed");
+	}
+
+	LOG_FUNC_RETURN(ctx, rv);
+}
+#endif
 
 
 static int

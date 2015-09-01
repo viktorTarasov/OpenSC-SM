@@ -820,7 +820,7 @@ static void print_ssh_key(FILE *outf, const char * alg, struct sc_pkcs15_object 
 		if (r < 0)
 			return;
 
-		if (obj->label && strlen(obj->label)) 
+		if (obj->label && strlen(obj->label))
 			fprintf(outf,"ssh-%s %s %s\n", alg, uu, obj->label);
 		else
 			fprintf(outf,"ssh-%s %s\n", alg, uu);
@@ -1069,7 +1069,8 @@ get_pin_info(void)
 			return NULL;
 		}
 		obj = objs[0];
-	} else {
+	}
+	else {
 		struct sc_pkcs15_id auth_id;
 
 		sc_pkcs15_hex_string_to_id(opt_auth_id, &auth_id);
@@ -1457,7 +1458,8 @@ static int change_pin(void)
 		return 2;
 
 	pinfo = (sc_pkcs15_auth_info_t *) pin_obj->data;
-	if (pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
+	printf("%i: PIN auth type %X/%X\n", __LINE__, pinfo->auth_type, SC_PKCS15_PIN_AUTH_TYPE_PIN);
+	if ((pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN) && (pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY))
 		return 1;
 
 	if (pinfo->tries_left != -1) {
@@ -1514,8 +1516,7 @@ static int change_pin(void)
 		newpin=NULL;
 	}
 
-	r = sc_pkcs15_change_pin(p15card, pin_obj,
-			pincode, pincode ? strlen((char *) pincode) : 0,
+	r = sc_pkcs15_change_pin(p15card, pin_obj, pincode, pincode ? strlen((char *) pincode) : 0,
 			newpin, newpin ? strlen((char *) newpin) : 0);
 	if (r == SC_ERROR_PIN_CODE_INCORRECT) {
 		fprintf(stderr, "PIN code incorrect; tries left: %d\n", pinfo->tries_left);
