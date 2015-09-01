@@ -1107,11 +1107,9 @@ vsctpm_md_cmap_size(struct sc_card *card)
 				if (!strcmp(data, default_cont))
 					rec.bFlags |= CONTAINER_MAP_DEFAULT_CONTAINER;
 
-				sc_log(ctx, "Container(%i) priv->md.cmap_data.value %p", nn_cont, priv->md.cmap_data.value);
 				priv->md.cmap_data.value = (char *) realloc(priv->md.cmap_data.value, (nn_cont + 1) * sizeof(CONTAINER_MAP_RECORD));
 				if (priv->md.cmap_data.value == NULL)
 					LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-				sc_log(ctx, "Container(%i) priv->md.cmap_data.value %p", nn_cont, priv->md.cmap_data.value);
 				rec.bFlags |= CONTAINER_MAP_VALID_CONTAINER;
 
 				memcpy(priv->md.cmap_data.value + nn_cont*sizeof(CONTAINER_MAP_RECORD), &rec, sizeof(CONTAINER_MAP_RECORD));
@@ -1121,6 +1119,7 @@ vsctpm_md_cmap_size(struct sc_card *card)
 				hRes = CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_NEXT);
 				sc_log(ctx, "HRES '%X'", hRes);
 			} while(hRes);
+
 			priv->md.cmap_data.len = nn_cont * sizeof(CONTAINER_MAP_RECORD);
 		}
 
@@ -1798,7 +1797,7 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
-#if 1
+#if 0
 {
 	NCRYPT_PROV_HANDLE hProvider = 0;
 
@@ -1934,7 +1933,6 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 
 
 
-		sc_log(ctx, "CryptDecodeObject(RSA_CSP_PUBLICKEYBLOB)");
 		if (CryptDecodeObject(dwEncodingType, RSA_CSP_PUBLICKEYBLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, &sz))   {
 			LPBYTE data = NULL;
 
