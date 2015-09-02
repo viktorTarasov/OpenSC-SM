@@ -1647,18 +1647,17 @@ pkcs15_change_pin(struct sc_pkcs11_slot *slot,
 	int login_user = slot->login_user;
 	int rc;
 
+	sc_log(context, "pkcs15_change_pin(old-length:%i new-length:%i), login-type %i", ulOldLen, ulNewLen, login_user);
 	fw_data = (struct pkcs15_fw_data *) p11card->fws_data[slot->fw_data_idx];
 	if (!fw_data)
 		return sc_to_cryptoki_error(SC_ERROR_INTERNAL, "C_SetPin");
 
 	p15card = fw_data->p15_card;
 
-	if (login_user == CKU_SO) {
+	if (login_user == CKU_SO)
 		rc = sc_pkcs15_find_so_pin(p15card, &pin_obj);
-		sc_log(context, "pkcs15-login: find SO PIN: rc %i", rc);
-	} else {
+	else
 		pin_obj = slot_data_auth(slot->fw_data);
-	}
 
 	if (!pin_obj)
 		return CKR_USER_PIN_NOT_INITIALIZED;
@@ -1667,7 +1666,7 @@ pkcs15_change_pin(struct sc_pkcs11_slot *slot,
 	if (!auth_info)
 		return CKR_USER_PIN_NOT_INITIALIZED;
 
-	sc_log(context, "Change '%s' (ref:%i,type:%i)", pin_obj->label, auth_info->attrs.pin.reference, login_user);
+	sc_log(context, "Change '%s', login-type:%i, auth-type:%X", pin_obj->label, login_user, auth_info->auth_type);
 	if (p11card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
 		/* pPin should be NULL in case of a pin pad reader, but
 		 * some apps (e.g. older Netscapes) don't know about it.
@@ -1678,8 +1677,15 @@ pkcs15_change_pin(struct sc_pkcs11_slot *slot,
 		pOldPin = pNewPin = NULL;
 		ulOldLen = ulNewLen = 0;
 	}
-	else if (ulNewLen < auth_info->attrs.pin.min_length || ulNewLen > auth_info->attrs.pin.max_length)  {
-		return CKR_PIN_LEN_RANGE;
+	else if (auth_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+	}
+	else if (auth_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+		if (ulNewLen < auth_info->attrs.pin.min_length || ulNewLen > auth_info->attrs.pin.max_length)
+			return CKR_PIN_LEN_RANGE;
+	}
+	else   {
+		sc_log(context, "Unsupported authentication type %X", auth_info->auth_type);
+		return CKR_FUNCTION_NOT_SUPPORTED;
 	}
 
 	if (login_user < 0) {
@@ -1696,8 +1702,11 @@ pkcs15_change_pin(struct sc_pkcs11_slot *slot,
 		}
 		rc = sc_pkcs15_unblock_pin(fw_data->p15_card, pin_obj, pOldPin, ulOldLen, pNewPin, ulNewLen);
 	}
-	else if ((login_user == CKU_USER) || (login_user == CKU_SO)) {
-		rc = sc_pkcs15_change_pin(fw_data->p15_card, pin_obj, pOldPin, ulOldLen, pNewPin, ulNewLen);
+	else if ((login_user == CKU_USER) || (login_user == CKU_SO))   {
+		if (auth_info->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)
+			rc = sc_pkcs15_change_authkey(fw_data->p15_card, pin_obj, pOldPin, ulOldLen, pNewPin, ulNewLen);
+		else
+			rc = sc_pkcs15_change_pin(fw_data->p15_card, pin_obj, pOldPin, ulOldLen, pNewPin, ulNewLen);
 	}
 	else {
 		sc_log(context, "cannot change PIN: non supported login type: %i", login_user);

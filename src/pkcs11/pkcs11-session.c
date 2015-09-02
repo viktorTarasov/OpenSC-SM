@@ -388,7 +388,7 @@ CK_RV C_SetPIN(CK_SESSION_HANDLE hSession,
 	}
 
 	slot = session->slot;
-	sc_log(context, "Changing PIN (session 0x%lx; login user %d)", hSession, slot->login_user);
+	sc_log(context, "Changing PIN (session:%lx login-type:%d) framework->change-pin %p", hSession, slot->login_user, slot->p11card->framework->change_pin);
 
 	if (!(session->flags & CKF_RW_SESSION)) {
 		rv = CKR_SESSION_READ_ONLY;
