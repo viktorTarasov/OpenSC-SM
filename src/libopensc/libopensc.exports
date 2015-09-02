@@ -144,6 +144,7 @@ sc_pkcs15_card_clear
 sc_pkcs15_card_free
 sc_pkcs15_card_new
 sc_pkcs15_change_pin
+sc_pkcs15_change_authkey
 sc_pkcs15_compare_id
 sc_pkcs15_compute_signature
 sc_pkcs15_decipher

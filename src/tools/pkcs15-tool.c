@@ -1458,7 +1458,6 @@ static int change_pin(void)
 		return 2;
 
 	pinfo = (sc_pkcs15_auth_info_t *) pin_obj->data;
-	printf("%i: PIN auth type %X/%X\n", __LINE__, pinfo->auth_type, SC_PKCS15_PIN_AUTH_TYPE_PIN);
 	if ((pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN) && (pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY))
 		return 1;
 
@@ -1516,8 +1515,18 @@ static int change_pin(void)
 		newpin=NULL;
 	}
 
-	r = sc_pkcs15_change_pin(p15card, pin_obj, pincode, pincode ? strlen((char *) pincode) : 0,
-			newpin, newpin ? strlen((char *) newpin) : 0);
+	if (pinfo->auth_type == SC_PKCS15_PIN_AUTH_TYPE_PIN)   {
+		r = sc_pkcs15_change_pin(p15card, pin_obj, pincode, pincode ? strlen((char *) pincode) : 0,
+				newpin, newpin ? strlen((char *) newpin) : 0);
+	}
+	else if (pinfo->auth_type == SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)   {
+		r = sc_pkcs15_change_authkey(p15card, pin_obj, pincode, pincode ? strlen((char *) pincode) : 0,
+				newpin, newpin ? strlen((char *) newpin) : 0);
+	}
+	else   {
+		return 2;
+	}
+
 	if (r == SC_ERROR_PIN_CODE_INCORRECT) {
 		fprintf(stderr, "PIN code incorrect; tries left: %d\n", pinfo->tries_left);
 		return 3;

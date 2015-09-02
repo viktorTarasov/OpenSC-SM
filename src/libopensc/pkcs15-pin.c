@@ -389,10 +389,8 @@ out:
 /*
  * Change a PIN.
  */
-int sc_pkcs15_change_pin(struct sc_pkcs15_card *p15card,
-			 struct sc_pkcs15_object *pin_obj,
-			 const u8 *oldpin, size_t oldpinlen,
-			 const u8 *newpin, size_t newpinlen)
+int sc_pkcs15_change_pin(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *pin_obj,
+		const u8 *oldpin, size_t oldpinlen, const u8 *newpin, size_t newpinlen)
 {
 	struct sc_context *ctx = p15card->card->ctx;
 	struct sc_pin_cmd_data data;
@@ -474,6 +472,79 @@ out:
 	sc_unlock(card);
 	return r;
 }
+
+/*
+ * Change a Auth Key
+ */
+int sc_pkcs15_change_authkey(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *pin_obj,
+		const u8 *oldpin, size_t oldpinlen, const u8 *newpin, size_t newpinlen)
+{
+	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_pin_cmd_data data;
+	struct sc_pkcs15_auth_info *auth_info = (struct sc_pkcs15_auth_info *)pin_obj->data;
+	struct sc_card *card = p15card->card;
+	unsigned char cur_bin[0x100], new_bin[0x100];
+	size_t cur_bin_len = sizeof(cur_bin), new_bin_len = sizeof(new_bin);
+	int r;
+
+	LOG_FUNC_CALLED(ctx);
+	if (auth_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_AUTH_KEY)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	/* make sure the pins are in valid range */
+	r = _validate_pin(p15card, auth_info, oldpinlen);
+	LOG_TEST_RET(ctx, r, "Old PIN value do not conform PIN policy");
+
+	r = _validate_pin(p15card, auth_info, newpinlen);
+	LOG_TEST_RET(ctx, r, "New PIN value do not conform PIN policy");
+
+	card = p15card->card;
+	r = sc_lock(card);
+	LOG_TEST_RET(ctx, r, "sc_lock() failed");
+	/* the path in the pin object is optional */
+	if (auth_info->path.len > 0) {
+		r = sc_select_file(card, &auth_info->path, NULL);
+		if (r)
+			goto out;
+	}
+
+	sc_hex_to_bin(oldpin, cur_bin, &cur_bin_len);
+	sc_hex_to_bin(newpin, new_bin, &new_bin_len);
+
+	/* set pin_cmd data */
+	memset(&data, 0, sizeof(data));
+	data.cmd             = SC_PIN_CMD_CHANGE;
+	data.pin_type        = SC_AC_AUT;
+	data.pin_reference   = auth_info->attrs.authkey.reference;
+	data.pin1.data       = cur_bin;
+	data.pin1.len        = cur_bin_len;
+	data.pin2.data       = new_bin;
+	data.pin2.len        = new_bin_len;
+
+	if((!oldpin || !newpin) && p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD) {
+		data.flags |= SC_PIN_CMD_USE_PINPAD;
+		if (auth_info->attrs.pin.flags & SC_PKCS15_PIN_FLAG_SO_PIN) {
+			data.pin1.prompt = "Please enter SO PIN";
+			data.pin2.prompt = "Please enter new SO PIN";
+		}
+		else {
+			data.pin1.prompt = "Please enter PIN";
+			data.pin2.prompt = "Please enter new PIN";
+		}
+	}
+
+	r = sc_pin_cmd(card, &data, &auth_info->tries_left);
+	if (r == SC_SUCCESS)
+		sc_pkcs15_pincache_add(p15card, pin_obj, newpin, newpinlen);
+
+out:
+	sc_unlock(card);
+	return r;
+}
+
+
+
+
 
 /*
  * Unblock a PIN.

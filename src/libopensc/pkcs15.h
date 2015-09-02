@@ -801,6 +801,10 @@ int sc_pkcs15_change_pin(struct sc_pkcs15_card *card,
 			 struct sc_pkcs15_object *pin_obj,
 			 const u8 *oldpincode, size_t oldpinlen,
 			 const u8 *newpincode, size_t newpinlen);
+int sc_pkcs15_change_authkey(struct sc_pkcs15_card *,
+			 struct sc_pkcs15_object *,
+		         const u8 *, size_t,
+			 const u8 *, size_t);
 int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *card,
 			 struct sc_pkcs15_object *pin_obj,
 			 const u8 *puk, size_t puklen,

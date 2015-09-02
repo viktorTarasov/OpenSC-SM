@@ -80,7 +80,10 @@ vsctpm_add_user_pin (struct sc_pkcs15_card *p15card)
 
 	rv = vsctpm_md_get_pin_info(card, ROLE_USER, &md_pin_info);
         LOG_TEST_RET(ctx, rv, "Failed to get User PIN info");
-	sc_log(ctx, "User PIN type %X, purpose %X", md_pin_info.PinType, md_pin_info.PinPurpose);
+	sc_log(ctx, "User PIN (type:%X purpose:%X changePermission:%X unblockPermission:%X flags:%X",
+			md_pin_info.PinType, md_pin_info.PinPurpose,
+			md_pin_info.dwChangePermission, md_pin_info.dwUnblockPermission,
+			md_pin_info.dwFlags);
 
 	if (md_pin_info.PinType != AlphaNumericPinType)    {
 		sc_log(ctx, "User PIN is expected to be AlphaNumeric");
@@ -137,7 +140,10 @@ vsctpm_add_user_puk (struct sc_pkcs15_card *p15card)
 
 	rv = vsctpm_md_get_pin_info(card, ROLE_ADMIN, &md_pin_info);
         LOG_TEST_RET(ctx, rv, "Failed to get User PIN info");
-	sc_log(ctx, "Admin PIN type %X, purpose %X", md_pin_info.PinType, md_pin_info.PinPurpose);
+	sc_log(ctx, "Admin PIN (type:%X purpose:%X changePermission:%X unblockPermission:%X flags:%X",
+			md_pin_info.PinType, md_pin_info.PinPurpose,
+			md_pin_info.dwChangePermission, md_pin_info.dwUnblockPermission,
+			md_pin_info.dwFlags);
 
 	if (md_pin_info.PinType != ChallengeResponsePinType)   {
 		sc_log(ctx, "Admin PIN is expected to be ChallengeResponsePinType");

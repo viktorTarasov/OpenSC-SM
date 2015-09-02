@@ -822,7 +822,7 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 
 
 int
-vsctpm_md_pin_change(struct sc_card *card, int pin_role,
+vsctpm_md_pin_change(struct sc_card *card,
 		const unsigned char *cur_pin, size_t cur_pin_size,
 		const unsigned char *new_pin, size_t new_pin_size,
 		int *tries_left)
@@ -836,13 +836,58 @@ vsctpm_md_pin_change(struct sc_card *card, int pin_role,
 	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_pin_change(cur:'%s' new:'%s')", sc_dump_hex(cur_pin, cur_pin_size), sc_dump_hex(new_pin, new_pin_size));
-	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data,
-			PIN_CHANGE_FLAG_CHANGEPIN,
-			pin_role, cur_pin, cur_pin_size,
-			pin_role, new_pin, new_pin_size,
-			pin_role == ROLE_USER ? VSCTPM_USER_PIN_RETRY_COUNT : VSCTPM_ADMIN_PIN_RETRY_COUNT,
-			&attempts);
+	sc_log(ctx, "vsctpm_md_pin_change(cur:'%s',new:'%s')", sc_dump_hex(cur_pin, cur_pin_size), sc_dump_hex(new_pin, new_pin_size));
+	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
+			ROLE_USER, cur_pin, cur_pin_size, ROLE_USER, new_pin, new_pin_size, 0, &attempts);
+	if (hRes == SCARD_W_RESET_CARD)   {
+		int rv;
+		sc_log(ctx, "CardAuthenticateEx() failed: RESET-CARD");
+		rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+		LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
+
+		sc_md_delete_context(card);
+		rv = sc_md_acquire_context(card);
+		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+		// pin_role == ROLE_USER ? VSCTPM_USER_PIN_RETRY_COUNT : VSCTPM_ADMIN_PIN_RETRY_COUNT,
+		hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
+			ROLE_USER, cur_pin, cur_pin_size, ROLE_USER, new_pin, new_pin_size, 0, &attempts);
+	}
+
+	if (hRes == SCARD_W_WRONG_CHV)   {
+		if (tries_left)
+			*tries_left = attempts;
+		sc_log(ctx, "attempts left %i", attempts);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	else if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardAuthenticateEx() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+vsctpm_md_authkey_change(struct sc_card *card,
+		const unsigned char *auth_data, size_t auth_data_size,
+		const unsigned char *new_key, size_t new_key_size,
+		int *tries_left)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	HRESULT hRes = S_OK;
+	DWORD attempts = 0;
+
+	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "vsctpm_md_authkey_change(auth-data:'%s',new:'%s')", sc_dump_hex(auth_data, auth_data_size), sc_dump_hex(new_key, new_key_size));
+	// pin_role == ROLE_USER ? VSCTPM_USER_PIN_RETRY_COUNT : VSCTPM_ADMIN_PIN_RETRY_COUNT,
+	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
+			ROLE_ADMIN, auth_data, auth_data_size,
+			ROLE_ADMIN, new_key, new_key_size, 0, &attempts);
 	if (hRes == SCARD_W_WRONG_CHV)   {
 		if (tries_left)
 			*tries_left = attempts;
@@ -1604,6 +1649,19 @@ vsctpm_md_get_challenge(struct sc_card *card, unsigned char *rnd, size_t len)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	hRes = priv->md.card_data.pfnCardGetChallenge(&priv->md.card_data, &pbBinChallenge, &cBinChallenge);
+	if (hRes == SCARD_W_RESET_CARD)   {
+		int rv;
+		sc_log(ctx, "CardGetChallenge() failed: RESET-CARD");
+		rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+		LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
+
+		sc_md_delete_context(card);
+		rv = sc_md_acquire_context(card);
+		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+		hRes = priv->md.card_data.pfnCardGetChallenge(&priv->md.card_data, &pbBinChallenge, &cBinChallenge);
+	}
+
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetChallenge(%p,%i) failed: hRes %lX", rnd, len, hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
