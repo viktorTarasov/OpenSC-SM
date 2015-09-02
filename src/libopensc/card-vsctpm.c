@@ -579,8 +579,6 @@ vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int
 	if (pin_cmd->pin1.len > sizeof(priv->admin_key))
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_DATA, "Invalid AUTH key length");
 
-	sc_log(ctx, "PIN data 01 %s", sc_dump_hex(pin_cmd->pin1.data, pin_cmd->pin1.len));
-
 	memset(challenge, 0, sizeof(challenge));
 	rv = vsctpm_md_get_challenge(card, challenge, sizeof(challenge));
 	LOG_TEST_RET(ctx, rv, "MD get challenge failed");
@@ -601,55 +599,6 @@ vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int
 }
 
 
-#if 0
-static int
-vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
-{
-	struct sc_context *ctx = card->ctx;
-#ifdef ENABLE_MINIDRIVER
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
-	struct sc_apdu apdu;
-	int rv;
-
-	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Verify PIN(type:%X,ref:%i,len:%i)", pin_cmd->pin_type, pin_cmd->pin_reference, pin_cmd->pin1.len);
-
-	if (pin_cmd->pin_type == SC_AC_AUT)   {
-		rv = vsctpm_authkey_verify(card, pin_cmd, tries_left);
-		LOG_FUNC_RETURN(ctx, rv);
-	}
-
-	if (pin_cmd->pin1.data && !pin_cmd->pin1.len)   {
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0x20, 0, pin_cmd->pin_reference);
-	}
-	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x20, 0, pin_cmd->pin_reference);
-		apdu.data = pin_cmd->pin1.data;
-		apdu.datalen = pin_cmd->pin1.len;
-		apdu.lc = pin_cmd->pin1.len;
-	}
-	else   {
-		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
-	}
-
-	rv = sc_transmit_apdu(card, &apdu);
-	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-
-	if (tries_left && apdu.sw1 == 0x63 && (apdu.sw2 & 0xF0) == 0xC0)
-		*tries_left = apdu.sw2 & 0x0F;
-
-	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
-	LOG_TEST_RET(ctx, rv, "Verify PIN failed");
-
-	priv->user_logged = 1;
-	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
-#else
-	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
-#endif
-}
-#endif
-
-
 #ifdef ENABLE_MINIDRIVER
 static int
 vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tries_left)
@@ -666,9 +615,8 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 	}
 	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
 		rv = vsctpm_md_pin_authenticate(card,  pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
-		LOG_TEST_RET(ctx, rv, "PIN authenticate failed");
-
-		priv->user_logged = 1;
+		if (!rv)
+			priv->user_logged = 1;
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);

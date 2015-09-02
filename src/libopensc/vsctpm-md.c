@@ -883,8 +883,8 @@ vsctpm_md_authkey_change(struct sc_card *card,
 	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_authkey_change(auth-data:'%s',new:'%s')", sc_dump_hex(auth_data, auth_data_size), sc_dump_hex(new_key, new_key_size));
-	// pin_role == ROLE_USER ? VSCTPM_USER_PIN_RETRY_COUNT : VSCTPM_ADMIN_PIN_RETRY_COUNT,
+	sc_log(ctx, "vsctpm_md_authkey_change(auth-data:'%s')", sc_dump_hex(auth_data, auth_data_size));
+	sc_log(ctx, "vsctpm_md_authkey_change(new-key:'%s')", sc_dump_hex(new_key, new_key_size));
 	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
 			ROLE_ADMIN, auth_data, auth_data_size,
 			ROLE_ADMIN, new_key, new_key_size, 0, &attempts);

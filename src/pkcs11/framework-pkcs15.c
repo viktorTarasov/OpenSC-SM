@@ -505,7 +505,6 @@ CK_RV C_GetTokenInfo(CK_SLOT_ID slotID, CK_TOKEN_INFO_PTR pInfo)
 		}
 
 		r = sc_pin_cmd(slot->p11card->card, &data, NULL);
-		sc_log(context, "C_GetTokenInfo(): get-pin-info() rv %i", r);
 		if (r == SC_SUCCESS) {
 			if (data.pin1.max_tries > 0)
 				pin_info->max_tries = data.pin1.max_tries;

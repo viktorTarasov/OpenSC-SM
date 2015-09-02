@@ -1747,7 +1747,6 @@ sc_pkcs15_find_pin_by_flags(struct sc_pkcs15_card *p15card,
 	for (i=idx; i<num; i++)   {
 		struct sc_pkcs15_auth_info *pin_info = (struct sc_pkcs15_auth_info *)(*(auths + i))->data;
 
-		sc_log(ctx, "Try auth object '%s', pin_info->auth_type %X", (*(auths + i))->label, pin_info->auth_type);
 		if (!pin_info)
 			continue;
 
