@@ -244,6 +244,24 @@ sc_dump_hex(const u8 * in, size_t count)
 }
 
 char *
+sc_dump_pin(const u8 * in, size_t count)
+{
+	static char pin_buf[0x200];
+	size_t ii, size = sizeof(pin_buf);
+	size_t offs = 0;
+
+	memset(pin_buf, 0, sizeof(pin_buf));
+	if (!in || !count)
+		return pin_buf;
+
+	if (count > 4)
+		snprintf(pin_buf, sizeof(pin_buf) - 1, "%02X...%02X(%i)", *in, *(in + count - 1), count);
+	else
+		snprintf(pin_buf, sizeof(pin_buf) - 1, "%02X...(%i)", *in, count);
+	return pin_buf;
+}
+
+char *
 sc_dump_oid(const struct sc_object_id *oid)
 {
 	static char dump_buf[SC_MAX_OBJECT_ID_OCTETS * 20];

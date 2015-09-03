@@ -296,7 +296,7 @@ int sc_pkcs15_verify_pin(struct sc_pkcs15_card *p15card,
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "PKCS#15 verify PIN(type:%X;method:%X)", auth_info->auth_type, auth_info->auth_method);
-	sc_log(ctx, "PIN(%i): %s", pinlen, sc_dump_hex(pincode, pinlen));
+	sc_log(ctx, "PIN(%s)", sc_dump_pin(pincode, pinlen));
 
 	if (pinlen > SC_MAX_PIN_SIZE)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_PIN_LENGTH, "Invalid PIN size");

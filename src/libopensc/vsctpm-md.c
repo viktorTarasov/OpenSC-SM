@@ -265,30 +265,6 @@ vsctpm_md_test_ncrypt(struct sc_card *card, char *container, unsigned type, size
 			sc_log(ctx, "CryptDecodeObject(RSA_CSP_PUBLICKEYBLOB) failed: error %X", GetLastError());
 		}
 
-/*
-		pszProperty = NCRYPT_CERTIFICATE_PROPERTY;
-		ntStatus = NCryptGetProperty(hKey, pszProperty, NULL, 0, &cbPubKeyBlob, NCRYPT_PERSIST_ONLY_FLAG);
-		if (!BCRYPT_SUCCESS(ntStatus)) {
-			sc_log(ctx, "NCryptGetProperty(pszProperty) get size : error 0x%x", ntStatus);
-			break;
-		}
-		else   {
-			sc_log(ctx, "NCryptGetProperty(pszProperty) need %i bytes to allocate", cbPubKeyBlob);
-		}
-		pbPubKeyBlob = LocalAlloc(0, cbPubKeyBlob);
-		if (!pbPubKeyBlob)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-		ntStatus = NCryptGetProperty(hKey, pszProperty, pbPubKeyBlob, cbPubKeyBlob, &cbPubKeyBlob, NCRYPT_PERSIST_ONLY_FLAG);
-		if (!BCRYPT_SUCCESS(ntStatus)) {
-			sc_log(ctx, "NCryptGetProperty(pszProperty) : error 0x%x", ntStatus);
-			break;
-		}
-		else   {
-			sc_log(ctx, "NCryptGetProperty(pszProperty) ntStatus 0x%X", ntStatus);
-		}
-		sc_log(ctx, "NCRYPT_READER_PROPERTY '%s'", sc_dump_hex(pbPubKeyBlob, cbPubKeyBlob));
-*/
-
 		if (CryptDecodeObjectEx(dwEncodingType, CNG_RSA_PUBLIC_KEY_BLOB, pbPubKeyBlob, cbPubKeyBlob, 0, NULL, NULL, &cbPubKeyInfo))   {
 			pbPubKeyInfo = (CERT_PUBLIC_KEY_INFO *) LocalAlloc(0, cbPubKeyInfo);
 			if (!pbPubKeyInfo)
@@ -489,8 +465,8 @@ vsctpm_md_test(struct sc_card *card)
 				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
 				continue;
 			}
-			sc_log(ctx, "Certificate for '%s', pCertContext %p", pszNameString, pCertContext);
-			sc_log(ctx, "type 0x%X, data(%i) %p", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded, pCertContext->pbCertEncoded);
+			sc_log(ctx, "Certificate for '%s'", pszNameString);
+			// sc_log(ctx, "type 0x%X, data(%i) %p", pCertContext->dwCertEncodingType, pCertContext->cbCertEncoded, pCertContext->pbCertEncoded);
 			// sc_log(ctx, "cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
 			sc_log(ctx, "cert serial '%s'", sc_dump_hex(pCertContext->pCertInfo->SerialNumber.pbData, pCertContext->pCertInfo->SerialNumber.cbData));
 
@@ -503,7 +479,6 @@ vsctpm_md_test(struct sc_card *card)
 				CRYPT_KEY_PROV_INFO *keyInfo;
 				char name[255];
 
-				// sc_log(ctx, "KeyInfo (%i) %s", len, sc_dump_hex(buf, len));
 				keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
 
 				sc_log(ctx, "KeyInfo (%i), key spec 0x%X, provType 0x%X, flags 0x%X, number of params %i", len,
@@ -518,10 +493,8 @@ vsctpm_md_test(struct sc_card *card)
 			}
 		}
 
-		if (!CertCloseStore(hCertStore, 0))
-			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
-		else
-			sc_log(ctx, "CertCloseStore() cert store closed");
+		CertCloseStore(hCertStore, 0);
+		sc_log(ctx, "CertCloseStore() closed");
 	}
 
 	{
@@ -791,7 +764,7 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 	if (!priv->md.card_data.pfnCardAuthenticateEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_pin_authenticate(%i:'%s')", pin_size, pin ? sc_dump_hex(pin, pin_size) : "null");
+	sc_log(ctx, "vsctpm_md_pin_authenticate(pin:'%s')", pin ? sc_dump_pin(pin, pin_size) : "null");
 	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, pin_size, NULL, NULL, &attempts);
 	if (hRes == SCARD_W_RESET_CARD)   {
 		int rv;
@@ -836,7 +809,8 @@ vsctpm_md_pin_change(struct sc_card *card,
 	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_pin_change(cur:'%s',new:'%s')", sc_dump_hex(cur_pin, cur_pin_size), sc_dump_hex(new_pin, new_pin_size));
+	sc_log(ctx, "vsctpm_md_pin_change(cur:'%s')", sc_dump_pin(cur_pin, cur_pin_size));
+	sc_log(ctx, "vsctpm_md_pin_change(new:'%s')", sc_dump_pin(new_pin, new_pin_size));
 	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
 			ROLE_USER, cur_pin, cur_pin_size, ROLE_USER, new_pin, new_pin_size, 0, &attempts);
 	if (hRes == SCARD_W_RESET_CARD)   {
@@ -883,8 +857,8 @@ vsctpm_md_authkey_change(struct sc_card *card,
 	if (!priv->md.card_data.pfnCardChangeAuthenticatorEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_authkey_change(auth-data:'%s')", sc_dump_hex(auth_data, auth_data_size));
-	sc_log(ctx, "vsctpm_md_authkey_change(new-key:'%s')", sc_dump_hex(new_key, new_key_size));
+	sc_log(ctx, "vsctpm_md_authkey_change(auth-data:'%s')", sc_dump_pin(auth_data, auth_data_size));
+	sc_log(ctx, "vsctpm_md_authkey_change(new-key:'%s')", sc_dump_pin(new_key, new_key_size));
 	hRes = priv->md.card_data.pfnCardChangeAuthenticatorEx(&priv->md.card_data, PIN_CHANGE_FLAG_CHANGEPIN,
 			ROLE_ADMIN, auth_data, auth_data_size,
 			ROLE_ADMIN, new_key, new_key_size, 0, &attempts);
@@ -1770,8 +1744,8 @@ vsctpm_md_user_pin_unblock(struct sc_card *card,
 	if (!auth || !auth_len || !pin || !pin_len)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
-	sc_log(ctx, "Auth Data(%i)'%s'", auth_len, sc_dump_hex(auth, auth_len));
-	sc_log(ctx, "NewPIN(%i)'%s'", pin_len, sc_dump_hex(pin, pin_len));
+	sc_log(ctx, "Auth Data('%s')", sc_dump_pin(auth, auth_len));
+	sc_log(ctx, "NewPIN('%s')", sc_dump_pin(pin, pin_len));
 	hRes = priv->md.card_data.pfnCardUnblockPin(&priv->md.card_data, wszCARD_USER_USER,
 			auth, auth_len, pin, pin_len,
 			tries_left, CARD_AUTHENTICATE_PIN_CHALLENGE_RESPONSE);
@@ -2428,7 +2402,7 @@ vsctpm_get_pin_from_cache(struct sc_pkcs15_card *p15card, char *pin, size_t pin_
 
         rv = sc_pkcs15_find_pin_by_reference(p15card, NULL, VSCTPM_USER_PIN_REF, &pin_obj);
         LOG_TEST_RET(ctx, rv, "Cannot get PIN object");
-        sc_log(ctx, "PIN in cache: %s", sc_dump_hex(pin_obj->content.value, pin_obj->content.len));
+        sc_log(ctx, "PIN in cache: %s", sc_dump_pin(pin_obj->content.value, pin_obj->content.len));
 
         if (!pin_obj->content.len)
                 LOG_FUNC_RETURN(ctx, SC_ERROR_REF_DATA_NOT_USABLE);
