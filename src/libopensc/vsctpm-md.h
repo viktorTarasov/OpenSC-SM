@@ -119,6 +119,8 @@ struct vsctpm_deskey_blob {
 
 #define VSCTPM_MD_ENTRY_DNAME_SIZE 9
 #define VSCTPM_MD_ENTRY_FNAME_SIZE 11
+#define VSCTPM_MD_ENTRY_SIZE 28
+
 struct vsctpm_md_file {
         char dname[VSCTPM_MD_ENTRY_DNAME_SIZE + 1];
         char fname[VSCTPM_MD_ENTRY_FNAME_SIZE + 1];

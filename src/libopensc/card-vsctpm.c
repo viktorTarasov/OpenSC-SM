@@ -133,7 +133,7 @@ vsctpm_get_data(struct sc_card *card, unsigned file_id, unsigned tag, unsigned c
 	struct sc_context *ctx = card->ctx;
 	struct sc_apdu apdu;
 	unsigned char sbuf[4] = {0x5C, 0x02, 0xFF, 0xFF};
-	unsigned char rbuf[0x100];
+	unsigned char rbuf[0x400];
 	unsigned char p1, p2;
 	int rv;
 
@@ -152,7 +152,7 @@ vsctpm_get_data(struct sc_card *card, unsigned file_id, unsigned tag, unsigned c
 	apdu.lc = apdu.datalen;
 	apdu.resp = rbuf;
 	apdu.resplen = sizeof(rbuf);
-	apdu.le = sizeof(rbuf);
+	apdu.le = 0x100;
 
 	rv = sc_transmit_apdu(card, &apdu);
 	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
@@ -234,9 +234,9 @@ vsctpm_get_md_entries(struct sc_card *card)
 {
 	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
-	unsigned char *blob = NULL, *ptr;
-	size_t blob_len;
-	int rv;
+	unsigned char *blob = NULL, *ptr, *data;
+	size_t blob_len, data_len, offs, nn;
+	int rv, ii;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -245,16 +245,31 @@ vsctpm_get_md_entries(struct sc_card *card)
 
 	if (*blob != 0xDF || *(blob + 1) != 0x1F)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+	offs = 2;
 
-	/* TODO: size can be encoded in more then one byte */
-	ptr = blob + 5;
+	if (*(blob + offs) & 0x80)   {
+		nn = *(blob + offs++) & 0x7F;
+		for (ii=0, data_len=0; ii<nn; ii++)
+			data_len = data_len * 0x100 + *(blob + offs + ii);
+		offs += nn;
+	}
+	else    {
+		data_len = *(blob + offs++);
+	}
+
+	if (*(blob + offs++) != 0x01)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
+	data_len--;
+
+	data = ptr = blob + offs;
+	sc_log(ctx, "offset %i, data-length %i", offs, data_len);
 
 	if (prv_data->md_files)
 		free(prv_data->md_files);
 	prv_data->md_files = NULL;
 	prv_data->md_files_num = 0;
 
-	while ((unsigned)(ptr - blob) < blob_len)   {
+	while ((unsigned)(ptr - data) < data_len)   {
 		struct vsctpm_md_file mdf;
 		unsigned char *tail = NULL;
 
