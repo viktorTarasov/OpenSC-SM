@@ -486,7 +486,7 @@ vsctpm_md_test(struct sc_card *card)
 			char pszNameString[256];
 
 			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
-				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
 				continue;
 			}
 			sc_log(ctx, "Certificate for '%s', pCertContext %p", pszNameString, pCertContext);
@@ -514,7 +514,7 @@ vsctpm_md_test(struct sc_card *card)
 					sc_log(ctx, "pwszProvName: %s", name);
 			}
 			else   {
-				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
 			}
 		}
 
@@ -1031,7 +1031,7 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 			char pszNameString[256];
 
 			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
-				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
 				continue;
 			}
 			sc_log(ctx, "Found certificate '%s'", pszNameString);
@@ -1061,7 +1061,7 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 				}
 			}
 			else   {
-				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
 				continue;
 			}
 		}
@@ -1099,7 +1099,7 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 			char pszNameString[256];
 
 			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
-				sc_log(ctx, "CertificateName failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
 				continue;
 			}
 			sc_log(ctx, "Found certificate '%s'", pszNameString);
@@ -1125,7 +1125,7 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 				}
 			}
 			else   {
-				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error Ox%X", GetLastError());
+				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
 				continue;
 			}
 		}
@@ -1494,23 +1494,22 @@ vsctpm_md_cmap_reload(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-#if 1
+
 int
 vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
-	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	CARD_SIGNING_INFO sign_info;
 	CONTAINER_MAP_RECORD *rec = NULL;
 	HRESULT hRes = S_OK;
-	PBYTE pbBinChallenge = NULL;
-	DWORD cBinChallenge = 0;
-	unsigned char *ptr = NULL;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!priv->md.card_data.pfnCardSignData)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "CMAP index %i, data-to-sign(%i) %s", idx, in_len, sc_dump_hex(in, in_len));
 
 	rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + idx * sizeof(CONTAINER_MAP_RECORD));
 
@@ -1533,121 +1532,70 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		sc_log(ctx, "CardSignData() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
-	sc_log(ctx, "signature(%i) %s", sign_info.cbSignedData, sc_dump_hex(sign_info.pbSignedData, sign_info.cbSignedData));
 	if (out && out_len)   {
 		if (out_len < sign_info.cbSignedData)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 		memcpy(out, sign_info.pbSignedData, sign_info.cbSignedData);
 		sc_mem_reverse(out, sign_info.cbSignedData);
+		sc_log(ctx, "computed signature(%i) %s", sign_info.cbSignedData, sc_dump_hex(out, sign_info.cbSignedData));
 	}
 
 	LocalFree(sign_info.pbSignedData);
 	LOG_FUNC_RETURN(ctx, sign_info.cbSignedData);
 }
-#else
+
+
 int
-vsctpm_md_compute_signature(struct sc_card *card, int idx,
+vsctpm_md_decipher(struct sc_card *card, int idx,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
+	CARD_RSA_DECRYPT_INFO decrypt_info;
 	CONTAINER_MAP_RECORD *rec = NULL;
-	HCRYPTPROV hCryptProv = 0;
 	HRESULT hRes = S_OK;
-	HCRYPTKEY  hKey;
-	HCRYPTHASH hHash;
-	WORD type = 0;
-	unsigned char data[2000];
-	size_t sz;
-	unsigned char *ptr = NULL;
-	char cont_guid[255], path[200], pin[50];
-	int rv = SC_ERROR_INTERNAL;
+	unsigned char buf[1024];
 
 	LOG_FUNC_CALLED(ctx);
+	if (!priv->md.card_data.pfnCardRSADecrypt)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "vsctpm_md_compute_signature() idx:%i, in(%i):%s", idx, in_len, sc_dump_hex(in, in_len));
+	if (sizeof(buf) < in_len)
+                LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+	memcpy(buf, in, in_len);
+	sc_log(ctx, "CMAP index %i, crypted data(%i) %s", idx, in_len, sc_dump_hex(buf, in_len));
+	sc_mem_reverse(buf, in_len);
 
 	rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + idx * sizeof(CONTAINER_MAP_RECORD));
-	wcstombs(cont_guid, rec->wszGuid, sizeof(cont_guid));
-	sc_log(ctx, "KeyExchange %i, Sign %i", rec->wKeyExchangeKeySizeBits, rec->wSigKeySizeBits);
 
-	if (rec->wKeyExchangeKeySizeBits)
-		type = AT_KEYEXCHANGE;
+	memset(&decrypt_info, 0, sizeof(CARD_RSA_DECRYPT_INFO));
+	decrypt_info.dwVersion = CARD_RSA_KEY_DECRYPT_INFO_CURRENT_VERSION;
+	decrypt_info.bContainerIndex = idx;
 	if (rec->wSigKeySizeBits)
-		type = AT_SIGNATURE;
-	if (!type)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_DATA);
-
-	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, cont_guid);
-	sc_log(ctx, "CryptAcquireContext('%s',CRYPT_MACHINE_KEYSET), container type %i", path, type);
-	if(!CryptAcquireContext(&hCryptProv, path, MS_SCARD_PROV_A, PROV_RSA_FULL, CRYPT_MACHINE_KEYSET))   {
-		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
+		decrypt_info.dwKeySpec = AT_SIGNATURE;
+	else if (rec->wKeyExchangeKeySizeBits)
+		decrypt_info.dwKeySpec = AT_KEYEXCHANGE;
+	else
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	decrypt_info.pbData = buf;
+	decrypt_info.cbData = in_len;
+	decrypt_info.dwPaddingType = CARD_PADDING_PKCS1;
+
+	hRes = priv->md.card_data.pfnCardRSADecrypt(&priv->md.card_data, &decrypt_info);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardRSADecrypt() failed: hRes %lX", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+	if (out && out_len)   {
+		if (out_len < decrypt_info.cbData)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		sc_mem_reverse(decrypt_info.pbData, decrypt_info.cbData);
+		memcpy(out, decrypt_info.pbData, decrypt_info.cbData);
+		sc_log(ctx, "decrypted data(%i) %s", decrypt_info.cbData, sc_dump_hex(out, decrypt_info.cbData));
 	}
 
-        rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
-	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
-
-	sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN)");
-	if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))   {
-		sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN) failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-
-	sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN)");
-	if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))   {
-		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-
-	sc_log(ctx, "CryptGetUserKey(%i)", type);
-	if (CryptGetUserKey(hCryptProv, type, &hKey))   {
-		sz = sizeof(data);
-		if (CryptGetKeyParam(hKey, KP_KEYLEN, data, &sz, 0))
-			rec->wKeyExchangeKeySizeBits = (WORD)(*((DWORD *)data));
-		if (CryptCreateHash(hCryptProv, CALG_SSL3_SHAMD5, 0, 0, &hHash))   {
-			sc_log(ctx, "CryptCreateHash() hHash:%X", hHash);
-
-			sz = sizeof(data);
-			if (CryptGetHashParam(hHash, HP_HASHSIZE, data, &sz, 0))
-				sc_log(ctx, "CryptGetHashParam(HP_HASHSIZE) size %i", *((DWORD *)data));
-
-			if (CryptSetHashParam(hHash, HP_HASHVAL, in, 0))   {
-				sc_log(ctx, "CryptSetHashParam(HP_HASHVAL) success");
-				sz = sizeof(data);
-				if (CryptSignHash(hHash, type, NULL, 0, &data[0], &sz))   {
-					sc_mem_reverse(data, sz);
-					sc_log(ctx, "CryptSignHash() signature %s", sc_dump_hex(data, sz));
-					if (sz > out_len)   {
-						rv = SC_ERROR_BUFFER_TOO_SMALL;
-					}
-					else   {
-						memcpy(out, data, sz);
-						rv = sz;
-					}
-				}
-				else   {
-					sc_log(ctx, "CryptSignHash() failed: error %X", GetLastError());
-				}
-			}
-			else   {
-				sc_log(ctx, "CryptSetHashParam() failed: error %X", GetLastError());
-			}
-
-			CryptDestroyHash(hHash);
-		}
-		else   {
-			sc_log(ctx, "CryptCreateHash() failed: error %X", GetLastError());
-		}
-
-		CryptDestroyKey(hKey);
-	}
-
-	CryptReleaseContext(hCryptProv, 0);
-
-	LOG_FUNC_RETURN(ctx, rv);
+	LOG_FUNC_RETURN(ctx, decrypt_info.cbData);
 }
-#endif
 
 
 int

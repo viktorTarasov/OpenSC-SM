@@ -95,7 +95,8 @@ int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, s
 int vsctpm_get_pin_from_cache(struct sc_pkcs15_card *, char *, size_t);
 int vsctpm_md_pin_change(struct sc_card *, const unsigned char *, size_t, const unsigned char *, size_t, int *);
 int vsctpm_md_authkey_change(struct sc_card *, const unsigned char *, size_t, const unsigned char *, size_t, int *);
-
+int vsctpm_md_compute_signature(struct sc_card *, int, const unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_decipher(struct sc_card *, int, const unsigned char *, size_t, unsigned char *, size_t);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;

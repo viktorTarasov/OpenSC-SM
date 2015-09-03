@@ -473,7 +473,7 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 
 	sc_log(ctx, "Private key index '0x%X'", idx);
         if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
-		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
+		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}
 	sc_log(ctx, "Private key label '%s'", kobj.label);
@@ -596,7 +596,7 @@ sc_pkcs15emu_vsctpm_container_add_pubkey(struct sc_pkcs15_card *p15card,
 
 	sc_log(ctx, "Public key index '0x%X'", idx);
         if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
-		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
+		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}
 	sc_log(ctx, "Public key label '%s'", kobj.label);
@@ -644,7 +644,7 @@ sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, const CE
 	memset(&cobj, 0, sizeof(cobj));
 
 	if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cobj.label, sizeof(cobj.label) - 1))   {
-		sc_log(ctx, "Cannot get certificate label: error Ox%X", GetLastError());
+		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}
 	cobj.flags |= SC_PKCS15_CO_FLAG_MODIFIABLE;

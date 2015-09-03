@@ -671,13 +671,10 @@ static int
 vsctpm_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	struct sc_context *ctx = card->ctx;
-	struct sc_apdu apdu;
-	unsigned reference = data->pin_reference;
-	unsigned char pin_data[0x100];
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", reference, data->pin_type, data->pin1.len, data->pin2.len);
+	sc_log(ctx, "Change PIN(ref:%i,type:0x%X,lengths:%i/%i)", data->pin_reference, data->pin_type, data->pin1.len, data->pin2.len);
 
 	if (!data->pin1.data && data->pin1.len)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
@@ -815,13 +812,7 @@ vsctpm_md_acquire_context(struct sc_card *card)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	sc_log(ctx, "MD: version %i of communication initialized with MD", priv->md.card_data.dwVersion);
-	sc_log(ctx, "MD: card-data pfnCardGetChallenge %p",		priv->md.card_data.pfnCardGetChallenge);
-	sc_log(ctx, "MD: card-data pfnCardAuthenticateChallenge %p",	priv->md.card_data.pfnCardAuthenticateChallenge);
-	sc_log(ctx, "MD: card-data pfnCardUnblockPin %p",		priv->md.card_data.pfnCardUnblockPin);
-	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticator %p",	priv->md.card_data.pfnCardChangeAuthenticator);
-	sc_log(ctx, "MD: card-data pfnCardChangeAuthenticatorEx %p",	priv->md.card_data.pfnCardChangeAuthenticatorEx);
-
+	sc_log(ctx, "MD: md-version %i, CardGetChallenge %p", priv->md.card_data.dwVersion, priv->md.card_data.pfnCardGetChallenge);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -878,7 +869,7 @@ vsctpm_set_security_env(struct sc_card *card, const struct sc_security_env *env,
 	};
 	int cmap_idx, key_size = 0;
 
-	sc_log(ctx, "set security env, operation: Ox%X, key-ref %i", env->operation, env->key_ref[0]);
+	sc_log(ctx, "set security env, operation: 0x%X, key-ref %i", env->operation, env->key_ref[0]);
 	cmap_idx = (env->key_ref[0] & 0x7F) - 1;
 
 	if (((CONTAINER_MAP_RECORD *)(prv_data->md.cmap_data.value) + cmap_idx)->wSigKeySizeBits)
@@ -934,50 +925,25 @@ vsctpm_compute_signature(struct sc_card *card, const unsigned char *in, size_t i
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid compute signature arguments");
 
 	cmap_idx = (prv_data->sec_env.key_ref[0] & 0x7F) - 1;
-	sc_log(ctx, "CMAP index %i", cmap_idx);
 
-#if 0
-	if (in_len == HASH_SIZE_CALG_SSL3_SHAMD5)   {
-		sc_log(ctx, "Use Crypto API, in-len %i", in_len);
-		rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, out, out_len);
-	}
-	else   {
-		struct sc_apdu apdu;
-
-		sc_log(ctx, "Use ISO-7816, in-len %i", in_len);
-		sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, prv_data->crt_tag);
-		apdu.data = prv_data->sec_data;
-		apdu.datalen = sizeof(prv_data->sec_data);
-		apdu.lc = sizeof(prv_data->sec_data);
-
-		rv = sc_transmit_apdu(card, &apdu);
-		LOG_TEST_RET(ctx, rv, "APDU transmit failed");
-		rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
-		LOG_TEST_RET(ctx, rv, "MSE restore error");
-
-		rv = iso_drv->ops->compute_signature(card, in, in_len, out, out_len);
-	}
-	LOG_TEST_RET(ctx, rv, "Compute signature failed");
-#else
-	sc_log(ctx, "Use Crypto API, in-len %i", in_len);
 	rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, out, out_len);
 	LOG_TEST_RET(ctx, rv, "MD compute signature failed");
-#endif
 
 	out_len = rv;
-	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
 
 	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
 	LOG_FUNC_RETURN(ctx, out_len);
 }
 
 
+#if 0
 static int
 vsctpm_decipher(struct sc_card *card,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_apdu apdu;
 	size_t save_max_send_size = card->max_send_size;
 	unsigned char *sbuf = NULL;
@@ -987,6 +953,19 @@ vsctpm_decipher(struct sc_card *card,
 	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
 	if (!card || !in || !out)
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
+
+	sc_log(ctx, "Use ISO-7816, in-len %i", in_len);
+	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, 0x41, prv_data->crt_tag);
+	apdu.data = prv_data->sec_data;
+	apdu.datalen = sizeof(prv_data->sec_data);
+	apdu.lc = sizeof(prv_data->sec_data);
+
+	rv = sc_transmit_apdu(card, &apdu);
+	LOG_TEST_RET(ctx, rv, "APDU transmit failed");
+	rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
+	LOG_TEST_RET(ctx, rv, "MSE restore error");
+
+	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
 
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_4, 0x2A, 0x80, 0x86);
 	apdu.flags |= SC_APDU_FLAGS_CHAINING;
@@ -1007,6 +986,32 @@ vsctpm_decipher(struct sc_card *card,
 
 	LOG_FUNC_RETURN(card->ctx, sc_check_sw(card, apdu.sw1, apdu.sw2));
 }
+#else
+static int
+vsctpm_decipher(struct sc_card *card, const unsigned char *in, size_t in_len,
+		unsigned char *out, size_t out_len)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *prv_data = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
+	int rv, cmap_idx;
+
+	LOG_FUNC_CALLED(ctx);
+	sc_log(ctx, "inlen %i, outlen %i", in_len, out_len);
+	if (!card || !in || !out)
+		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid decipher arguments");
+
+	cmap_idx = (prv_data->sec_env.key_ref[0] & 0x7F) - 1;
+	sc_log(ctx, "CMAP index %i", cmap_idx);
+
+	rv = vsctpm_md_decipher(card, cmap_idx, in, in_len, out, out_len);
+	LOG_TEST_RET(ctx, rv, "MD decipher failed");
+
+	out_len = rv;
+	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
+	LOG_FUNC_RETURN(ctx, out_len);
+}
+#endif
 
 
 static int
