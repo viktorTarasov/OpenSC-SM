@@ -1494,7 +1494,7 @@ vsctpm_md_cmap_reload(struct sc_card *card)
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
-#if 0
+#if 1
 int
 vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
@@ -1502,6 +1502,7 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	CARD_SIGNING_INFO sign_info;
+	CONTAINER_MAP_RECORD *rec = NULL;
 	HRESULT hRes = S_OK;
 	PBYTE pbBinChallenge = NULL;
 	DWORD cBinChallenge = 0;
@@ -1511,28 +1512,39 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	if (!priv->md.card_data.pfnCardSignData)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	memset(&sign_info, 0, sizeof(CARD_SIGNING_INFO));
+	rec = (CONTAINER_MAP_RECORD *)(priv->md.cmap_data.value + idx * sizeof(CONTAINER_MAP_RECORD));
 
-	hRes = priv->md.card_data.pfnCardSignData(&priv->md.card_data, );
+	memset(&sign_info, 0, sizeof(CARD_SIGNING_INFO));
+	sign_info.dwVersion = CARD_SIGNING_INFO_CURRENT_VERSION;
+	sign_info.bContainerIndex = idx;
+	if (rec->wSigKeySizeBits)
+		sign_info.dwKeySpec = AT_SIGNATURE;
+	else if (rec->wKeyExchangeKeySizeBits)
+		sign_info.dwKeySpec = AT_KEYEXCHANGE;
+	else
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	sign_info.dwSigningFlags = 0;
+	sign_info.aiHashAlg = 0;
+	sign_info.pbData = in;
+	sign_info.cbData = in_len;
+
+	hRes = priv->md.card_data.pfnCardSignData(&priv->md.card_data, &sign_info);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardSignData() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
-	sc_log(ctx, "Generated challenge(%i) %s", cBinChallenge, sc_dump_hex(pbBinChallenge, cBinChallenge));
-	if (!rnd)
-		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	sc_log(ctx, "signature(%i) %s", sign_info.cbSignedData, sc_dump_hex(sign_info.pbSignedData, sign_info.cbSignedData));
+	if (out && out_len)   {
+		if (out_len < sign_info.cbSignedData)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
+		memcpy(out, sign_info.pbSignedData, sign_info.cbSignedData);
+		sc_mem_reverse(out, sign_info.cbSignedData);
+	}
 
-	if (len < cBinChallenge)
-		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
-
-	len = cBinChallenge;
-	memcpy(rnd, pbBinChallenge, len);
-	LocalFree(pbBinChallenge);
-
-	LOG_FUNC_RETURN(ctx, len);
+	LocalFree(sign_info.pbSignedData);
+	LOG_FUNC_RETURN(ctx, sign_info.cbSignedData);
 }
-#endif
-
+#else
 int
 vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		const unsigned char *in, size_t in_len, unsigned char *out, size_t out_len)
@@ -1548,7 +1560,7 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	unsigned char data[2000];
 	size_t sz;
 	unsigned char *ptr = NULL;
-	char cont_guid[255], path[200], *pin = "12345678";
+	char cont_guid[255], path[200], pin[50];
 	int rv = SC_ERROR_INTERNAL;
 
 	LOG_FUNC_CALLED(ctx);
@@ -1572,6 +1584,9 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 		sc_log(ctx, "CryptAcquireContext(CRYPT_NEWKEYSET) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
+
+        rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
+	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
 
 	sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN)");
 	if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))   {
@@ -1632,6 +1647,7 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
+#endif
 
 
 int

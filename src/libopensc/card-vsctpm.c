@@ -936,7 +936,8 @@ vsctpm_compute_signature(struct sc_card *card, const unsigned char *in, size_t i
 	cmap_idx = (prv_data->sec_env.key_ref[0] & 0x7F) - 1;
 	sc_log(ctx, "CMAP index %i", cmap_idx);
 
-	if (0 && in_len == HASH_SIZE_CALG_SSL3_SHAMD5)   {
+#if 0
+	if (in_len == HASH_SIZE_CALG_SSL3_SHAMD5)   {
 		sc_log(ctx, "Use Crypto API, in-len %i", in_len);
 		rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, out, out_len);
 	}
@@ -957,12 +958,16 @@ vsctpm_compute_signature(struct sc_card *card, const unsigned char *in, size_t i
 		rv = iso_drv->ops->compute_signature(card, in, in_len, out, out_len);
 	}
 	LOG_TEST_RET(ctx, rv, "Compute signature failed");
+#else
+	sc_log(ctx, "Use Crypto API, in-len %i", in_len);
+	rv = vsctpm_md_compute_signature(card, cmap_idx, in, in_len, out, out_len);
+	LOG_TEST_RET(ctx, rv, "MD compute signature failed");
+#endif
 
 	out_len = rv;
 	sc_log(ctx, "direct signature value: %s", sc_dump_hex(out, out_len));
 
 	memset(&(prv_data->sec_env), 0, sizeof(prv_data->sec_env));
-
 	LOG_FUNC_RETURN(ctx, out_len);
 }
 
