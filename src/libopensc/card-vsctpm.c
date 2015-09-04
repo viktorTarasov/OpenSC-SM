@@ -418,12 +418,12 @@ vsctpm_select_aid(struct sc_card *card, struct sc_aid *aid, unsigned char *out, 
 static int
 vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 {
+#if 1
 	struct sc_context *ctx = card->ctx;
 	int rv;
-
-#if 0
 	struct vsctpm_md_file *mdf = NULL;
 	unsigned char *blob = NULL;
+	size_t blob_len = 0;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -451,8 +451,8 @@ vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 	/*
 	 * Cache serial number.
 	 */
-	memcpy(card->serialnr.value, blob + 3, MIN((*(blob + 2)), SC_MAX_SERIALNR));
-	card->serialnr.len = MIN((*(blob + 2)), SC_MAX_SERIALNR);
+	memcpy(card->serialnr.value, blob + 3, MIN(*(blob + 2), SC_MAX_SERIALNR));
+	card->serialnr.len = MIN(*(blob + 2), SC_MAX_SERIALNR);
 
 	/*
 	 * Copy and return serial number.
@@ -461,14 +461,19 @@ vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 		memcpy(serial, &card->serialnr, sizeof(*serial));
 
 	free(blob);
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 #else
+	struct sc_context *ctx = card->ctx;
+	int rv;
+
 	LOG_FUNC_CALLED(ctx);
 
 	rv = vsctpm_md_get_serial(card, serial);
 	LOG_TEST_RET(ctx, rv, "cannot get serial");
-#endif
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+#endif
 }
 
 
