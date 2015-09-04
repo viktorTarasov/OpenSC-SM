@@ -1373,8 +1373,12 @@ vsctpm_md_cmap_size(struct sc_card *card)
 		sz = sizeof(data);
 		if (CryptGetProvParam(hCryptProv, PP_CONTAINER, data, &sz, 0))   {
 			strcpy(default_cont, (char *)data);
-			sc_log(ctx, "Default container '%s'", default_cont);
+			sc_log(ctx, "PP_CONTAINER '%s'", default_cont);
 		}
+
+		sz = sizeof(data);
+		if (CryptGetProvParam(hCryptProv, PP_SMARTCARD_GUID, data, &sz, 0))
+			sc_log(ctx, "PP_SMARTCARD_GUID '%s'", sc_dump_hex(data, sz));
 
 		sz = sizeof(data);
 		if (CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_FIRST))   {
@@ -2051,7 +2055,7 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "KeyBlob(%i): %s", cbKeyBlob, sc_dump_hex(pbKeyBlob, cbKeyBlob));
 
-	// rv = vsctpm_md_test_ncrypt(card, container, type, key_length, pin, blob, blob_len);
+	// vsctpm_md_test_ncrypt(card, container, type, key_length, pin, blob, blob_len);
 
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
 	sc_log(ctx, "CryptAcquireContext('%s',0)", path);

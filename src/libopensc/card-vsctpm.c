@@ -457,7 +457,6 @@ vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 	memcpy(card->serialnr.value, blob + 3, MIN((*(blob + 2)), SC_MAX_SERIALNR));
 	card->serialnr.len = MIN((*(blob + 2)), SC_MAX_SERIALNR);
 
-
 	/*
 	 * Copy and return serial number.
 	 */
