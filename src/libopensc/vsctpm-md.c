@@ -647,8 +647,21 @@ vsctpm_md_get_card_info(struct sc_card *card)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	sz = sizeof(caps->free_space);
-	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE,
-			(PBYTE)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
+	hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE, (PBYTE)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
+	if (hRes == SCARD_W_RESET_CARD)   {
+		int rv;
+		sc_log(ctx, "CardAuthenticateEx() failed: RESET-CARD");
+		rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+		LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
+
+		sc_md_delete_context(card);
+		rv = sc_md_acquire_context(card);
+		LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+		hRes = priv->md.card_data.pfnCardGetProperty(&priv->md.card_data, CP_CARD_FREE_SPACE, (PBYTE)(&caps->free_space), sizeof(caps->free_space), &sz, 0);
+	}
+
+
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardGetProperty(CP_CARD_FREE_SPACE) failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -944,7 +957,7 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	struct sc_context *ctx = card->ctx;
 	HRESULT hRes = S_OK;
-	DWORD sz;
+	DWORD sz = 0;
 	unsigned char *buf = NULL, *ptr;
 
 	LOG_FUNC_CALLED(ctx);
@@ -956,9 +969,7 @@ vsctpm_md_enum_files(struct sc_card *card, char *dir_name, char **out, size_t *o
 	if (!priv->md.card_data.pfnCardEnumFiles)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
-	sc_log(ctx, "call pfhCardEnumFiles(%s)", dir_name);
 	hRes = priv->md.card_data.pfnCardEnumFiles(&priv->md.card_data, dir_name, &buf, &sz, 0);
-	sc_log(ctx, "call pfhCardEnumFiles(%s) hRes %lX", dir_name, hRes);
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardEnumFiles(%s) failed: hRes %lX", dir_name, hRes);
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
@@ -1377,8 +1388,15 @@ vsctpm_md_cmap_size(struct sc_card *card)
 		}
 
 		sz = sizeof(data);
-		if (CryptGetProvParam(hCryptProv, PP_SMARTCARD_GUID, data, &sz, 0))
+		if (CryptGetProvParam(hCryptProv, PP_SMARTCARD_GUID, data, &sz, 0))   {
 			sc_log(ctx, "PP_SMARTCARD_GUID '%s'", sc_dump_hex(data, sz));
+			memcpy(card->serialnr.value, data, MIN(sz, SC_MAX_SERIALNR));
+			card->serialnr.len = MIN(sz, SC_MAX_SERIALNR);
+		}
+		else   {
+			sc_log(ctx, "CryptGetProvParam(PP_SMARTCARD_GUID) failed: error %X", GetLastError());
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+		}
 
 		sz = sizeof(data);
 		if (CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_FIRST))   {
@@ -1402,7 +1420,6 @@ vsctpm_md_cmap_size(struct sc_card *card)
 
 				sz = sizeof(data);
 				hRes = CryptGetProvParam(hCryptProv,PP_ENUMCONTAINERS, data, &sz, CRYPT_NEXT);
-				sc_log(ctx, "HRES '%X'", hRes);
 			} while(hRes);
 
 			priv->md.cmap_data.len = nn_cont * sizeof(CONTAINER_MAP_RECORD);
@@ -1448,6 +1465,25 @@ vsctpm_md_cmap_size(struct sc_card *card)
 
 	nn_cont = priv->md.cmap_data.len / sizeof(CONTAINER_MAP_RECORD);
 	LOG_FUNC_RETURN(ctx, nn_cont);
+}
+
+
+int
+vsctpm_md_get_serial(struct sc_card *card, struct sc_serial_number *serial)
+{
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct sc_context *ctx = card->ctx;
+	int rv, nn_cont = 0;
+
+	LOG_FUNC_CALLED(ctx);
+
+	rv = vsctpm_md_cmap_size(card);
+	LOG_TEST_RET(ctx, rv, "Read CMAP file error");
+
+	if (card->serialnr.len)
+		if (serial)
+			*serial = card->serialnr;
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
 

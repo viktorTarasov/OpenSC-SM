@@ -97,6 +97,7 @@ int vsctpm_md_pin_change(struct sc_card *, const unsigned char *, size_t, const 
 int vsctpm_md_authkey_change(struct sc_card *, const unsigned char *, size_t, const unsigned char *, size_t, int *);
 int vsctpm_md_compute_signature(struct sc_card *, int, const unsigned char *, size_t, unsigned char *, size_t);
 int vsctpm_md_decipher(struct sc_card *, int, const unsigned char *, size_t, unsigned char *, size_t);
+int vsctpm_md_get_serial(struct sc_card *, struct sc_serial_number *);
 
 typedef struct _ENUM_ARG {
 	BOOL fAll;

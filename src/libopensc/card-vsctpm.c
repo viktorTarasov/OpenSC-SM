@@ -348,10 +348,6 @@ vsctpm_select_file(struct sc_card *card, const struct sc_path *path_in, struct s
 	case SC_PATH_TYPE_PATH:
 		sc_log(ctx, "vsctpm_select_file() path length %i", ipath.len);
 		if (ipath.len >= 2 && ipath.value[0] == 0x3F && ipath.value[1] == 0)   {
-//			sc_log(ctx, "select VSC AID instead of MF");
-//			rv = vsctpm_select_aid(card, &Virtual_Identity_AID, NULL, NULL);
-//			LOG_TEST_RET(ctx, rv, "Cannot select Virtual Identity AID");
-
 			if (ipath.len == 2)   {
 				if (file_out)   {
 					*file_out = sc_file_new();
@@ -423,10 +419,11 @@ static int
 vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 {
 	struct sc_context *ctx = card->ctx;
+	int rv;
+
+#if 0
 	struct vsctpm_md_file *mdf = NULL;
 	unsigned char *blob = NULL;
-	size_t blob_len;
-	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 
@@ -464,6 +461,13 @@ vsctpm_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 		memcpy(serial, &card->serialnr, sizeof(*serial));
 
 	free(blob);
+#else
+	LOG_FUNC_CALLED(ctx);
+
+	rv = vsctpm_md_get_serial(card, serial);
+	LOG_TEST_RET(ctx, rv, "cannot get serial");
+#endif
+
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
