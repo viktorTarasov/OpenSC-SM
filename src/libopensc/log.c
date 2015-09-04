@@ -247,8 +247,6 @@ char *
 sc_dump_pin(const u8 * in, size_t count)
 {
 	static char pin_buf[0x200];
-	size_t ii, size = sizeof(pin_buf);
-	size_t offs = 0;
 
 	memset(pin_buf, 0, sizeof(pin_buf));
 	if (!in || !count)

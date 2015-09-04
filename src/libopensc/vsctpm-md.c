@@ -777,6 +777,12 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 	if (!priv->md.card_data.pfnCardAuthenticateEx)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
+	if (pin_size > sizeof(priv->user_pin))
+		LOG_FUNC_RETURN(ctx, SC_ERROR_BUFFER_TOO_SMALL);
+
+	if (tries_left)
+		*tries_left = -1;
+
 	sc_log(ctx, "vsctpm_md_pin_authenticate(pin:'%s')", pin ? sc_dump_pin(pin, pin_size) : "null");
 	hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, pin_size, NULL, NULL, &attempts);
 	if (hRes == SCARD_W_RESET_CARD)   {
@@ -792,10 +798,23 @@ vsctpm_md_pin_authenticate(struct sc_card *card, unsigned char *pin, size_t pin_
 		hRes = priv->md.card_data.pfnCardAuthenticateEx(&priv->md.card_data, ROLE_USER, 0, pin, pin_size, NULL, NULL, &attempts);
 	}
 
+	if (hRes != SCARD_S_SUCCESS)   {
+		memset(priv->user_pin, 0, sizeof(priv->user_pin));
+		priv->user_pin_len = 0;
+		priv->user_logged = 0;
+		sc_log(ctx, "vsctpm_md_pin_authenticate() sweeped from cache user pin");
+	}
+	else   {
+		memcpy(priv->user_pin, pin, pin_size);
+		priv->user_pin_len = pin_size;
+		priv->user_logged = 1;
+		sc_log(ctx, "vsctpm_md_pin_authenticate() User pin in cache '%s'", sc_dump_pin(pin, pin_size));
+	}
+
 	if (hRes == SCARD_W_WRONG_CHV)   {
+		sc_log(ctx, "attempts left %i", attempts);
 		if (tries_left)
 			*tries_left = attempts;
-		sc_log(ctx, "attempts left %i", attempts);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
 	else if (hRes != SCARD_S_SUCCESS)   {
@@ -1542,6 +1561,15 @@ vsctpm_md_compute_signature(struct sc_card *card, int idx,
 	sign_info.cbData = in_len;
 
 	hRes = priv->md.card_data.pfnCardSignData(&priv->md.card_data, &sign_info);
+	if (hRes == SCARD_W_SECURITY_VIOLATION && priv->user_pin_len)   {
+		int rv;
+
+		rv = vsctpm_md_pin_authenticate(card, priv->user_pin, priv->user_pin_len, NULL);
+		LOG_TEST_RET(ctx, rv, "User MD authenticate failed");
+
+		hRes = priv->md.card_data.pfnCardSignData(&priv->md.card_data, &sign_info);
+	}
+
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardSignData() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
@@ -1839,6 +1867,18 @@ vsctpm_md_logout(struct sc_card *card, DWORD role)
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardDeauthenticateEx() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	if (role == ROLE_USER)   {
+		memset(priv->user_pin, 0, sizeof(priv->user_pin));
+		priv->user_pin_len = 0;
+		priv->user_logged = 0;
+		sc_log(ctx, "vsctpm_md_pin_authenticate() sweeped from cache user pin");
+	}
+	else if (role == ROLE_ADMIN)   {
+		memset(priv->admin_key, 0, sizeof(priv->admin_key));
+		priv->admin_key_len = 0;
+		priv->admin_logged = 0;
 	}
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);

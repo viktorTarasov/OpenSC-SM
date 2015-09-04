@@ -134,8 +134,12 @@ struct vsctpm_private_data {
 
 	unsigned char admin_key[24];
 	size_t admin_key_len;
+	int admin_logged;
 
-	int user_logged, admin_logged;
+	unsigned char user_pin[16];
+	size_t user_pin_len;
+	int user_logged;
+
 #if ENABLE_MINIDRIVER
         struct vsctpm_md_data md;
 #endif

@@ -607,12 +607,17 @@ vsctpm_authkey_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int
 	sc_log(ctx, "MD challenge encrypted: %s", sc_dump_hex(challenge, sizeof(challenge)));
 
 	rv = vsctpm_md_admin_login (card, challenge, sizeof(challenge), tries_left);
-	LOG_TEST_RET(ctx, rv, "MD Admin login failed");
-
-	memcpy(priv->admin_key, pin_cmd->pin1.data, pin_cmd->pin1.len);
-	priv->admin_key_len = pin_cmd->pin1.len;
-	priv->admin_logged = 1;
-
+	if (rv)   {
+		memset(priv->admin_key, 0, sizeof(priv->admin_key));
+		priv->admin_key_len = 0;
+		priv->admin_logged = 0;
+	}
+	else   {
+		memcpy(priv->admin_key, pin_cmd->pin1.data, pin_cmd->pin1.len);
+		priv->admin_key_len = pin_cmd->pin1.len;
+		priv->admin_logged = 1;
+		sc_log(ctx, "vsctpm_authkey_verify() Admin key in cache '%s'", sc_dump_pin(priv->admin_key, priv->admin_key_len));
+	}
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
@@ -628,14 +633,10 @@ vsctpm_pin_verify(struct sc_card *card, struct sc_pin_cmd_data *pin_cmd, int *tr
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Verify PIN(type:%X,ref:%i,len:%i)", pin_cmd->pin_type, pin_cmd->pin_reference, pin_cmd->pin1.len);
 
-	if (pin_cmd->pin_type == SC_AC_AUT)   {
+	if (pin_cmd->pin_type == SC_AC_AUT)
 		rv = vsctpm_authkey_verify(card, pin_cmd, tries_left);
-	}
-	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)   {
-		rv = vsctpm_md_pin_authenticate(card,  pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
-		if (!rv)
-			priv->user_logged = 1;
-	}
+	else if (pin_cmd->pin1.data && pin_cmd->pin1.len)
+		rv = vsctpm_md_pin_authenticate(card, pin_cmd->pin1.data, pin_cmd->pin1.len, tries_left);
 
 	LOG_FUNC_RETURN(ctx, rv);
 }
