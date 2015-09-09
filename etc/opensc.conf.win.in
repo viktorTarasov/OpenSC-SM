@@ -12,14 +12,15 @@ app default {
 	# A greater value means more debug info.
 	# Default: 0
 	#
-	debug = 4;
+	debug = 0;
 
 	# The file to which debug output will be written
 	#
 	# Special values 'stdout' and 'stderr' are recognized.
 	# Default: stderr
 	#
-	debug_file = c:\tmp\opensc-debug.log
+	debug_file = "%localappdata%\OpenTrust\OpenTrust CMS Client\logs\opensc-debug.log"
+
 
 	# Re-open debug file  (used in WIN32)
 	#
@@ -35,6 +36,7 @@ app default {
 	# Default: obtained from windows registers
 	#
 	# profile_dir = "";
+	profile_dir = "%programfiles%\OpenTrust\OpenTrust Virtual Smart Card Manager"
 
 	# Paranoid memory allocation.
 	#
