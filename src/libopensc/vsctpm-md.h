@@ -91,7 +91,7 @@ int vsctpm_md_cmap_delete_certificate(struct sc_card *, char *, struct sc_pkcs15
 int vsctpm_md_cmap_create_container(struct sc_card *, char *, unsigned char **, size_t *);
 int vsctpm_md_key_generate(struct sc_card *, char *, unsigned, size_t, char *, unsigned char **, size_t *);
 int vsctpm_md_key_import(struct sc_card *, char *, unsigned, size_t, char *, unsigned char *, size_t);
-int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, unsigned char *, size_t);
+int vsctpm_md_store_my_cert(struct sc_card *, char *, char *, char *, unsigned char *, size_t);
 int vsctpm_get_pin_from_cache(struct sc_pkcs15_card *, char *, size_t);
 int vsctpm_md_pin_change(struct sc_card *, const unsigned char *, size_t, const unsigned char *, size_t, int *);
 int vsctpm_md_authkey_change(struct sc_card *, const unsigned char *, size_t, const unsigned char *, size_t, int *);

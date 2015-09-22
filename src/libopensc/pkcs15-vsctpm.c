@@ -463,6 +463,8 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 	struct sc_pkcs15_object kobj;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	int    rv;
+	WCHAR wszLabel [256];
+	size_t len;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!cert_ctx || !mdc)
@@ -472,7 +474,13 @@ sc_pkcs15emu_vsctpm_container_add_prvkey(struct sc_pkcs15_card *p15card, unsigne
 	memset(&kobj, 0, sizeof(kobj));
 
 	sc_log(ctx, "Private key index '0x%X'", idx);
-        if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
+
+	len = sizeof(wszLabel);
+	if(CertGetCertificateContextProperty(cert_ctx, CERT_FRIENDLY_NAME_PROP_ID, wszLabel, &len))   {
+		wcstombs(kobj.label, wszLabel, sizeof(kobj.label));
+		sc_log(ctx, "Private key friendly name from certificate '%s'", kobj.label);
+	}
+	else   if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, kobj.label, sizeof(kobj.label) - 1))   {
 		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}
@@ -635,6 +643,8 @@ sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, const CE
 	struct sc_pkcs15_der der;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	int    rv;
+	size_t len;
+	WCHAR wszLabel [256];
 
 	LOG_FUNC_CALLED(ctx);
 	if (!cert_ctx)
@@ -643,7 +653,12 @@ sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, const CE
 	memset(&cinfo, 0, sizeof(cinfo));
 	memset(&cobj, 0, sizeof(cobj));
 
-	if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cobj.label, sizeof(cobj.label) - 1))   {
+	len = sizeof(wszLabel);
+	if(CertGetCertificateContextProperty(cert_ctx, CERT_FRIENDLY_NAME_PROP_ID, wszLabel, &len))   {
+		wcstombs(cobj.label, wszLabel, sizeof(cobj.label));
+		sc_log(ctx, "Certificate friendly name '%s'", cobj.label);
+	}
+	else   if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cobj.label, sizeof(cobj.label) - 1))   {
 		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_CORRUPTED_DATA);
 	}

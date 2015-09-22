@@ -475,6 +475,10 @@ vsctpm_md_test(struct sc_card *card)
 				sc_log(ctx, "KeyID (%i) %s", len, sc_dump_hex(buf, len));
 
 			len = sizeof(buf);
+			if(CertGetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, buf, &len))
+				sc_log(ctx, "FriendlyName (%i) %s", len, sc_dump_hex(buf, len));
+
+			len = sizeof(buf);
 			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
 				CRYPT_KEY_PROV_INFO *keyInfo;
 				char name[255];
@@ -1029,16 +1033,21 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 		PCCERT_CONTEXT pCertContext = NULL;
 		unsigned char buf[12000];
 		size_t len;
+		DWORD dw;
 
 		sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
 		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
 			char pszNameString[256];
 
-			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, 128))   {
+			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, sizeof(pszNameString)/sizeof(pszNameString[0])))   {
 				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
 				continue;
 			}
 			sc_log(ctx, "Found certificate '%s'", pszNameString);
+
+			len = sizeof(buf);
+			if(CertGetNameString(pCertContext, CERT_NAME_FRIENDLY_DISPLAY_TYPE, 0, NULL, buf, len))
+				sc_log(ctx, "CertGetNameString(CERT_NAME_FRIENDLY_DISPLAY_TYPE) %s", buf);
 
 			len = sizeof(buf);
 			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
@@ -2232,16 +2241,79 @@ out:
 
 
 int
-vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
+vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, char *label,
 		unsigned char *blob, size_t blob_len)
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
 	int rv = SC_ERROR_INTERNAL;
+	PCCERT_CONTEXT pCertContext = NULL;
+	HCERTSTORE hCertStore;
 	HRESULT hRes;
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Store 'MY' certificate; container '%s'", (container ? container : "none"));
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
+			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+	if (!hCertStore)   {
+		hRes = GetLastError();
+		sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
+		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
+	}
+
+	sc_log(ctx, "CertOpenStore() hCertStore %X", hCertStore);
+
+	pCertContext = CertCreateCertificateContext(X509_ASN_ENCODING, blob, blob_len);
+	if (pCertContext) {
+		if (label)   {
+			WCHAR wszLabel [256];
+			CRYPT_DATA_BLOB cryptBlob;
+
+			memset(wszLabel, 0, sizeof(wszLabel));
+			mbstowcs(wszLabel, label, sizeof(wszLabel)/sizeof(wszLabel[0]) - 1);
+
+			cryptBlob.cbData = (lstrlenW(wszLabel) + 1)*sizeof(WCHAR);
+			cryptBlob.pbData = (PBYTE)wszLabel;
+
+			if (CertSetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, 0, &cryptBlob))   {
+				unsigned char buf[12000];
+				size_t len;
+
+				sc_log(ctx, "CertSetCertificateContextProperty(CERT_FRIENDLY_NAME) '%s'", label);
+
+				len = sizeof(buf);
+				if(CertGetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, buf, &len))
+					sc_log(ctx, "FriendlyName after set (%i) %s", len, sc_dump_hex(buf, len));
+
+			}
+			else   {
+				HRESULT hRes = GetLastError();
+				sc_log(ctx, "CertAddCertificateContextToStore() failed: error %X", hRes);
+				rv = vsctpm_md_get_sc_error(hRes);
+			}
+		}
+
+		if (CertAddCertificateContextToStore(hCertStore, pCertContext, CERT_STORE_ADD_REPLACE_EXISTING, NULL))   {
+			sc_log(ctx, "Certificate added to store ");
+			rv = SC_SUCCESS;
+		}
+		else   {
+			HRESULT hRes = GetLastError();
+			sc_log(ctx, "CertAddCertificateContextToStore() failed: error %X", hRes);
+			rv = vsctpm_md_get_sc_error(hRes);
+		}
+
+		CertFreeCertificateContext(pCertContext);
+	}
+	else {
+		hRes = GetLastError();
+		sc_log(ctx, "CertCreateCertificateContext() failed: error %X", hRes);
+		rv = vsctpm_md_get_sc_error(hRes);
+	}
+
+	if (!CertCloseStore(hCertStore, 0))
+		sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
 
 	if (container && strlen(container))   {
 		HCRYPTPROV hCryptProv;
@@ -2292,42 +2364,6 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container,
 
 		if (!CryptReleaseContext(hCryptProv, 0))
 			sc_log(ctx, "CryptReleaseContext() failed: error %X", GetLastError());
-	}
-	else   {
-		HCERTSTORE hCertStore;
-		PCCERT_CONTEXT pCertContext = NULL;
-
-		hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
-				CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
-		if (!hCertStore)   {
-			hRes = GetLastError();
-			sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
-			LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
-		}
-
-		sc_log(ctx, "CertOpenStore() hCertStore %X", hCertStore);
-
-		pCertContext = CertCreateCertificateContext(X509_ASN_ENCODING, blob, blob_len);
-		if (!pCertContext) {
-			hRes = GetLastError();
-			sc_log(ctx, "CertCreateCertificateContext() failed: error %X", hRes);
-			rv = vsctpm_md_get_sc_error(hRes);
-		}
-		else   {
-			if (!CertAddCertificateContextToStore(hCertStore, pCertContext, CERT_STORE_ADD_REPLACE_EXISTING, NULL))   {
-				HRESULT hRes = GetLastError();
-				sc_log(ctx, "CertAddCertificateContextToStore() failed: error %X", hRes);
-				rv = vsctpm_md_get_sc_error(hRes);
-			}
-			else   {
-				sc_log(ctx, "Certificate added to store ");
-				rv = SC_SUCCESS;
-			}
-			CertFreeCertificateContext(pCertContext);
-		}
-
-		if (!CertCloseStore(hCertStore, 0))
-			sc_log(ctx, "CertCloseStore() failed, error %X", GetLastError());
 	}
 
 	LOG_FUNC_RETURN(ctx, rv);

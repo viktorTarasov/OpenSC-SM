@@ -432,10 +432,10 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 		memset(cmap_guid, 0, sizeof(cmap_guid));
 		memcpy(cmap_guid, prkey_info->cmap_record.guid, prkey_info->cmap_record.guid_len);
 
-		rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, data->value, data->len);
+		rv = vsctpm_md_store_my_cert(card, pin, cmap_guid, object->label, data->value, data->len);
 	}
 	else   {
-		rv = vsctpm_md_store_my_cert(card, pin, NULL, data->value, data->len);
+		rv = vsctpm_md_store_my_cert(card, pin, NULL, object->label, data->value, data->len);
 	}
 
 	LOG_TEST_RET(ctx, rv, "Failed to store certificate");
