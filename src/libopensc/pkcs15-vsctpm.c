@@ -655,8 +655,9 @@ sc_pkcs15emu_vsctpm_container_add_cert (struct sc_pkcs15_card *p15card, const CE
 
 	len = sizeof(wszLabel);
 	if(CertGetCertificateContextProperty(cert_ctx, CERT_FRIENDLY_NAME_PROP_ID, wszLabel, &len))   {
-		wcstombs(cobj.label, wszLabel, sizeof(cobj.label));
-		sc_log(ctx, "Certificate friendly name '%s'", cobj.label);
+		memset(cobj.label, 0, sizeof(cobj.label));
+		len = WideCharToMultiByte( CP_UTF8, 0, wszLabel, lstrlenW(wszLabel), cobj.label, sizeof(cobj.label), NULL, NULL);
+		sc_log(ctx, "FriendlyName(CP_UTF8) '%s'", sc_dump_hex(cobj.label, len));
 	}
 	else   if(!CertGetNameString(cert_ctx, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, cobj.label, sizeof(cobj.label) - 1))   {
 		sc_log(ctx, "Cannot get certificate label: error 0x%X", GetLastError());
