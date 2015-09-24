@@ -1038,6 +1038,8 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 		sc_log(ctx, "CertOpenSystemStore() hCertStore %X", hCertStore);
 		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
 			char pszNameString[256];
+			PCCERT_CONTEXT pDupCertContext = NULL;
+			int to_be_deleted;
 
 			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, sizeof(pszNameString)/sizeof(pszNameString[0])))   {
 				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
@@ -1048,6 +1050,8 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 			len = sizeof(buf);
 			if(CertGetNameString(pCertContext, CERT_NAME_FRIENDLY_DISPLAY_TYPE, 0, NULL, buf, len))
 				sc_log(ctx, "CertGetNameString(CERT_NAME_FRIENDLY_DISPLAY_TYPE) %s", buf);
+
+			to_be_deleted = (strstr(buf, "My own l") != NULL);
 
 			len = sizeof(buf);
 			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
@@ -1076,6 +1080,13 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 			else   {
 				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
 				continue;
+			}
+
+			if (to_be_deleted)   {
+				sc_log(ctx, "Delete Cert Context");
+				pDupCertContext = CertDuplicateCertificateContext(pCertContext);
+				if (pDupCertContext)
+					CertDeleteCertificateFromStore(pDupCertContext);
 			}
 		}
 
@@ -1153,6 +1164,38 @@ vsctpm_md_cmap_get_request_context(struct sc_card *card, struct vsctpm_md_contai
 }
 
 
+CERT_PUBLIC_KEY_INFO *
+vsctpm_md_cmap_get_pub_info(struct sc_card *card, HCRYPTPROV hCryptProv, int at_type)
+{
+	struct sc_context *ctx = card->ctx;
+	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+        size_t sz;
+
+        LOG_FUNC_CALLED(ctx);
+
+	if (CryptExportPublicKeyInfo(hCryptProv, at_type, dwEncodingType, NULL, &sz))   {
+		pub_info = malloc(sz);
+		if (!pub_info)   {
+			sc_log(ctx, "out of memory");
+			return NULL;
+		}
+
+		if (!CryptExportPublicKeyInfo(hCryptProv, at_type, dwEncodingType, pub_info, &sz))   {
+			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+			free(pub_info);
+			pub_info = NULL;
+		}
+	}
+	else   {
+		sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
+	}
+
+	sc_log(ctx, "returns %p", pub_info);
+	return pub_info;
+}
+
+
 static int
 vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container *vsctpm_cont)
 {
@@ -1186,49 +1229,25 @@ vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container 
         }
 
 	if (vsctpm_cont->rec.wSigKeySizeBits)   {
-		CERT_PUBLIC_KEY_INFO *pub_info;
+		CERT_PUBLIC_KEY_INFO *pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_SIGNATURE);
+		if (!pub_info)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 
-		if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, NULL, &sz))   {
-			pub_info = vsctpm_cont->signPublicKeyInfo = malloc(sz);
-			if (vsctpm_cont->signPublicKeyInfo == NULL)
-				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
-			if (CryptExportPublicKeyInfo(hCryptProv, AT_SIGNATURE, dwEncodingType, vsctpm_cont->signPublicKeyInfo, &sz))   {
-				pub_info = (CERT_PUBLIC_KEY_INFO *)vsctpm_cont->signPublicKeyInfo;
-				sc_log(ctx, "CryptExportPublicKeyInfo pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
-				sc_log(ctx, "CryptExportPublicKeyInfo algorithm '%s'", pub_info->Algorithm.pszObjId);
-				sc_log(ctx, "CryptExportPublicKeyInfo objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
-			}
-			else   {
-				sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-			}
-		}
-		else   {
-			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-		}
+		vsctpm_cont->signPublicKeyInfo = pub_info;
+		sc_log(ctx, "Sign pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
+		sc_log(ctx, "Sign algorithm '%s'", pub_info->Algorithm.pszObjId);
+		sc_log(ctx, "Sign objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
 	}
 
 	if (vsctpm_cont->rec.wKeyExchangeKeySizeBits)   {
-		CERT_PUBLIC_KEY_INFO *pub_info;
+		CERT_PUBLIC_KEY_INFO *pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_KEYEXCHANGE);
+		if (!pub_info)
+			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 
-		if (CryptExportPublicKeyInfo(hCryptProv, AT_KEYEXCHANGE, dwEncodingType, NULL, &sz))   {
-			pub_info = vsctpm_cont->exPublicKeyInfo = malloc(sz);
-			if (vsctpm_cont->exPublicKeyInfo == NULL)
-				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
-			if (CryptExportPublicKeyInfo(hCryptProv, AT_KEYEXCHANGE, dwEncodingType, vsctpm_cont->exPublicKeyInfo, &sz))   {
-				pub_info = (CERT_PUBLIC_KEY_INFO *)vsctpm_cont->exPublicKeyInfo;
-				sc_log(ctx, "CryptExportPublicKeyInfo pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
-				sc_log(ctx, "CryptExportPublicKeyInfo algorithm '%s'", pub_info->Algorithm.pszObjId);
-				sc_log(ctx, "CryptExportPublicKeyInfo objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
-			}
-			else   {
-				sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-			}
-		}
-		else   {
-			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-		}
+		vsctpm_cont->exPublicKeyInfo = pub_info;
+		sc_log(ctx, "ExKey pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
+		sc_log(ctx, "ExKey algorithm '%s'", pub_info->Algorithm.pszObjId);
+		sc_log(ctx, "ExKey objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
 	}
 
         sc_log(ctx, "CryptReleaseContext");
@@ -1282,6 +1301,57 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 			vsctpm_cont->signRequestContext != NULL, vsctpm_cont->exRequestContext != NULL);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
+int
+vsctpm_md_cmap_get_container_by_name(struct sc_card *card, char *container, struct vsctpm_md_container *vsctpm_cont)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	char cmap_guid[256];
+	int rv, nn, ii;
+
+	LOG_FUNC_CALLED(ctx);
+
+	if (!vsctpm_cont)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	if (!priv->md.card_data.pfnCardGetContainerInfo)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	rv = vsctpm_md_cmap_size(card);
+	LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+
+	nn = rv;
+	for (ii=0; ii<nn; ii++)     {
+		CONTAINER_MAP_RECORD *rec = (CONTAINER_MAP_RECORD *)priv->md.cmap_data.value + ii;
+
+		wcstombs(cmap_guid, rec->wszGuid, sizeof(cmap_guid));
+		if (strcmp(container, cmap_guid))
+			continue;
+
+		memset(vsctpm_cont, 0, sizeof(struct vsctpm_md_container));
+		vsctpm_cont->idx = ii;
+		vsctpm_cont->rec = *rec;
+
+		rv = vsctpm_md_cmap_get_cert_context(card, vsctpm_cont);
+		LOG_TEST_RET(ctx, rv, "Failed to get certificate for container");
+
+		rv = vsctpm_md_cmap_get_request_context(card, vsctpm_cont);
+		LOG_TEST_RET(ctx, rv, "Failed to get request for container");
+
+		rv = vsctpm_md_cmap_get_key_context(card, vsctpm_cont);
+		LOG_TEST_RET(ctx, rv, "Failed to get key contexts");
+
+		sc_log(ctx, "Container('%s') contexts SignCert:%i ExKeyCert:%i SignReq:%i ExKeyReq:%i", cmap_guid,
+			vsctpm_cont->signCertContext != NULL, vsctpm_cont->exCertContext != NULL,
+			vsctpm_cont->signRequestContext != NULL, vsctpm_cont->exRequestContext != NULL);
+
+		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_ERROR_RECORD_NOT_FOUND);
 }
 
 
@@ -2034,6 +2104,7 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	size_t sz;
 	int rv;
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
+	CERT_PUBLIC_KEY_INFO *pub_info = NULL;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
@@ -2060,28 +2131,17 @@ vsctpm_md_key_generate(struct sc_card *card, char *container, unsigned type, siz
 	}
 	sc_log(ctx, "Key handle %X", hKey);
 
-	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
-		CERT_PUBLIC_KEY_INFO *pub_info = (CERT_PUBLIC_KEY_INFO *)malloc(sz);
-		if (pub_info == NULL)
+	pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, type);
+	if (!pub_info)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	if (pubkey && pubkey_len)   {
+		*pubkey = malloc(pub_info->PublicKey.cbData);
+		if (*pubkey == NULL)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-
-		if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
-			if (pubkey && pubkey_len)   {
-				*pubkey = malloc(pub_info->PublicKey.cbData);
-				if (*pubkey == NULL)
-					LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-				memcpy(*pubkey, pub_info->PublicKey.pbData, pub_info->PublicKey.cbData);
-				*pubkey_len = pub_info->PublicKey.cbData;
-			}
-		}
-		else   {
-			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", GetLastError());
-		}
-		free(pub_info);
+		memcpy(*pubkey, pub_info->PublicKey.pbData, pub_info->PublicKey.cbData);
+		*pubkey_len = pub_info->PublicKey.cbData;
 	}
-	else   {
-		sc_log(ctx, "CryptExportPublicKeyInfo(get-size) failed: error %X", GetLastError());
-	}
+	free(pub_info);
 
 	rv = SC_SUCCESS;
 out:
@@ -2166,24 +2226,9 @@ vsctpm_md_key_import(struct sc_card *card, char *container, unsigned type, size_
 	}
 	sc_log(ctx, "Key(%p,%i) imported", pbKeyBlob, cbKeyBlob);
 
-	if (CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, NULL, &sz))   {
-		pub_info = (CERT_PUBLIC_KEY_INFO *)LocalAlloc(0, sz);
-		if (!pub_info)
-			LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
-		if (!CryptExportPublicKeyInfo(hCryptProv, type, dwEncodingType, pub_info, &sz))   {
-			HRESULT hRes = GetLastError();
-			sc_log(ctx, "CryptExportPublicKeyInfo() failed: error %X", hRes);
-			rv = vsctpm_md_get_sc_error(hRes);
-			goto out;
-		}
-		sc_log(ctx, "Exported PubKey Info '%s'", sc_dump_hex((unsigned char *)pub_info, sz));
-	}
-	else   {
-		HRESULT hRes = GetLastError();
-		sc_log(ctx, "CryptExportPublicKeyInfo(get-size) failed: error %X", hRes);
-		rv = vsctpm_md_get_sc_error(hRes);
-		goto out;
-	}
+	pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, type);
+	if (!pub_info)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 
 	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
 			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
@@ -2219,7 +2264,7 @@ out:
 		CertCloseStore(hCertStore, 0);
 
 	if (pub_info)
-		LocalFree(pub_info);
+		free(pub_info);
 
 	if (pbKeyBlob)
 		LocalFree(pbKeyBlob);
@@ -2375,13 +2420,19 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container
 {
 	struct sc_context *ctx = card->ctx;
 	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct vsctpm_md_container md_container;
 	HCRYPTPROV hCryptProv;
         char path[200];
-	int rv;
+	int rv, pin_type = 0;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!container)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
+
+	rv = vsctpm_md_cmap_get_container_by_name(card, container, &md_container);
+	LOG_TEST_RET(ctx, rv, "Cannot get container by name");
+
+	pin_type = (md_container.rec.wSigKeySizeBits) ? PP_SIGNATURE_PIN : PP_KEYEXCHANGE_PIN;
 
 	sprintf(path, "\\\\.\\%s\\%s", card->reader->name, container);
 	sc_log(ctx, "CryptAcquireContext('%s',DEFAULT_CONTAINER_OPTIONAL|SILENT)", path);
@@ -2390,15 +2441,9 @@ vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 
-	sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN)");
-	if(!CryptSetProvParam(hCryptProv, PP_SIGNATURE_PIN, pin, 0))   {
-		sc_log(ctx, "CryptSetProvParam(PP_SIGNATURE_PIN) failed: error %X", GetLastError());
-		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
-	}
-
-	sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN)");
-	if(!CryptSetProvParam(hCryptProv, PP_KEYEXCHANGE_PIN, pin, 0))   {
-		sc_log(ctx, "CryptSetProvParam(PP_KEYEXCHANGE_PIN) failed: error %X", GetLastError());
+	sc_log(ctx, "CryptSetProvParam(PP %i)", pin_type);
+	if(!CryptSetProvParam(hCryptProv, pin_type, pin, 0))   {
+		sc_log(ctx, "CryptSetProvParam(Pin) failed: error %X", GetLastError());
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
 	}
 

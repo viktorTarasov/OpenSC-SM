@@ -277,14 +277,14 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 #ifdef ENABLE_MINIDRIVER
 	struct sc_card *card = p15card->card;
 	struct sc_pkcs15_prkey_info *key_info = (struct sc_pkcs15_prkey_info *) key_object->data;
+	struct sc_pkcs15_object *cert_obj = NULL;
 	char pin[50], cmap_guid[50];
 	int rv, idx;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Delete Private Key '%s', reference 0x%X, container index %i", key_object->label, key_info->key_reference, idx);
 
 	idx = (key_info->key_reference & 0x7F) - 1;
-	sc_log(ctx, "Container index %i", idx);
+	sc_log(ctx, "Delete Private Key '%s', reference 0x%X, container index %i", key_object->label, key_info->key_reference, idx);
 
 	memset(cmap_guid, 0, sizeof(cmap_guid));
 	memcpy(cmap_guid, key_info->cmap_record.guid, key_info->cmap_record.guid_len);
@@ -294,6 +294,12 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 
 	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
 	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
+
+	rv = sc_pkcs15_find_cert_by_id(p15card, &key_info->id, &cert_obj);
+	if (cert_obj)   {
+		rv = sc_pkcs15init_delete_object(p15card, profile, cert_obj);
+		LOG_TEST_RET(ctx, rv, "Cannot delete linked certificate");
+	}
 
 	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
