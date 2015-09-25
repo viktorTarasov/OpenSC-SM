@@ -2286,7 +2286,7 @@ out:
 
 
 int
-vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, char *label,
+vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, int authority, char *label,
 		unsigned char *blob, size_t blob_len)
 {
 	struct sc_context *ctx = card->ctx;
@@ -2295,19 +2295,43 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, char *
 	PCCERT_CONTEXT pCertContext = NULL;
 	HCERTSTORE hCertStore;
 	HRESULT hRes;
+	LPCWSTR provider = L"MY";
+	DWORD open_store_flags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Store 'MY' certificate; container '%s'", (container ? container : "none"));
+	if (authority && !container)   {
+		struct sc_pkcs15_cert cert;
+		struct sc_pkcs15_der der;
 
-	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL,
-			CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER, L"MY");
+		der.value = blob;
+		der.len = blob_len;
+		rv = sc_pkcs15_parse_x509_cert(ctx, &blob, &cert);
+		LOG_TEST_RET(ctx, rv, "Cannot parse certificate blob");
+
+		if ((cert.subject_len == cert.issuer_len) && (!memcmp(cert.subject, cert.issuer, cert.subject_len)))   {
+			provider = L"ROOT";
+			sc_log(ctx, "Store certificate to 'ROOT' store");
+		}
+		else   {
+			provider = L"CA";
+			sc_log(ctx, "Store certificate to 'CA' store");
+		}
+		open_store_flags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_LOCAL_MACHINE;
+
+		sc_pkcs15_free_certificate_data(&cert);
+	}
+	else   {
+		provider = L"MY";
+		open_store_flags = CERT_STORE_OPEN_EXISTING_FLAG | CERT_SYSTEM_STORE_CURRENT_USER;
+		sc_log(ctx, "Store certificate to 'MY' store; container '%s'", container ? container : "none");
+	}
+
+	hCertStore = CertOpenStore(CERT_STORE_PROV_SYSTEM, 0, (HCRYPTPROV_LEGACY)NULL, open_store_flags, provider);
 	if (!hCertStore)   {
 		hRes = GetLastError();
 		sc_log(ctx, "CertOpenStore() failed, error %X", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
 	}
-
-	sc_log(ctx, "CertOpenStore() hCertStore %X", hCertStore);
 
 	pCertContext = CertCreateCertificateContext(X509_ASN_ENCODING, blob, blob_len);
 	if (pCertContext) {
@@ -2322,15 +2346,7 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, char *
 			cryptBlob.pbData = (PBYTE)wszLabel;
 
 			if (CertSetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, 0, &cryptBlob))   {
-				unsigned char buf[12000];
-				size_t len;
-
-				sc_log(ctx, "CertSetCertificateContextProperty(CERT_FRIENDLY_NAME) '%s'", label);
-
-				len = sizeof(buf);
-				if(CertGetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, buf, &len))
-					sc_log(ctx, "FriendlyName after set (%i) %s", len, sc_dump_hex(buf, len));
-
+				sc_log(ctx, "Friendly Name %s", label);
 			}
 			else   {
 				HRESULT hRes = GetLastError();
