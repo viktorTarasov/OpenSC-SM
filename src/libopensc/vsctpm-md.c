@@ -2338,13 +2338,12 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, int au
 		if (label)   {
 			WCHAR wszLabel [256];
 			CRYPT_DATA_BLOB cryptBlob;
+			char chr_label[256];
 			int lv_len;
 
 			memset(wszLabel, 0, sizeof(wszLabel));
-//			mbstowcs(wszLabel, label, sizeof(wszLabel)/sizeof(wszLabel[0]) - 1);
-
-			sc_log(ctx, "Label before MultiByteToWideChar() '%s'", sc_dump_hex(label, strlen(label)));
-			lv_len = MultiByteToWideChar(CP_ACP, 0, label, -1, wszLabel, sizeof(wszLabel)/sizeof(wszLabel[0]));
+			sc_log(ctx, "Label before MultiByteToWideChar() '%s'", sc_dump_hex(chr_label, strlen(chr_label)));
+			lv_len = MultiByteToWideChar(CP_UTF8, 0, chr_label, -1, wszLabel, sizeof(wszLabel)/sizeof(wszLabel[0]));
 
 			cryptBlob.cbData = lv_len*sizeof(WCHAR);
 			cryptBlob.pbData = (PBYTE)wszLabel;
