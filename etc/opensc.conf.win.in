@@ -36,7 +36,7 @@ app default {
 	# Default: obtained from windows registers
 	#
 	# profile_dir = "";
-	profile_dir = "%programfiles%\OpenTrust\OpenTrust Virtual Smart Card Manager"
+	# profile_dir = "%programfiles%\OpenTrust\OpenTrust Virtual Smart Card Manager"
 
 	# Paranoid memory allocation.
 	#

@@ -502,7 +502,7 @@ vsctpm_card_ctl(struct sc_card *card, unsigned long cmd, void *ptr)
 		memset(challenge, 0, sizeof(challenge));
 		rv = vsctpm_md_get_challenge(card, challenge, sizeof(challenge));
 		LOG_TEST_RET(ctx, rv, "MD get challenge failed");
-		sc_log(ctx, "MD second challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
+		sc_log(ctx, "MD challenge: %s", sc_dump_hex(challenge, sizeof(challenge)));
 
 		rv = vsctpm_md_cbc_encrypt(card, priv->admin_key, priv->admin_key_len, challenge, sizeof(challenge));
 		LOG_TEST_RET(ctx, rv, "MD CBC encrypt failed");

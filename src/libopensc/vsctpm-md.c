@@ -2338,12 +2338,17 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, int au
 		if (label)   {
 			WCHAR wszLabel [256];
 			CRYPT_DATA_BLOB cryptBlob;
+			int lv_len;
 
 			memset(wszLabel, 0, sizeof(wszLabel));
-			mbstowcs(wszLabel, label, sizeof(wszLabel)/sizeof(wszLabel[0]) - 1);
+//			mbstowcs(wszLabel, label, sizeof(wszLabel)/sizeof(wszLabel[0]) - 1);
 
-			cryptBlob.cbData = (lstrlenW(wszLabel) + 1)*sizeof(WCHAR);
+			sc_log(ctx, "Label before MultiByteToWideChar() '%s'", sc_dump_hex(label, strlen(label)));
+			lv_len = MultiByteToWideChar(CP_ACP, 0, label, -1, wszLabel, sizeof(wszLabel)/sizeof(wszLabel[0]));
+
+			cryptBlob.cbData = lv_len*sizeof(WCHAR);
 			cryptBlob.pbData = (PBYTE)wszLabel;
+			sc_log(ctx, "Label after MultiByteToWideChar() '%s'", sc_dump_hex(cryptBlob.pbData, cryptBlob.cbData));
 
 			if (CertSetCertificateContextProperty(pCertContext, CERT_FRIENDLY_NAME_PROP_ID, 0, &cryptBlob))   {
 				sc_log(ctx, "Friendly Name %s", label);
