@@ -1039,7 +1039,10 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 		while(pCertContext = CertEnumCertificatesInStore(hCertStore, pCertContext))   {
 			char pszNameString[256];
 			PCCERT_CONTEXT pDupCertContext = NULL;
-			int to_be_deleted;
+			CERT_PUBLIC_KEY_INFO pub_info;
+			struct sc_pkcs15_pubkey pubkey;
+			struct sc_pkcs15_id id;
+			int rv;
 
 			if(!CertGetNameString(pCertContext, CERT_NAME_SIMPLE_DISPLAY_TYPE, 0, NULL, pszNameString, sizeof(pszNameString)/sizeof(pszNameString[0])))   {
 				sc_log(ctx, "CertificateName failed, error 0x%X", GetLastError());
@@ -1049,44 +1052,67 @@ vsctpm_md_cmap_get_cert_context(struct sc_card *card, struct vsctpm_md_container
 
 			len = sizeof(buf);
 			if(CertGetNameString(pCertContext, CERT_NAME_FRIENDLY_DISPLAY_TYPE, 0, NULL, buf, len))
-				sc_log(ctx, "CertGetNameString(CERT_NAME_FRIENDLY_DISPLAY_TYPE) %s", buf);
+				sc_log(ctx, "CERT_NAME_FRIENDLY_DISPLAY_TYPE: %s", buf);
 
-			to_be_deleted = (strstr(buf, "My own l") != NULL);
+			pub_info = pCertContext->pCertInfo->SubjectPublicKeyInfo;
+			memset(&pubkey, 0, sizeof(pubkey));
+			pubkey.algorithm = SC_ALGORITHM_RSA;
+			rv = sc_pkcs15_decode_pubkey(ctx, &pubkey, pub_info.PublicKey.pbData, pub_info.PublicKey.cbData);
+			LOG_TEST_RET(ctx, rv, "Cannot decode RSA public key");
 
-			len = sizeof(buf);
-			if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
-				CRYPT_KEY_PROV_INFO *keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
-				if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
-					if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
-						sc_log(ctx, "Sign certificate matched");
-						// sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
-						if (vsctpm_cont->signRequestContext)   {
-							 CertFreeCertificateContext(vsctpm_cont->signRequestContext);
-							 vsctpm_cont->signRequestContext = NULL;
+			SHA1(pubkey.u.rsa.modulus.data, pubkey.u.rsa.modulus.len, id.value);
+			id.len = SHA_DIGEST_LENGTH;
+			sc_log(ctx, "CertKey ID %s", sc_pkcs15_print_id(&id));
+
+			sc_pkcs15_erase_pubkey(&pubkey);
+
+			if (sc_pkcs15_compare_id(&vsctpm_cont->keyex_id, &id))   {
+				sc_log(ctx, "KeyExchange certificate ID matched");
+				sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+				if (vsctpm_cont->exRequestContext)   {
+					 CertFreeCertificateContext(vsctpm_cont->exRequestContext);
+					 vsctpm_cont->exRequestContext = NULL;
+				}
+				vsctpm_cont->exCertContext = CertDuplicateCertificateContext(pCertContext);
+			}
+			else if (sc_pkcs15_compare_id(&vsctpm_cont->sign_id, &id))   {
+				sc_log(ctx, "Sign certificate ID matched");
+				sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+				if (vsctpm_cont->signRequestContext)   {
+					CertFreeCertificateContext(vsctpm_cont->signRequestContext);
+					vsctpm_cont->signRequestContext = NULL;
+				}
+				vsctpm_cont->signCertContext = CertDuplicateCertificateContext(pCertContext);
+			}
+			else    {
+				len = sizeof(buf);
+				if(CertGetCertificateContextProperty(pCertContext, CERT_KEY_PROV_INFO_PROP_ID, buf, &len))   {
+					CRYPT_KEY_PROV_INFO *keyInfo = (CRYPT_KEY_PROV_INFO *)buf;
+					if (!wcscmp(keyInfo->pwszContainerName, vsctpm_cont->rec.wszGuid))   {
+						if (vsctpm_cont->rec.wSigKeySizeBits && (keyInfo->dwKeySpec == AT_SIGNATURE))   {
+							sc_log(ctx, "Sign certificate matched");
+							// sc_log(ctx, "Sign cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+							if (vsctpm_cont->signRequestContext)   {
+								 CertFreeCertificateContext(vsctpm_cont->signRequestContext);
+								 vsctpm_cont->signRequestContext = NULL;
+							}
+							vsctpm_cont->signCertContext = CertDuplicateCertificateContext(pCertContext);
 						}
-						vsctpm_cont->signCertContext = CertDuplicateCertificateContext(pCertContext);
-					}
-					else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
-						sc_log(ctx, "KeyExchange certificate matched");
-						// sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
-						if (vsctpm_cont->exRequestContext)   {
-							 CertFreeCertificateContext(vsctpm_cont->exRequestContext);
-							 vsctpm_cont->exRequestContext = NULL;
+						else if (vsctpm_cont->rec.wKeyExchangeKeySizeBits && (keyInfo->dwKeySpec == AT_KEYEXCHANGE))   {
+							sc_log(ctx, "KeyExchange certificate matched");
+							// sc_log(ctx, "KeyExchange cert dump '%s'", sc_dump_hex(pCertContext->pbCertEncoded, pCertContext->cbCertEncoded));
+							if (vsctpm_cont->exRequestContext)   {
+								 CertFreeCertificateContext(vsctpm_cont->exRequestContext);
+								 vsctpm_cont->exRequestContext = NULL;
+							}
+							vsctpm_cont->exCertContext = CertDuplicateCertificateContext(pCertContext);
 						}
-						vsctpm_cont->exCertContext = CertDuplicateCertificateContext(pCertContext);
 					}
 				}
-			}
-			else   {
-				sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
-				continue;
-			}
-
-			if (to_be_deleted)   {
-				sc_log(ctx, "Delete Cert Context");
-				pDupCertContext = CertDuplicateCertificateContext(pCertContext);
-				if (pDupCertContext)
-					CertDeleteCertificateFromStore(pDupCertContext);
+				else   {
+					sc_log(ctx, "CertGetCertificateContextProperty(CERT_KEY_PROV_INFO_PROP_ID) failed, error 0x%X", GetLastError());
+					continue;
+				}
 			}
 		}
 
@@ -1206,6 +1232,7 @@ vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container 
 	DWORD dwEncodingType = PKCS_7_ASN_ENCODING | X509_ASN_ENCODING;
         unsigned char cmap_guid[256];
         size_t sz;
+	int rv;
 
         LOG_FUNC_CALLED(ctx);
         if (!vsctpm_cont)
@@ -1229,25 +1256,55 @@ vsctpm_md_cmap_get_key_context(struct sc_card *card, struct vsctpm_md_container 
         }
 
 	if (vsctpm_cont->rec.wSigKeySizeBits)   {
-		CERT_PUBLIC_KEY_INFO *pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_SIGNATURE);
+		CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+		struct sc_pkcs15_pubkey pubkey;
+		int rv;
+
+		pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_SIGNATURE);
 		if (!pub_info)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+
+		memset(&pubkey, 0, sizeof(pubkey));
+		pubkey.algorithm = SC_ALGORITHM_RSA;
+		rv = sc_pkcs15_decode_pubkey(ctx, &pubkey, pub_info->PublicKey.pbData, pub_info->PublicKey.cbData);
+		LOG_TEST_RET(ctx, rv, "Cannot decode RSA public key");
+
+		SHA1(pubkey.u.rsa.modulus.data, pubkey.u.rsa.modulus.len, vsctpm_cont->sign_id.value);
+		vsctpm_cont->sign_id.len = SHA_DIGEST_LENGTH;
+		sc_log(ctx, "SignKey ID %s", sc_pkcs15_print_id(&vsctpm_cont->sign_id));
 
 		vsctpm_cont->signPublicKeyInfo = pub_info;
 		sc_log(ctx, "Sign pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
 		sc_log(ctx, "Sign algorithm '%s'", pub_info->Algorithm.pszObjId);
 		sc_log(ctx, "Sign objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
+
+		sc_pkcs15_erase_pubkey(&pubkey);
 	}
 
 	if (vsctpm_cont->rec.wKeyExchangeKeySizeBits)   {
-		CERT_PUBLIC_KEY_INFO *pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_KEYEXCHANGE);
+		CERT_PUBLIC_KEY_INFO *pub_info = NULL;
+		struct sc_pkcs15_pubkey pubkey;
+		int rv;
+
+		pub_info = vsctpm_md_cmap_get_pub_info(card, hCryptProv, AT_KEYEXCHANGE);
 		if (!pub_info)
 			LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+
+		memset(&pubkey, 0, sizeof(pubkey));
+		pubkey.algorithm = SC_ALGORITHM_RSA;
+		rv = sc_pkcs15_decode_pubkey(ctx, &pubkey, pub_info->PublicKey.pbData, pub_info->PublicKey.cbData);
+		LOG_TEST_RET(ctx, rv, "Cannot decode RSA public key");
+
+		SHA1(pubkey.u.rsa.modulus.data, pubkey.u.rsa.modulus.len, vsctpm_cont->keyex_id.value);
+		vsctpm_cont->keyex_id.len = SHA_DIGEST_LENGTH;
+		sc_log(ctx, "ExKey ID %s", sc_pkcs15_print_id(&vsctpm_cont->keyex_id));
 
 		vsctpm_cont->exPublicKeyInfo = pub_info;
 		sc_log(ctx, "ExKey pubkey(%i) %s", pub_info->PublicKey.cbData, sc_dump_hex(pub_info->PublicKey.pbData, pub_info->PublicKey.cbData));
 		sc_log(ctx, "ExKey algorithm '%s'", pub_info->Algorithm.pszObjId);
 		sc_log(ctx, "ExKey objId '%s'", sc_dump_hex(pub_info->Algorithm.Parameters.pbData, pub_info->Algorithm.Parameters.cbData));
+
+		sc_pkcs15_erase_pubkey(&pubkey);
 	}
 
         sc_log(ctx, "CryptReleaseContext");
@@ -1286,14 +1343,14 @@ vsctpm_md_cmap_init_container(struct sc_card *card, int idx, struct vsctpm_md_co
 	vsctpm_cont->idx = idx;
 	vsctpm_cont->rec = *((PCONTAINER_MAP_RECORD)priv->md.cmap_data.value + idx);
 
+	rv = vsctpm_md_cmap_get_key_context(card, vsctpm_cont);
+	LOG_TEST_RET(ctx, rv, "Failed to get key contexts");
+
 	rv = vsctpm_md_cmap_get_cert_context(card, vsctpm_cont);
 	LOG_TEST_RET(ctx, rv, "Failed to get certificate for container");
 
 	rv = vsctpm_md_cmap_get_request_context(card, vsctpm_cont);
 	LOG_TEST_RET(ctx, rv, "Failed to get request for container");
-
-	rv = vsctpm_md_cmap_get_key_context(card, vsctpm_cont);
-	LOG_TEST_RET(ctx, rv, "Failed to get key contexts");
 
 	wcstombs(cmap_guid, vsctpm_cont->rec.wszGuid, sizeof(cmap_guid));
 	sc_log(ctx, "Container('%s') contexts SignCert:%i ExKeyCert:%i SignReq:%i ExKeyReq:%i", cmap_guid,

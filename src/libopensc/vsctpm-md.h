@@ -25,6 +25,8 @@ extern "C" {
 #include <windows.h>
 #include "cardmod.h"
 
+#include "libopensc/pkcs15.h"
+
 struct vsctpm_publickeublob {
 	PUBLICKEYSTRUC	publickeystruc;
 	RSAPUBKEY	rsapubkey;
@@ -59,6 +61,7 @@ struct vsctpm_md_container {
 	const CERT_CONTEXT *signCertContext, *exCertContext;
 	const CERT_CONTEXT *signRequestContext, *exRequestContext;
 	CERT_PUBLIC_KEY_INFO *signPublicKeyInfo, *exPublicKeyInfo;
+	struct sc_pkcs15_id sign_id, keyex_id;
 };
 
 #define VSCTPM_MODULE_NAME "msclmd.dll"
