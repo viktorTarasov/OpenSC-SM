@@ -2491,6 +2491,35 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, int au
 }
 
 
+
+int
+vsctpm_md_cmap_delete_container_index(struct sc_card *card, char *pin, int idx)
+{
+	struct sc_context *ctx = card->ctx;
+	struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+	struct vsctpm_md_container md_container;
+	HCRYPTPROV hCryptProv;
+	HRESULT hRes;
+        char path[200];
+	int rv, pin_type = 0;
+
+	LOG_FUNC_CALLED(ctx);
+
+	/* DWORD WINAPI CardDeleteContainer( __in PCARD_DATA pCardData, __in BYTE bContainerIndex, __in DWORD dwReserved ); */
+	if (!priv->md.card_data.pfnCardDeleteContainer)
+		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
+
+	sc_log(ctx, "Now CardDeleteContainer(%i)", idx);
+	hRes = priv->md.card_data.pfnCardDeleteContainer(&priv->md.card_data, idx, 0);
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardDeleteContainer(%i) failed: hRes %lX", idx, hRes);
+		LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+
+	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
+
 int
 vsctpm_md_cmap_delete_container(struct sc_card *card, char *pin, char *container)
 {

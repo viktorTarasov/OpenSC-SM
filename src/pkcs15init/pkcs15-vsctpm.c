@@ -204,8 +204,8 @@ vsctpm_pkcs15_generate_key(struct sc_profile *profile, sc_pkcs15_card_t *p15card
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "generate key(bits:%i,AuthID:%s", key_info->modulus_length, sc_pkcs15_print_id(&object->auth_id));
-	sc_log(ctx, "Container '%s'", key_info->cmap_record.guid);
+	sc_log(ctx, "Generate key(bits:%i,AuthID:%s", key_info->modulus_length, sc_pkcs15_print_id(&object->auth_id));
+	sc_log(ctx, "New Container '%s'", key_info->cmap_record.guid);
 
         type = vsctpm_md_key_type_from_usage(ctx, key_info->usage);
 
@@ -262,6 +262,7 @@ vsctpm_pkcs15_store_key(struct sc_profile *profile, struct sc_pkcs15_card *p15ca
 	rv = vsctpm_md_key_import(card, key_info->cmap_record.guid, type, key_info->modulus_length, pin, blob, blob_len);
 	LOG_TEST_RET(ctx, rv, "Failed to import private key");
 
+	sc_log(ctx, "Stored Private Key '%s', id:%s", object->label, sc_pkcs15_print_id(&key_info->id));
 	LOG_FUNC_RETURN(ctx, rv);
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
@@ -284,7 +285,8 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 	LOG_FUNC_CALLED(ctx);
 
 	idx = (key_info->key_reference & 0x7F) - 1;
-	sc_log(ctx, "Delete Private Key '%s', reference 0x%X, container index %i", key_object->label, key_info->key_reference, idx);
+	sc_log(ctx, "Delete Private Key '%s', id:%s", key_object->label, sc_pkcs15_print_id(&key_info->id));
+	sc_log(ctx, "Delete Private Key reference 0x%X, container index %i", key_info->key_reference, idx);
 
 	memset(cmap_guid, 0, sizeof(cmap_guid));
 	memcpy(cmap_guid, key_info->cmap_record.guid, key_info->cmap_record.guid_len);
@@ -301,9 +303,15 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 		LOG_TEST_RET(ctx, rv, "Cannot delete linked certificate");
 	}
 
-	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
+/*
+	sc_log(ctx, "Delete Private Key index '%i'", idx);
+	rv = vsctpm_md_cmap_delete_container_index(card, pin, idx);
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 
+	sc_log(ctx, "Delete Private Key delete container '%s'", cmap_guid);
+	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
+	LOG_TEST_RET(ctx, rv, "Cannot delete container");
+*/
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
@@ -324,7 +332,8 @@ vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p1
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "Delete Cert '%s'", obj->label);
+	sc_log(ctx, "Delete Cert '%s', id:%s", obj->label, sc_pkcs15_print_id(&cert_info->id));
+	// LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
@@ -422,7 +431,7 @@ vsctpm_store_cert(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "vsctpm_store_cert() ID '%s', data(%p,%i)", sc_pkcs15_print_id(&cert_info->id), data->value, data->len);
+	sc_log(ctx, "Store Certificate ID:%s, data(%p,%i)", sc_pkcs15_print_id(&cert_info->id), data->value, data->len);
 
 	rv = sc_pkcs15init_verify_secret(profile, p15card, NULL, SC_AC_CHV, VSCTPM_USER_PIN_REF);
 	LOG_TEST_RET(ctx, rv, "Failed to verify secret 'VSCTPM_USER_PIN_REF'");
