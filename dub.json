@@ -1,0 +1,18 @@
+{
+	"name" : "opensc",
+	"version": "0.15.0",
+	"description" : "A binding to libopensc (reduced extend required for external modules [driver/SM])",
+	"authors": [ "carblue" ],
+	"homepage": "https://github.com/carblue/opensc",
+	"copyright" : "Copyright © 2016, carblue",
+	"license": "LGPL-2.1",
+	"dependencies" : {
+	},
+	"libs": [ "opensc" ],
+	"configurations": [
+		{
+			"name": "library",
+			"targetType": "sourceLibrary"
+		}
+	]
+}
