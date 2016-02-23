@@ -1,6 +1,5 @@
 {
 	"name" : "opensc",
-	"version": "0.15.0",
 	"description" : "A binding to libopensc (reduced extend required for external modules [driver/SM])",
 	"authors": [ "carblue" ],
 	"homepage": "https://github.com/carblue/opensc",
