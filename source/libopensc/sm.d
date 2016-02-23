@@ -1,6 +1,6 @@
 // D import file generated from 'sm.d' renamed to 'sm.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
 // Functions within struct sm_module_operations exported from "libsmm-local.*",
-// all other functions exported from "liopensc.*"
+// all other functions exported from "libopensc.*"
 
 module libopensc.sm;
 version (ENABLE_SM)

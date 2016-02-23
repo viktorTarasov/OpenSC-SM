@@ -1,0 +1,48 @@
+// D import file generated from 'iso7816.d' renamed to 'iso7816.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
+// No function exported from "libopensc.*"
+
+module libopensc.iso7813;
+extern (C) 
+{
+	alias ISO7816_FILE_TYPE_t = ubyte;
+	enum : ISO7816_FILE_TYPE_t
+	{
+		ISO7816_FILE_TYPE_TRANSPARENT_EF = 1,
+		ISO7816_FILE_TYPE_DF = 56,
+	}
+	enum ISO7816_TAG_FCI = 111;
+	alias ISO7816_TAG_FCP_t = ubyte;
+	enum : ISO7816_TAG_FCP_t
+	{
+		ISO7816_TAG_FCP = 98,
+		ISO7816_TAG_FCP_SIZE = 128,
+		ISO7816_TAG_FCP_SIZE_FULL = 129,
+		ISO7816_TAG_FCP_TYPE = 130,
+		ISO7816_TAG_FCP_FID = 131,
+		ISO7816_TAG_FCP_DF_NAME = 132,
+		ISO7816_TAG_FCP_PROP_INFO = 133,
+		ISO7816_TAG_FCP_ACLS = 134,
+		ISO7816_TAG_FCP_LCS = 138,
+	}
+	alias ISO7816_II_CATEGORY_t = ubyte;
+	enum : ISO7816_II_CATEGORY_t
+	{
+		ISO7816_II_CATEGORY_TLV = 128,
+		ISO7816_II_CATEGORY_NOT_TLV = 0,
+	}
+	alias ISO7816_TAG_II_t = ubyte;
+	enum : ISO7816_TAG_II_t
+	{
+		ISO7816_TAG_II_CARD_SERVICE = 67,
+		ISO7816_TAG_II_INITIAL_ACCESS_DATA = 68,
+		ISO7816_TAG_II_CARD_ISSUER_DATA = 69,
+		ISO7816_TAG_II_PRE_ISSUING = 70,
+		ISO7816_TAG_II_CARD_CAPABILITIES = 71,
+		ISO7816_TAG_II_AID = 79,
+		ISO7816_TAG_II_ALLOCATION_SCHEME = 120,
+		ISO7816_TAG_II_STATUS_LCS = 129,
+		ISO7816_TAG_II_STATUS_SW = 130,
+		ISO7816_TAG_II_STATUS_LCS_SW = 131,
+	}
+	enum IASECC_TAG_II_IO_BUFFER_SIZES = 224;
+}
