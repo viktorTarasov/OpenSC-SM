@@ -16,6 +16,7 @@
 
 # eclipse/DDT
 .project
+.settings/
 
 # DUB
 .dub
