@@ -592,6 +592,6 @@ extern (C)
 		int errorno;
 		const(char)* errorstr;
 	}
-	immutable(char)* sc_get_version();
-	sc_card_driver* sc_get_iso7816_driver();
+	__gshared const(char)* sc_get_version();
+	__gshared sc_card_driver* sc_get_iso7816_driver();
 }

@@ -84,6 +84,7 @@ extern (C)
 		size_t len;
 		ubyte* value;
 	}
+
 	enum SC_PATH_TYPE 
 	{
 		SC_PATH_TYPE_FILE_ID = 0,
@@ -94,6 +95,7 @@ extern (C)
 		SC_PATH_TYPE_PARENT = 5,
 	}
 	mixin FreeEnumMembers!SC_PATH_TYPE;
+
 	struct sc_path
 	{
 		ubyte[SC_MAX_PATH_SIZE] value;
@@ -110,9 +112,10 @@ extern (C)
 		uint algo;
 		uint[8] refs;
 	}
-	enum SC_AC 
+
+	enum SC_AC : uint
 	{
-		SC_AC_NONE = 0,
+		SC_AC_NONE = uint.min,
 		SC_AC_CHV = 1,
 		SC_AC_TERM = 2,
 		SC_AC_PRO = 4,
@@ -121,10 +124,11 @@ extern (C)
 		SC_AC_SEN = 32,
 		SC_AC_SCB = 64,
 		SC_AC_IDA = 128,
-		SC_AC_UNKNOWN = 4294967294u,
-		SC_AC_NEVER = 4294967295u,
+		SC_AC_UNKNOWN = uint.max-1,
+		SC_AC_NEVER   = uint.max,
 	}
 	mixin FreeEnumMembers!SC_AC;
+
 	enum 
 	{
 		SC_AC_OP_SELECT = 0,
@@ -161,7 +165,9 @@ extern (C)
 		SC_MAX_AC_OPS = 31,
 		SC_AC_OP_ERASE = SC_AC_OP_DELETE,
 	}
-	enum SC_AC_KEY_REF_NONE = 4294967295u;
+
+	enum SC_AC_KEY_REF_NONE = uint.max;
+
 	struct sc_acl_entry
 	{
 		uint method;
@@ -169,13 +175,17 @@ extern (C)
 		sc_crt[SC_MAX_CRTS_IN_SE] crts;
 		sc_acl_entry* next;
 	}
-	enum 
+
+	enum SC_FILE_TYPE
 	{
 		SC_FILE_TYPE_DF = 4,
 		SC_FILE_TYPE_INTERNAL_EF = 3,
+//	SC_FILE_TYPE_INTERNAL_SE_EF = 7,
 		SC_FILE_TYPE_WORKING_EF = 1,
-		SC_FILE_TYPE_BSO = 16,
+		SC_FILE_TYPE_BSO = 16, // BSO (Base Security Object) BSO contains data that must never go out from the card, but are essential for cryptographic operations, like PINs or Private Keys
 	}
+	mixin FreeEnumMembers!SC_FILE_TYPE;
+	
 	enum 
 	{
 		SC_FILE_EF_UNKNOWN = 0,
