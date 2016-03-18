@@ -39,10 +39,10 @@ install:
   - set ZLIB_VER=128
   - set ZLIB_VER_DOT=1.2.8
   - ps: >-
-      echo $env:APPVEYOR_REPO_BRANCH
-      If ($env:APPVEYOR_REPO_TAG)  {
-        $env:APPVEYOR_REPO_BRANCH = git branch --contains $env:APPVEYOR_REPO_TAG_NAME
-        echo $env:APPVEYOR_REPO_BRANCH
+      If (${env:APPVEYOR_REPO_TAG})  {
+        echo ${env:APPVEYOR_REPO_BRANCH}
+        $env:APPVEYOR_REPO_BRANCH = git branch --contains ${env:APPVEYOR_REPO_TAG_NAME}
+        echo ${env:APPVEYOR_REPO_BRANCH}
       }
   - ps: >-
       If ($env:Platform -Match "x86") {
