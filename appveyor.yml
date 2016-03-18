@@ -1,4 +1,4 @@
-version: 0.15.0.{build}
+version: 0.16.0tt1.{build}
 
 platform:
   - x86
@@ -108,3 +108,17 @@ cache:
   - C:\OpenSSL-Win32 -> appveyor.yml
   - C:\OpenSSL-Win64 -> appveyor.yml
   - zlib.zip -> appveyor.yml
+
+deploy:
+  release: OpenSC-SM-$(appveyor_build_version)
+  description: 'OpenSC-SM Release'
+  provider: GitHub
+  auth_token:
+    secure: e5fd40a0ede6490d6d89806afa23f3172301b6db # your encrypted token from GitHub
+  artifact: /OpenSC-SM-.*\.msi/    
+  draft: false
+  prerelease: true
+  on:
+    branch: test-appveyor          # release from master branch only
+    appveyor_repo_tag: true        # deploy on tag push only
+
