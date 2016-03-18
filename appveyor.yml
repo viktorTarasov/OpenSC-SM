@@ -1,4 +1,4 @@
-version: 0.16.0tt5.{build}
+version: 0.16.0tt6.{build}
 
 platform:
   - x86
@@ -111,16 +111,16 @@ cache:
   - zlib.zip -> appveyor.yml
 
 deploy:
-  tag: $(APPVEYOR_REPO_TAG_NAME)
-  release: OpenSC-SM-$(APPVEYOR_REPO_TAG_NAME)
-  description: 'OpenSC-SM MSIs'
-  provider: GitHub
-  auth_token:
-    secure: e5fd40a0ede6490d6d89806afa23f3172301b6db # your encrypted token from GitHub
-  artifact: /OpenSC-SM-.*\.msi/  
-  draft: false
-  prerelease: true
-  on:
-    branch: %APPVEYOR_REPO_TAG_NAME%
-    appveyor_repo_tag: true        # deploy on tag push only
+  - provider: GitHub
+    tag: $(APPVEYOR_REPO_TAG_NAME)
+    release: OpenSC-SM-$(APPVEYOR_REPO_TAG_NAME)
+    description: 'OpenSC-SM MSIs'
+    auth_token:
+      secure: e5fd40a0ede6490d6d89806afa23f3172301b6db # your encrypted token from GitHub
+    artifact: /OpenSC-SM-.*\.msi/  
+    draft: false
+    prerelease: true
+    on:
+      branch: test-0.16.0-tt5
+      appveyor_repo_tag: true        # deploy on tag push only
 
