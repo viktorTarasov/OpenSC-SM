@@ -1,4 +1,4 @@
-version: 0.16.0tt1.{build}
+version: 0.16.0tt2.{build}
 
 platform:
   - x86
@@ -110,12 +110,12 @@ cache:
   - zlib.zip -> appveyor.yml
 
 deploy:
-  release: OpenSC-SM-$(appveyor_build_version)
-  description: 'OpenSC-SM Release'
+  release: OpenSC-SM-$(APPVEYOR_REPO_TAG_NAME)
+  description: 'OpenSC-SM MSIs'
   provider: GitHub
   auth_token:
     secure: e5fd40a0ede6490d6d89806afa23f3172301b6db # your encrypted token from GitHub
-  artifact: /OpenSC-SM-.*\.msi/    
+  artifact: /OpenSC-SM-.*\.msi/  
   draft: false
   prerelease: true
   on:
