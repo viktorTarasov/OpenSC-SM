@@ -76,6 +76,9 @@ install:
   - cngsdk.msi /quiet
   - uname -a
   - set
+  - git status
+  - git tag -l
+  - git branch
 
 build_script:
   # build zlib.lib as a static library
