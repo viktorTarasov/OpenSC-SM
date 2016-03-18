@@ -39,9 +39,13 @@ install:
   - set ZLIB_VER=128
   - set ZLIB_VER_DOT=1.2.8
   - ps: >-
-      If (${env:APPVEYOR_REPO_TAG})  {
+      If ($env:APPVEYOR_REPO_TAG)  {
+        echo "REPO TAG: ${env:APPVEYOR_REPO_TAG}"
+        echo "REPO TAG name: ${env:APPVEYOR_REPO_TAG_NAME}"
         $env:ARTIFACT_TITLE="OpenSC-SM-${env:APPVEYOR_REPO_TAG_NAME}"
       } Else {
+        echo "not REPO TAG: ${env:APPVEYOR_REPO_TAG}"
+        echo "not REPO TAG name: ${env:APPVEYOR_REPO_TAG_NAME}"
         $env:ARTIFACT_TITLE="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}"
       }
       If ($env:Platform -Match "x86") {
