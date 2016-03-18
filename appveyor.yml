@@ -114,7 +114,7 @@ deploy:
   - provider: GitHub
     tag: $(APPVEYOR_REPO_TAG_NAME)
     release: OpenSC-SM-$(APPVEYOR_REPO_TAG_NAME)
-    description: 'OpenSC-SM MSIs'
+    description: 'OpenSC-SM MSIs $(APPVEYOR_REPO_TAG_NAME)'
     auth_token:
       secure: YWY6+jv1p4n7yf/AUY+vyhfcWmgb3F6h2bNGa069BMtxQFruWHEAz9ke3Ci0V6FY
     artifact: /OpenSC-SM-.*\.msi/  
