@@ -44,13 +44,13 @@ install:
         $env:ENV_PLATFORM="x86"
         $env:OPENSSL_PF="Win32"
         $env:NMAKE_ARCH=""
-        $env:ARTIFACT="OpenSC-${env:APPVEYOR_BUILD_VERSION}-win32_vs${env:VSVER}-${env:CONFIGURATION}.msi"
+        $env:ARTIFACT="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}-win32_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       } Else {
         $env:VCVARS_PLATFORM="amd64"
         $env:ENV_PLATFORM="x64"
         $env:OPENSSL_PF="Win64"
         $env:NMAKE_ARCH="BUILD_ON=WIN64 BUILD_FOR=WIN64"
-        $env:ARTIFACT="OpenSC-${env:APPVEYOR_BUILD_VERSION}-win64_vs${env:VSVER}-${env:CONFIGURATION}.msi"
+        $env:ARTIFACT="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}-win64_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       }
   - ps: >-
       If ($env:Configuration -Like "*Debug*") {
@@ -87,7 +87,7 @@ build_script:
              nmake -f win32/Makefile.msc AS=ml64 LOC="-DASMV -DASMINF -I." OBJA="inffasx64.obj gvmat64.obj inffas8664.obj" zlib.lib
           }
           $env:NMAKE_EXTRA="ZLIBSTATIC_DEF=/DENABLE_ZLIB_STATIC ${env:NMAKE_EXTRA}"
-          cd c:\projects\Opensc
+          cd c:\projects\opensc-sm
       }
   - bash -c "exec 0</dev/null && ./bootstrap"
   # disable features to speed up the script
@@ -101,7 +101,7 @@ build_script:
   # put all pdb files for dump analysis, but this consume approx 100 MB per build
   - ps: >-
       If ($env:Configuration -Like "*Debug*") {
-        Get-ChildItem -recurse c:\projects\OpenSC -exclude vc*.pdb *.pdb | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
+        Get-ChildItem -recurse c:\projects\opensc-sm -exclude vc*.pdb *.pdb | % { Push-AppveyorArtifact $_.FullName -FileName $_.Name }
       }
 
 cache:
