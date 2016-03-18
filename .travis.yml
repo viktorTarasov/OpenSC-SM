@@ -15,7 +15,7 @@ addons:
     - xsltproc
   coverity_scan:
     project:
-      name: "OpenSC/OpenSC"
+      name: "viktorTarasov/OpenSC-SM"
       description: "Build submitted via Travis CI"
     notification_email: viktor.tarasov@gmail.com
     build_command:   "make -j 4"
