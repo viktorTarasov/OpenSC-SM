@@ -1,4 +1,4 @@
-version: 0.16.0tt10.{build}
+version: 0.16.0tt12.{build}
 
 platform:
   - x86
@@ -121,6 +121,6 @@ deploy:
     draft: false
     prerelease: true
     on:
-      branch: test-0.16.0-tt10
+      branch: $(APPVEYOR_REPO_TAG_NAME)
       appveyor_repo_tag: true        # deploy on tag push only
 
