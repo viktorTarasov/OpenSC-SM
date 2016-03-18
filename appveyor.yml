@@ -1,4 +1,8 @@
-version: 0.16.0tt8.{build}
+version: 0.16.0tt9.{build}
+
+branches:
+  only:
+    test-appveyor
 
 platform:
   - x86
@@ -121,5 +125,6 @@ deploy:
     draft: false
     prerelease: true
     on:
+      branch: test-0.16.0-tt9 
       appveyor_repo_tag: true        # deploy on tag push only
 
