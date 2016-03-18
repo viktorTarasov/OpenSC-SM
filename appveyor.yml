@@ -38,6 +38,13 @@ install:
   - set OPENSSL_VER=1_0_2e
   - set ZLIB_VER=128
   - set ZLIB_VER_DOT=1.2.8
+  - cmd: if "%APPVEYOR_REPO_TAG%"=="TRUE" (
+  - cmd:   git branch --contains %APPVEYOR_REPO_TAG_NAME%
+  - cmd:   for /f "delims=" %%a in ('git branch --contains %APPVEYOR_REPO_TAG_NAME%') do @set APPVEYOR_REPO_BRANCH_VT=%%a
+  - cmd:   echo "Coucou-%APPVEYOR_REPO_BRANCH_VT%"
+  - cmd:   git checkout %APPVEYOR_REPO_TAG_NAME%
+  - cmd:   set APPVEYOR_REPO_BRANCH=test-appveyor
+  - cmd: )
   - ps: >-
       If ($env:Platform -Match "x86") {
         $env:VCVARS_PLATFORM="x86"
@@ -124,6 +131,6 @@ deploy:
     draft: false
     prerelease: true
     on:
-      branch: $(APPVEYOR_REPO_TAG_NAME)
+      branch: test-appveyor
       appveyor_repo_tag: true        # deploy on tag push only
 
