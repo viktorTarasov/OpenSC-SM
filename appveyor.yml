@@ -138,6 +138,6 @@ deploy:
     draft: false
     prerelease: true
     on:
-      branch: test-appveyor
-      appveyor_repo_tag: true        # deploy on tag push only
+      branch: /test-0.16.0-.*/		# branch: test-appveyor
+      appveyor_repo_tag: true  		# deploy on tag push only
 
