@@ -1,4 +1,4 @@
-version: 0.16.0tt12.{build}
+version: 0.16.0rc20.{build}
 
 platform:
   - x86
@@ -40,23 +40,22 @@ install:
   - set ZLIB_VER_DOT=1.2.8
   - ps: >-
       If (${env:APPVEYOR_REPO_TAG})  {
-        echo ${env:APPVEYOR_REPO_BRANCH}
-        $env:APPVEYOR_REPO_BRANCH = git branch --contains ${env:APPVEYOR_REPO_TAG_NAME}
-        echo ${env:APPVEYOR_REPO_BRANCH}
+        $env:ARTIFACT_TITLE="OpenSC-SM-${env:APPVEYOR_REPO_TAG_NAME}"
+      } Else {
+        $env:ARTIFACT_TITLE="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}"
       }
-  - ps: >-
       If ($env:Platform -Match "x86") {
         $env:VCVARS_PLATFORM="x86"
         $env:ENV_PLATFORM="x86"
         $env:OPENSSL_PF="Win32"
         $env:NMAKE_ARCH=""
-        $env:ARTIFACT="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}-win32_vs${env:VSVER}-${env:CONFIGURATION}.msi"
+        $env:ARTIFACT="${env:ARTIFACT_TITLE}-win32_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       } Else {
         $env:VCVARS_PLATFORM="amd64"
         $env:ENV_PLATFORM="x64"
         $env:OPENSSL_PF="Win64"
         $env:NMAKE_ARCH="BUILD_ON=WIN64 BUILD_FOR=WIN64"
-        $env:ARTIFACT="OpenSC-SM-${env:APPVEYOR_BUILD_VERSION}-win64_vs${env:VSVER}-${env:CONFIGURATION}.msi"
+        $env:ARTIFACT="${env:ARTIFACT_TITLE}-win64_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       }
   - ps: >-
       If ($env:Configuration -Like "*Debug*") {
