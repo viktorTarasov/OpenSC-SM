@@ -75,6 +75,7 @@ install:
   - appveyor DownloadFile "http://download.microsoft.com/download/2/C/9/2C93059C-0532-42DF-8C24-9AEAFF00768E/cngsdk.msi"
   - cngsdk.msi /quiet
   - uname -a
+  - set
 
 build_script:
   # build zlib.lib as a static library
@@ -110,6 +111,7 @@ cache:
   - zlib.zip -> appveyor.yml
 
 deploy:
+  tag: $(APPVEYOR_REPO_TAG_NAME)
   release: OpenSC-SM-$(APPVEYOR_REPO_TAG_NAME)
   description: 'OpenSC-SM MSIs'
   provider: GitHub
