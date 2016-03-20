@@ -38,8 +38,7 @@ install:
   - set OPENSSL_VER=1_0_2e
   - set ZLIB_VER=128
   - set ZLIB_VER_DOT=1.2.8
-  - ps: >-
-      $env:PACKAGE_NAME=(git describe --tags)
+  - ps: $env:PACKAGE_NAME=(git describe --tags)
   - ps: >-
       If ($env:Platform -Match "x86") {
         $env:VCVARS_PLATFORM="x86"
@@ -78,9 +77,6 @@ install:
   - cngsdk.msi /quiet
   - uname -a
   - set
-  - git status
-  - git tag -l
-  - git branch
 
 build_script:
   # build zlib.lib as a static library
@@ -115,14 +111,6 @@ cache:
   - C:\OpenSSL-Win64 -> appveyor.yml
   - zlib.zip -> appveyor.yml
 
-before_deploy:
-  - ps: >-
-      echo $env:APPVEYOR_REPO_BRANCH
-      If ($env:APPVEYOR_REPO_TAG)  {
-        $env:APPVEYOR_REPO_BRANCH = git branch --contains $env:APPVEYOR_REPO_TAG_NAME
-        echo $env:APPVEYOR_REPO_BRANCH
-      }
-  
 deploy:
   - provider: GitHub
     tag: $(APPVEYOR_REPO_TAG_NAME)
