@@ -2490,6 +2490,46 @@ vsctpm_md_store_my_cert(struct sc_card *card, char *pin, char *container, int au
 	LOG_FUNC_RETURN(ctx, rv);
 }
 
+int
+vsctpm_md_cmap_delete_cert_file(struct sc_card *card, int idx)
+{
+    struct sc_context *ctx = card->ctx;
+    HRESULT hRes;
+    char file_name[256];
+    struct vsctpm_private_data *priv = (struct vsctpm_private_data *) card->drv_data;
+    
+    sc_log(ctx, "Delete certificate file at index '%i'", idx);
+   
+    
+    sprintf(file_name, "kxc%02u", idx);
+    hRes = priv->md.card_data.pfnCardDeleteFile(&priv->md.card_data, "mscp", file_name, 0);
+    if (hRes == SCARD_W_RESET_CARD)   {
+        int rv;
+        sc_log(ctx, "CardDeleteFile() failed: RESET-CARD");
+        rv = card->reader->ops->reconnect(card->reader, SCARD_LEAVE_CARD);
+        LOG_TEST_RET(ctx, rv, "Cannot reconnect card");
+
+        sc_md_delete_context(card);
+        rv = sc_md_acquire_context(card);
+        LOG_TEST_RET(ctx, rv, "Failed to get CMAP size");
+        
+        rv = vsctpm_md_pin_authenticate(card, priv->user_pin, priv->user_pin_len, NULL);
+		LOG_TEST_RET(ctx, rv, "User MD authenticate failed");
+
+        hRes = priv->md.card_data.pfnCardDeleteFile(&priv->md.card_data, "mscp", file_name, 0);
+    }
+    
+	if (hRes != SCARD_S_SUCCESS)   {
+		sc_log(ctx, "CardDeleteFile(%i) failed: hRes %lX", idx, hRes);
+        if (hRes == SCARD_E_FILE_NOT_FOUND) 
+            sc_log(ctx, "CardDeleteFile(%i) : file already deleted", idx);
+        else
+            LOG_FUNC_RETURN(ctx, SC_ERROR_INTERNAL);
+	}
+    
+    LOG_FUNC_RETURN(ctx, SC_SUCCESS);
+}
+
 
 
 int

@@ -32,6 +32,8 @@
 #include <ctype.h>
 #include <errno.h>
 #include <stdio.h>
+#include <stdarg.h>
+#include <sys/stat.h>
 
 #include <openssl/bn.h>
 #include <openssl/evp.h>
@@ -49,6 +51,7 @@
 #include "../libopensc/pkcs15.h"
 #include "../libopensc/cards.h"
 #include "../libopensc/vsctpm-md.h"
+#include "../libopensc/types.h"
 
 #include "pkcs15-init.h"
 #include "profile.h"
@@ -296,9 +299,10 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 
 	rv = vsctpm_get_pin_from_cache(p15card, pin, sizeof(pin));
 	LOG_TEST_RET(ctx, rv, "Cannot get PIN from cache");
-
-	rv = sc_pkcs15_find_cert_by_id(p15card, &key_info->id, &cert_obj);
+    
+    rv = sc_pkcs15_find_cert_by_id(p15card, &key_info->id, &cert_obj);
 	if (cert_obj)   {
+        sc_log(ctx, "Delete linked certificate");
 		rv = sc_pkcs15init_delete_object(p15card, profile, cert_obj);
 		LOG_TEST_RET(ctx, rv, "Cannot delete linked certificate");
 	}
@@ -307,11 +311,25 @@ vsctpm_pkcs15_delete_container (struct sc_profile *profile, struct sc_pkcs15_car
 	sc_log(ctx, "Delete Private Key index '%i'", idx);
 	rv = vsctpm_md_cmap_delete_container_index(card, pin, idx);
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
-
-	sc_log(ctx, "Delete Private Key delete container '%s'", cmap_guid);
-	rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
-	LOG_TEST_RET(ctx, rv, "Cannot delete container");
 */
+
+    sc_log(ctx, "Delete certificate file kcx%02u", idx);
+    rv = vsctpm_md_cmap_delete_cert_file(card, idx);
+    LOG_TEST_RET(ctx, rv, "Cannot delete certificate file");
+
+
+// Delete container only if it is the last one
+    rv = vsctpm_md_cmap_size(card);
+    sc_log(ctx, "rv = %d, idx = %d", rv, idx);
+    
+    if (idx == rv - 1) {
+        sc_debug(ctx, 2, "Delete Private Key delete container '%s'", cmap_guid);
+        rv = vsctpm_md_cmap_delete_container(card, pin, cmap_guid);
+        LOG_TEST_RET(ctx, rv, "Cannot delete container");    
+    } else {
+        sc_debug(ctx, 2, "Will not delete container because it would break card structure...");
+    }
+  
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 #else
 	LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_IMPLEMENTED);
@@ -344,9 +362,10 @@ vsctpm_pkcs15_delete_cert (struct sc_profile *profile, struct sc_pkcs15_card *p1
 	rv = sc_pkcs15_read_certificate(p15card, cert_info, &p15cert);
 	LOG_TEST_RET(ctx, rv, "Read certificate failed");
 
+    
 	rv = vsctpm_md_cmap_delete_certificate(card, pin, p15cert);
 	LOG_TEST_RET(ctx, rv, "Cannot delete container");
-
+    
 	sc_pkcs15_free_certificate(p15cert);
 
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
