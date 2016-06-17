@@ -1,12 +1,10 @@
-// D import file generated from 'errors.d' renamed to 'errors.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
 // Function exported from "libopensc.*"
 
 module libopensc.errors;
+
 extern (C) 
 {
-	alias SC_ERROR_t = int;
-	enum : SC_ERROR_t
-	{
+	enum {
 		SC_SUCCESS = 0,
 		SC_ERROR_READER = -1100,
 		SC_ERROR_NO_READERS_FOUND = -1101,

@@ -3,14 +3,17 @@
 // all other functions exported from "libopensc.*"
 
 module libopensc.sm;
+
 version (ENABLE_SM)
 {
+	import core.stdc.config : c_ulong;
+
+	import libopensc.errors;
+	import libopensc.types;
+	import libopensc.opensc : sc_card, sc_context;
+
 	extern (C) 
 	{
-		import core.stdc.config : c_ulong;
-		import libopensc.errors;
-		import libopensc.types;
-		import libopensc.opensc : sc_card, sc_context;
 		enum SHA_DIGEST_LENGTH = 20;
 		enum SHA1_DIGEST_LENGTH = 20;
 		enum SHA256_DIGEST_LENGTH = 32;

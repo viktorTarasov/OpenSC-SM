@@ -1,27 +1,28 @@
-// D import file generated from 'opensc.d' renamed to 'opensc.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
 // Functions exported from "libopensc.*"
 
 module libopensc.opensc;
+
 import core.stdc.stdio : FILE;
+import core.stdc.config : c_ulong;
+
+import common.simclist : list_t;
+import scconf.scconf;
+import libopensc.internal;
+import libopensc.errors;
+import libopensc.types;
+import libopensc.sm;
+
 extern (C) 
 {
-	private import libopensc.internal;
-	public import common.simclist;
-	public import scconf.scconf;
-	public import libopensc.errors;
-	public import libopensc.types;
-	version (ENABLE_SM)
-	{
-		import libopensc.sm;
-	}
-	enum 
+	enum
 	{
 		SC_SEC_OPERATION_DECIPHER = 1,
 		SC_SEC_OPERATION_SIGN = 2,
 		SC_SEC_OPERATION_AUTHENTICATE = 3,
 		SC_SEC_OPERATION_DERIVE = 4,
 	}
-	enum 
+
+	enum
 	{
 		SC_SEC_ENV_ALG_REF_PRESENT = 1,
 		SC_SEC_ENV_FILE_REF_PRESENT = 2,
@@ -29,8 +30,8 @@ extern (C)
 		SC_SEC_ENV_KEY_REF_ASYMMETRIC = 8,
 		SC_SEC_ENV_ALG_PRESENT = 16,
 	}
-	alias SC_ALGORITHM_t = int;
-	enum : SC_ALGORITHM_t
+
+	enum
 	{
 		SC_ALGORITHM_RSA = 0,
 		SC_ALGORITHM_DSA = 1,
@@ -84,6 +85,7 @@ extern (C)
 		SC_ALGORITHM_EXT_EC_UNCOMPRESES = 16,
 		SC_ALGORITHM_EXT_EC_COMPRESS = 32,
 	}
+
 	enum 
 	{
 		SC_EVENT_CARD_INSERTED = 1,
@@ -93,6 +95,7 @@ extern (C)
 		SC_EVENT_READER_DETACHED = 8,
 		SC_EVENT_READER_EVENTS = SC_EVENT_READER_ATTACHED | SC_EVENT_READER_DETACHED,
 	}
+
 	struct sc_supported_algo_info
 	{
 		uint reference;
@@ -101,6 +104,7 @@ extern (C)
 		sc_object_id algo_id;
 		uint algo_ref;
 	}
+
 	struct sc_security_env
 	{
 		c_ulong flags;
@@ -113,12 +117,15 @@ extern (C)
 		size_t key_ref_len;
 		sc_supported_algo_info[SC_MAX_SUPPORTED_ALGORITHMS] supported_algos;
 	}
+//	alias sc_security_env_t = sc_security_env;
+
 	struct sc_algorithm_id
 	{
 		uint algorithm;
 		sc_object_id oid;
 		void* params;
 	}
+
 	struct sc_pbkdf2_params
 	{
 		ubyte[16] salt;
@@ -127,11 +134,13 @@ extern (C)
 		size_t key_length;
 		sc_algorithm_id hash_alg;
 	}
+
 	struct sc_pbes2_params
 	{
 		sc_algorithm_id derivation_alg;
 		sc_algorithm_id key_encr_alg;
 	}
+
 	struct sc_ec_parameters
 	{
 		char* named_curve;
@@ -140,6 +149,7 @@ extern (C)
 		int type;
 		size_t field_length;
 	}
+
 	struct sc_algorithm_info
 	{
 		uint algorithm;
@@ -161,6 +171,8 @@ extern (C)
 		}
 		anonymous u;
 	}
+//	alias sc_algorithm_info_t = sc_algorithm_info;
+
 	struct sc_app_info
 	{
 		char* label;
@@ -169,6 +181,8 @@ extern (C)
 		sc_path path;
 		int rec_nr;
 	}
+//	alias sc_app_info_t = sc_app_info;
+
 	struct sc_ef_atr
 	{
 		ubyte card_service;
@@ -183,6 +197,7 @@ extern (C)
 		sc_object_id allocation_oid;
 		uint status;
 	}
+
 	struct sc_card_cache
 	{
 		sc_path current_path;
@@ -190,22 +205,28 @@ extern (C)
 		sc_file* current_df;
 		int valid;
 	}
+
 	enum 
 	{
-		SC_PROTO_T0 = 1,
-		SC_PROTO_T1 = 2,
-		SC_PROTO_RAW = 4096,
-		SC_PROTO_ANY = 4294967295u,
+		SC_PROTO_T0  = 0x0000_0001,
+		SC_PROTO_T1  = 0x0000_0002,
+		SC_PROTO_RAW = 0x0000_1000,
+		SC_PROTO_ANY = 0xFFFF_FFFF,
 	}
+
 	struct sc_reader_driver
 	{
-		immutable(char)* name;
-		immutable(char)* short_name;
+		const(char)* name;
+		const(char)* short_name;
 		sc_reader_operations* ops;
+version(until15)
+{
 		size_t max_send_size;
 		size_t max_recv_size;
+}
 		void* dll;
 	}
+
 	enum 
 	{
 		SC_READER_CARD_PRESENT = 1,
@@ -224,6 +245,11 @@ extern (C)
 		SC_READER_CAP_PACE_DESTROY_CHANNEL = 16,
 		SC_READER_CAP_PACE_GENERIC = 32,
 	}
+
+/* reader send/receive length of short APDU */
+	enum SC_READER_SHORT_APDU_MAX_SEND_SIZE = 255;
+	enum SC_READER_SHORT_APDU_MAX_RECV_SIZE = 256;
+	
 	struct sc_reader
 	{
 		sc_context* ctx;
@@ -231,10 +257,25 @@ extern (C)
 		const(sc_reader_operations)* ops;
 		void* drv_data;
 		char* name;
+version(until15)
+{}
+else
+{
+		char* vendor;
+		ubyte version_major;
+		ubyte version_minor;	
+}
 		c_ulong flags;
 		c_ulong capabilities;
 		uint supported_protocols;
 		uint active_protocol;
+version(until15)
+{}
+else
+{
+		size_t max_send_size; /* Max Lc supported by the reader layer */
+		size_t max_recv_size; /* Mac Le supported by the reader layer */
+}
 		sc_atr atr;
 		struct _atr_info
 		{
@@ -249,30 +290,30 @@ extern (C)
 		}
 		_atr_info atr_info;
 	}
-	alias SC_PIN_CMD_t = uint;
-	enum SC_PIN_CMD : SC_PIN_CMD_t
-	{
+//	alias sc_reader_t = sc_reader;
+
+	enum {
 		SC_PIN_CMD_VERIFY = 0,
 		SC_PIN_CMD_CHANGE = 1,
 		SC_PIN_CMD_UNBLOCK = 2,
 		SC_PIN_CMD_GET_INFO = 3,
 	}
-	alias SC_PIN_CMD_FLAG_t = uint;
-	enum : SC_PIN_CMD_FLAG_t
-	{
+
+	enum {
 		SC_PIN_CMD_USE_PINPAD = 1,
 		SC_PIN_CMD_NEED_PADDING = 2,
 		SC_PIN_CMD_IMPLICIT_CHANGE = 4,
 	}
-	enum 
-	{
+
+	enum {
 		SC_PIN_ENCODING_ASCII = 0,
 		SC_PIN_ENCODING_BCD = 1,
 		SC_PIN_ENCODING_GLP = 2,
 	}
+
 	struct sc_pin_cmd_pin
 	{
-		immutable(char)* prompt;
+		const(char)* prompt;
 		const(ubyte)* data;
 		int len;
 		size_t min_length;
@@ -287,6 +328,7 @@ extern (C)
 		int tries_left;
 		sc_acl_entry[SC_MAX_SDO_ACLS] acls;
 	}
+
 	struct sc_pin_cmd_data
 	{
 		uint cmd;
@@ -297,6 +339,7 @@ extern (C)
 		sc_pin_cmd_pin pin2;
 		sc_apdu* apdu;
 	}
+
 	alias reader_fun1_t = int function(sc_context* ctx);
 	alias reader_fun2_t = int function(sc_reader* reader);
 	struct sc_reader_operations
@@ -313,27 +356,30 @@ extern (C)
 		reader_fun2_t lock;
 		reader_fun2_t unlock;
 		int function(sc_reader* reader, uint proto) set_protocol;
-		int function(sc_reader* reader, immutable(char)*) display_message;
+		int function(sc_reader* reader, const(char)*) display_message;
 		int function(sc_reader* reader, sc_pin_cmd_data*) perform_verify;
 		int function(sc_reader* reader, void* establish_pace_channel_input, void* establish_pace_channel_output) perform_pace;
 		int function(sc_context* ctx, uint event_mask, sc_reader** event_reader, uint* event, int timeout, void** reader_states) wait_for_event;
 		int function(sc_reader*, int) reset;
 		int function(sc_context* ctx, void* pcsc_context_handle, void* pcsc_card_handle) use_reader;
 	}
+
 	enum 
 	{
-		SC_CARD_FLAG_VENDOR_MASK = 4294901760u,
-		SC_CARD_FLAG_RNG = 2,
+		SC_CARD_FLAG_VENDOR_MASK = 0xFFFF_0000,
+		SC_CARD_FLAG_RNG         = 0x0000_0002,
 	}
-	alias SC_CARD_CAP_t = int;
-	enum : SC_CARD_CAP_t
+
+	enum
 	{
 		SC_CARD_CAP_APDU_EXT = 1,
 		SC_CARD_CAP_RNG = 4,
+		SC_CARD_CAP_ISO7816_PIN_INFO = 8,
 		SC_CARD_CAP_USE_FCI_AC = 16,
 		SC_CARD_CAP_ONLY_RAW_HASH = 64,
 		SC_CARD_CAP_ONLY_RAW_HASH_STRIPPED = 128,
 	}
+
 	struct sc_card
 	{
 		sc_context* ctx;
@@ -354,7 +400,7 @@ extern (C)
 		int lock_count;
 		sc_card_driver* driver;
 		sc_card_operations* ops;
-		immutable(char)* name;
+		const(char)* name;
 		void* drv_data;
 		int max_pin_len;
 		sc_card_cache cache;
@@ -367,6 +413,8 @@ extern (C)
 		}
 		uint magic;
 	}
+//	alias sc_card_t = sc_card;
+
 	alias card_fun1_t = int function(sc_card* card);
 	alias card_fun2_t = int function(sc_card* card, uint idxORrec_nr, ubyte* buf, size_t count, c_ulong flags);
 	alias card_fun3_t = int function(sc_card* card, uint idxORrec_nr, const(ubyte)* buf, size_t count, c_ulong flags);
@@ -393,6 +441,7 @@ extern (C)
 	alias put_data_tf = int function(sc_card* card, uint, const(ubyte)*, size_t);
 	alias delete_record_tf = int function(sc_card* card, uint rec_nr);
 	alias read_public_key_tf = int function(sc_card* card, uint, sc_path* path, uint, uint, ubyte**, size_t*);
+
 	struct sc_card_operations
 	{
 		card_fun1_t match_card;
@@ -430,15 +479,18 @@ extern (C)
 		delete_record_tf delete_record;
 		read_public_key_tf read_public_key;
 	}
+
 	struct sc_card_driver
 	{
-		immutable(char)* name;
-		immutable(char)* short_name;
+		const(char)* name;
+		const(char)* short_name;
 		sc_card_operations* ops;
-		immutable(sc_atr_table)* atr_map;
+		sc_atr_table* atr_map;
 		uint natrs;
 		void* dll;
 	}
+//	alias sc_card_driver_t = sc_card_driver;
+
 	struct sc_thread_context_t
 	{
 		uint ver;
@@ -448,14 +500,27 @@ extern (C)
 		int function(void*) destroy_mutex;
 		c_ulong function() thread_id;
 	}
+
+	enum SC_CTX_FLAG_TERMINATE              = 0x00000001;
+	enum SC_CTX_FLAG_PARANOID_MEMORY        = 0x00000002;
+	enum SC_CTX_FLAG_DEBUG_MEMORY           = 0x00000004;
+	enum SC_CTX_FLAG_ENABLE_DEFAULT_DRIVER  = 0x00000008;
+
 	struct sc_context
 	{
 		scconf_context* conf;
 		scconf_block*[3] conf_blocks;
 		char* app_name;
 		int debug_;
+version(until15)
+{
 		int paranoid_memory;
 		int enable_default_driver;
+}
+else
+{
+		c_ulong flags;
+}
 		FILE* debug_file;
 		char* debug_filename;
 		char* preferred_language;
@@ -468,6 +533,8 @@ extern (C)
 		void* mutex;
 		uint magic;
 	}
+//	alias sc_context_t = sc_context;
+
 	int sc_transmit_apdu(sc_card* card, sc_apdu* apdu);
 	void sc_format_apdu(sc_card* card, sc_apdu* apdu, int apdu_case, int ins, int p1, int p2);
 	int sc_check_apdu(sc_card* card, const(sc_apdu)* apdu);
@@ -485,6 +552,7 @@ extern (C)
 	int sc_context_create(sc_context** ctx, const(sc_context_param_t)* parm);
 	int sc_release_context(sc_context* ctx);
 	int sc_ctx_detect_readers(sc_context* ctx);
+	int sc_ctx_win32_get_config_value(char* env, char* reg, char* key, char* out_, size_t* out_size);
 	sc_reader* sc_ctx_get_reader(sc_context* ctx, uint i);
 	int sc_ctx_use_reader(sc_context* ctx, void* pcsc_context_handle, void* pcsc_card_handle);
 	sc_reader* sc_ctx_get_reader_by_name(sc_context* ctx, const(char)* name);
@@ -501,12 +569,15 @@ extern (C)
 	int sc_cancel(sc_context* ctx);
 	int sc_lock(sc_card* card);
 	int sc_unlock(sc_card* card);
+	size_t sc_get_max_recv_size(const(sc_card)* card);
+	size_t sc_get_max_send_size(const(sc_card)* card);
 	int sc_select_file(sc_card* card, const(sc_path)* path, sc_file** file);
 	int sc_list_files(sc_card* card, ubyte* buf, size_t buflen);
 	int sc_read_binary(sc_card* card, uint idx, ubyte* buf, size_t count, c_ulong flags);
 	int sc_write_binary(sc_card* card, uint idx, const(ubyte)* buf, size_t count, c_ulong flags);
 	int sc_update_binary(sc_card* card, uint idx, const(ubyte)* buf, size_t count, c_ulong flags);
 	int sc_erase_binary(sc_card* card, uint idx, size_t count, c_ulong flags);
+
 	enum 
 	{
 		SC_RECORD_EF_ID_MASK = 31LU,
@@ -514,6 +585,7 @@ extern (C)
 		SC_RECORD_BY_REC_NR = 256LU,
 		SC_RECORD_CURRENT = 0LU,
 	}
+
 	int sc_read_record(sc_card* card, uint rec_nr, ubyte* buf, size_t count, c_ulong flags);
 	int sc_write_record(sc_card* card, uint rec_nr, const(ubyte)* buf, size_t count, c_ulong flags);
 	int sc_append_record(sc_card* card, const ubyte* buf, size_t count, c_ulong flags);
@@ -586,12 +658,14 @@ extern (C)
 	uint sc_crc32(ubyte* value, size_t len);
 	void sc_remote_data_init(sc_remote_data* rdata);
 	int sc_copy_ec_params(sc_ec_parameters*, sc_ec_parameters*);
+
 	struct sc_card_error
 	{
 		uint SWs;
 		int errorno;
 		const(char)* errorstr;
 	}
+
 	__gshared const(char)* sc_get_version();
 	__gshared sc_card_driver* sc_get_iso7816_driver();
 }

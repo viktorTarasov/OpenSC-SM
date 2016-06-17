@@ -2,7 +2,9 @@
 // Functions exported from "libopensc.*"
 
 module libopensc.types;
+
 import core.stdc.config : c_ulong;
+
 template FreeEnumMembers(T) if (is(T == enum))
 {
 	mixin(()
@@ -16,6 +18,7 @@ template FreeEnumMembers(T) if (is(T == enum))
 	}
 	());
 }
+
 extern (C) 
 {
 	alias SC_MAX_t = int;
@@ -105,6 +108,7 @@ extern (C)
 		int type;
 		sc_aid aid;
 	}
+
 	struct sc_crt
 	{
 		uint tag;
@@ -132,11 +136,11 @@ extern (C)
 	enum 
 	{
 		SC_AC_OP_SELECT = 0,
-		SC_AC_OP_LOCK = 1,
-		SC_AC_OP_DELETE = 2,
+		SC_AC_OP_LOCK = 1,   // Irreversibly block a file
+		SC_AC_OP_DELETE = 2, // Delete a uniquely identifiable object (such as a load file, application or key).
 		SC_AC_OP_CREATE = 3,
-		SC_AC_OP_REHABILITATE = 4,
-		SC_AC_OP_INVALIDATE = 5,
+		SC_AC_OP_REHABILITATE = 4, // INS 44: Unblock a file.           ACOS5-64: Activate File
+		SC_AC_OP_INVALIDATE = 5,   // INS 04: Reversibly block a file.  ACOS5-64: 
 		SC_AC_OP_LIST_FILES = 6,
 		SC_AC_OP_CRYPTO = 7,
 		SC_AC_OP_DELETE_SELF = 8,
@@ -278,6 +282,8 @@ extern (C)
 		c_ulong flags;
 		sc_apdu* next;
 	}
+//	alias sc_apdu_t = sc_apdu;
+
 	enum 
 	{
 		SC_CPLC_TAG = 40831,

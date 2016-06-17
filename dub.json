@@ -1,15 +1,28 @@
 {
-	"name" : "opensc",
-	"description" : "A binding to libopensc (reduced extend required for external modules [driver/SM])",
-	"authors" : ["Carsten Blüggel"],
-	"homepage" : "https://github.com/carblue/opensc",
-	"copyright" : "Copyright © 2016, Carsten Blüggel",
-	"license" : "LGPL-2.1",
-	"libs" : [ "opensc" ],
-	"configurations" : [
-		{
-			"name" : "library",
-			"targetType" : "sourceLibrary"
-		}
+	"description": "A binding to libopensc (reduced extend required for external modules [driver/SM])",
+	"version": "0.15.1",
+	"name": "opensc",
+	"copyright": "Copyright © 2016, Carsten Blüggel",
+	"homepage": "https://github.com/carblue/opensc",
+	"authors": [
+		"Carsten Blüggel"
+	],
+	"configurations": [
+	],
+	"license": "LGPL-2.1",
+	"targetType": "library",
+	"targetPath": "lib",
+	"sourcePaths": [
+		"source/"
+	],
+	"importPaths": [
+		"source/"
+	],
+	"libs-posix": ["opensc"],
+	"sourceFiles-windows-x86": [
+		"lib/windows-x86-dmd/opensc.lib"
+	],
+	"sourceFiles-windows-x86_64": [
+		"lib/windows-x86_64-dmd/opensc.lib"
 	]
 }

@@ -1,8 +1,14 @@
-// D import file generated from 'libopensc/pkcs15.d'
 module libopensc.pkcs15;
+
+import core.stdc.config : c_ulong;
+import libopensc.opensc;
+import libopensc.types;
+import scconf.scconf;
+import libopensc.auxdata;
+
+
 extern (C) 
 {
-	import libopensc.opensc;
 	enum SC_PKCS15_CACHE_DIR = ".eid";
 	enum SC_PKCS15_PIN_MAGIC = 826366246;
 	enum SC_PKCS15_MAX_PINS = 8;
@@ -308,6 +314,9 @@ extern (C)
 		size_t len;
 		void function(void*) free_params;
 	}
+	
+version(until15)
+{
 	enum SC_MD_MAX_CONTAINER_NAME_LEN = 39;
 	enum SC_MD_CONTAINER_MAP_VALID_CONTAINER = 1;
 	enum SC_MD_CONTAINER_MAP_DEFAULT_CONTAINER = 2;
@@ -331,6 +340,8 @@ extern (C)
 		sc_md_cardcf cardcf;
 		void* prop_data;
 	}
+}
+
 	struct sc_pkcs15_prkey_info
 	{
 		sc_pkcs15_id id;
@@ -344,8 +355,17 @@ extern (C)
 		sc_pkcs15_der subject;
 		sc_pkcs15_key_params params;
 		sc_path path;
+version(until15)
+{
 		sc_md_cmap_record cmap_record;
+}
+else
+{
+		sc_auxiliary_data* aux_data;
+}
 	}
+//	alias sc_pkcs15_prkey_info_t = sc_pkcs15_prkey_info;
+	
 	struct sc_pkcs15_pubkey_info
 	{
 		sc_pkcs15_id id;

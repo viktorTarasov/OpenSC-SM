@@ -9,7 +9,7 @@
 
 # Compiled Static libraries
 *.a
-*.lib
+#*.lib
 
 # Executables
 *.exe
@@ -23,3 +23,11 @@
 docs.json
 __dummy.html
 dub.selections.json
+
+
+.directory
+lib/opensc.def
+lib/opensc_alt.def
+lib/windows-x86_64-dmd/opensc.exp
+lib/windows-x86_64-dmd/opensc_alt.lib
+lib/windows-x86_64-dmd/out.txt

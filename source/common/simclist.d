@@ -1,8 +1,8 @@
-// D import file generated from 'simclist.d' renamed to 'simclist.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
-// no functions
+// No functions exported from "libopensc.*"
 
 module common.simclist;
-extern (C) 
+
+extern (C)
 {
 	alias list_hash_t = int;
 	alias element_comparator = int function(const(void)* a, const(void)* b);
@@ -11,12 +11,14 @@ extern (C)
 	alias element_hash_computer = list_hash_t function(const(void)* el);
 	alias element_serializer = void* function(const(void)* el, uint* serializ_len);
 	alias element_unserializer = void* function(const(void)* data, uint* data_len);
+
 	struct list_entry_s
 	{
 		void* data;
 		list_entry_s* next;
 		list_entry_s* prev;
 	}
+
 	struct list_attributes_s
 	{
 		element_comparator comparator;
@@ -27,6 +29,7 @@ extern (C)
 		element_serializer serializer;
 		element_unserializer unserializer;
 	}
+
 	struct list_t
 	{
 		list_entry_s* head_sentinel;
@@ -35,7 +38,11 @@ extern (C)
 		uint numels;
 		list_entry_s** spareels;
 		uint spareelsnum;
+version(SIMCLIST_WITH_THREADS)
+{
+		/* how many threads are currently running */
 		uint threadcount;
+}
 		int iter_active;
 		uint iter_pos;
 		list_entry_s* iter_curentry;

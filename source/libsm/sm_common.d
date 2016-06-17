@@ -7,6 +7,7 @@ version (ENABLE_SM)
 	import core.stdc.config : c_long;
 	import libopensc.opensc : sc_context;
 	import deimos.openssl.des : DES_LONG, DES_cblock, const_DES_cblock, DES_key_schedule;
+
 	extern (C) 
 	{
 		DES_LONG DES_cbc_cksum_3des(const(ubyte)* in_, DES_cblock* output, c_long length, DES_key_schedule* schedule, DES_key_schedule* schedule2, const_DES_cblock* ivec);
