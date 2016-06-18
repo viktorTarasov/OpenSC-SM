@@ -24,10 +24,10 @@ docs.json
 __dummy.html
 dub.selections.json
 
-
 .directory
+# not necessary to be done or later:
+private/
 lib/opensc.def
 lib/opensc_alt.def
-lib/windows-x86_64-dmd/opensc.exp
-lib/windows-x86_64-dmd/opensc_alt.lib
-lib/windows-x86_64-dmd/out.txt
+lib/windows-x86_64/opensc_alt.lib
+lib/windows-x86_64/out.txt

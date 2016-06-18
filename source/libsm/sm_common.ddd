@@ -1,4 +1,3 @@
-// D import file generated from 'sm_common.d' renamed to 'sm_common.d' (method [only for original == header file] results in very compact code and obviates to overhaul comments now)
 // Functions exported from "libsmm-local.*" ; TODO check if this module will finally be required at all
 
 module libsm.sm_common;
