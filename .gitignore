@@ -31,3 +31,4 @@ lib/opensc.def
 lib/opensc_alt.def
 lib/windows-x86_64/opensc_alt.lib
 lib/windows-x86_64/out.txt
+lib/windows-x86-dmd/libeay32.lib
