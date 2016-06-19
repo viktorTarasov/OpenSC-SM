@@ -1,8 +1,7 @@
 {
 	"name": "opensc",
-	"version": "0.15.3",
-	"description": "Deimos-like binding to libopensc (reduced extend required for external modules [driver/SM])",
-	"systemDependencies": "Linux: The executable using this will link to/provide the shared object, i.e.    libs-posix: [:libopensc.so.3]",
+	"version": "0.15.4",
+	"description": "Deimos-like binding to libopensc (reduced extend required by external modules [driver/SM])",
 	"dependencies" : {
 		"openssl": "~>1.1.4+1.0.1g"
 	},

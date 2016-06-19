@@ -6,6 +6,10 @@ import libopensc.types;
 import scconf.scconf;
 import libopensc.auxdata;
 
+version(FAKE_OPENSC_VERSION)
+{
+	version = UPTO_15_OPENSC_VERSION;
+}
 
 extern (C) 
 {
@@ -315,7 +319,7 @@ extern (C)
 		void function(void*) free_params;
 	}
 	
-version(until15)
+version(UPTO_15_OPENSC_VERSION)
 {
 	enum SC_MD_MAX_CONTAINER_NAME_LEN = 39;
 	enum SC_MD_CONTAINER_MAP_VALID_CONTAINER = 1;
@@ -341,6 +345,10 @@ version(until15)
 		void* prop_data;
 	}
 }
+else
+{
+	struct sc_md_data;
+}
 
 	struct sc_pkcs15_prkey_info
 	{
@@ -355,7 +363,7 @@ version(until15)
 		sc_pkcs15_der subject;
 		sc_pkcs15_key_params params;
 		sc_path path;
-version(until15)
+version(UPTO_15_OPENSC_VERSION)
 {
 		sc_md_cmap_record cmap_record;
 }
