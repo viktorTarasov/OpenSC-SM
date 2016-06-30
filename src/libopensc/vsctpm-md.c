@@ -1733,6 +1733,7 @@ vsctpm_md_decipher(struct sc_card *card, int idx,
 	CONTAINER_MAP_RECORD *rec = NULL;
 	HRESULT hRes = S_OK;
 	unsigned char buf[1024];
+	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!priv->md.card_data.pfnCardRSADecrypt)
@@ -1760,6 +1761,12 @@ vsctpm_md_decipher(struct sc_card *card, int idx,
 	decrypt_info.dwPaddingType = CARD_PADDING_PKCS1;
 
 	hRes = priv->md.card_data.pfnCardRSADecrypt(&priv->md.card_data, &decrypt_info);
+
+	if (hRes == SCARD_W_SECURITY_VIOLATION) { // Card was disconnected but PIN was not provided on reconnection
+		rv = vsctpm_md_pin_authenticate(card, priv->user_pin, priv->user_pin_len, NULL);
+		LOG_TEST_RET(ctx, rv, "User MD authenticate failed");
+        hRes = priv->md.card_data.pfnCardRSADecrypt(&priv->md.card_data, &decrypt_info);		
+	}
 	if (hRes != SCARD_S_SUCCESS)   {
 		sc_log(ctx, "CardRSADecrypt() failed: hRes %lX", hRes);
 		LOG_FUNC_RETURN(ctx, vsctpm_md_get_sc_error(hRes));
