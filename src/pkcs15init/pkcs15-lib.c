@@ -1425,9 +1425,17 @@ sc_pkcs15init_store_private_key(struct sc_pkcs15_card *p15card, struct sc_profil
 	LOG_TEST_RET(ctx, r, "Get intrinsic ID error");
 
 	/* Make sure that private key's ID is the unique inside the PKCS#15 application */
-	r = sc_pkcs15_find_prkey_by_id(p15card, &keyargs->id, NULL);
-	if (!r)
-		LOG_TEST_RET(ctx, SC_ERROR_NON_UNIQUE_ID, "Non unique ID of the private key object");
+	r = sc_pkcs15_find_prkey_by_id(p15card, &keyargs->id, &object);
+	if (!r) {
+        /* See CMS-6602: We are trying to import a private key that already exists on card, probably during recover on enrollment
+           It means that the existing object should not be on card but we could not remove it because of Microsoft VSC TPM limitation 
+           that a container cannot be removed safely if it is not the last one. However since version 1.1/CMS 4.9.1, this scenario should
+           not happen as we will be removing the objects in reverse order. */
+           
+        // Change the ID of the object to a dummy value (only for the current PKCS#15 session, this will not be persisted on card)
+        r = sc_pkcs15init_change_attrib(p15card, profile, object, P15_ATTR_TYPE_ID, "00000000000000000", 16);
+        LOG_TEST_RET(ctx, r, "Cannot change attrib");
+    }
 	else if (r != SC_ERROR_OBJECT_NOT_FOUND)
 		LOG_TEST_RET(ctx, r, "Find private key error");
 
