@@ -2501,7 +2501,7 @@ vsctpm_md_cmap_delete_cert_file(struct sc_card *card, int idx)
     sc_log(ctx, "Delete certificate file at index '%i'", idx);
    
     
-    sprintf(file_name, "kxc%02u", idx);
+    sprintf(file_name, "kxc%02x", idx);
     hRes = priv->md.card_data.pfnCardDeleteFile(&priv->md.card_data, "mscp", file_name, 0);
     if (hRes == SCARD_W_RESET_CARD)   {
         int rv;
