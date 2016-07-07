@@ -512,7 +512,8 @@ app opensc-pkcs11 {
 		# If there are more slots than defined here,
 		# the remaining slots will be hidden from PKCS#11.
 		# Default: 16
-		# max_virtual_slots = 32;
+		# Increment the number of slots for handling Safenet Virtual Slots
+		max_virtual_slots = 32;
 
 		# Maximum number of slots per smart card.
 		# If the card has fewer keys than defined here,
