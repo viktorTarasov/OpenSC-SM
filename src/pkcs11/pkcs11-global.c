@@ -316,7 +316,6 @@ CK_RV C_Finalize(CK_VOID_PTR pReserved)
 
 	while ((slot = list_fetch(&virtual_slots))) {
 		list_destroy(&slot->objects);
-		pop_all_login_states(slot);
 		list_destroy(&slot->logins);
 		free(slot);
 	}
@@ -406,16 +405,20 @@ CK_RV C_GetSlotList(CK_BBOOL       tokenPresent,  /* only slots with token prese
 	prev_reader = NULL;
 	numMatches = 0;
 	for (i=0; i<list_size(&virtual_slots); i++) {
-	        slot = (sc_pkcs11_slot_t *) list_get_at(&virtual_slots, i);
+		slot = (sc_pkcs11_slot_t *) list_get_at(&virtual_slots, i);
 		/* the list of available slots contains:
 		 * - if present, virtual hotplug slot;
 		 * - any slot with token;
 		 * - without token(s), one empty slot per reader;
+		 * - any slot that has already been seen;
 		 */
-	        if ((!tokenPresent && !slot->reader)
+		if ((!tokenPresent && !slot->reader)
 				|| (!tokenPresent && slot->reader != prev_reader)
-				|| (slot->slot_info.flags & CKF_TOKEN_PRESENT))
+				|| (slot->slot_info.flags & CKF_TOKEN_PRESENT)
+				|| (slot->flags & SC_PKCS11_SLOT_FLAG_SEEN)) {
 			found[numMatches++] = slot->id;
+			slot->flags |= SC_PKCS11_SLOT_FLAG_SEEN;
+		}
 		prev_reader = slot->reader;
 	}
 
@@ -641,10 +644,11 @@ CK_RV C_WaitForSlotEvent(CK_FLAGS flags,   /* blocking/nonblocking flag */
 		return  CKR_ARGUMENTS_BAD;
 
 	sc_log(context, "C_WaitForSlotEvent(block=%d)", !(flags & CKF_DONT_BLOCK));
+#ifndef PCSCLITE_GOOD
 	/* Not all pcsc-lite versions implement consistently used functions as they are */
-	/* FIXME: add proper checking into build to check correct pcsc-lite version for SCardStatusChange/SCardCancel */
 	if (!(flags & CKF_DONT_BLOCK))
 		return CKR_FUNCTION_NOT_SUPPORTED;
+#endif /* PCSCLITE_GOOD */
 	rv = sc_pkcs11_lock();
 	if (rv != CKR_OK)
 		return rv;

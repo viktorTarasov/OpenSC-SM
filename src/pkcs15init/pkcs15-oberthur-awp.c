@@ -27,12 +27,13 @@
 #include <sys/types.h>
 
 #include "config.h"
+#include "pkcs15-oberthur.h"
+
 #include "libopensc/opensc.h"
 #include "libopensc/cardctl.h"
 #include "libopensc/log.h"
 #include "profile.h"
 #include "pkcs15-init.h"
-#include "pkcs15-oberthur.h"
 #include "libopensc/asn1.h"
 
 #ifdef ENABLE_OPENSSL
@@ -151,8 +152,7 @@ awp_new_file(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	if (otag)   {
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "obj template %s",otag);
 		if (sc_profile_get_file(profile, otag, &ofile) < 0) {
-			if (ifile)
-				sc_file_free(ifile);
+			sc_file_free(ifile);
 			sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "profile does not defines template '%s'", name);
 			return SC_ERROR_INCONSISTENT_PROFILE;
 		}
@@ -530,8 +530,8 @@ awp_update_container(struct sc_pkcs15_card *p15card, struct sc_profile *profile,
 	}
 
 done:
-	if (clist)	sc_file_free(clist);
-	if (file)	sc_file_free(file);
+	sc_file_free(clist);
+	sc_file_free(file);
 	if (list)  free(list);
 
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
@@ -996,6 +996,30 @@ awp_encode_cert_info(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *ob
 	/*
 	 * serial number
 	 */
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L
+	
+	/* TODO the der encoding of a ANS1_INTEGER is a TLV, the original code only as using the 
+	 * i2c_ASN1_INTEGER which is not in OpenSSL 1.1  
+	 * It was adding the tag V_ASN1_INTEGER and the one byte length back in in effect creating
+	 * a DER encoded ASN1_INTEGER
+	 * So we can simplifty the code and make compatable with OpenSSL 1.1. This needs to be tested
+	 */
+	ci->serial.len = 0;
+	ci->serial.value = NULL;
+	/* get length */
+	ci->serial.len = i2d_ASN1_INTEGER(X509_get_serialNumber(x), NULL);
+	if (ci->serial.len > 0) {
+		if (!(ci->serial.value = malloc(ci->serial.len)))   {
+			ci->serial.len = 0;
+			r = SC_ERROR_OUT_OF_MEMORY;
+			goto done;
+		}
+		ci->serial.len = i2d_ASN1_INTEGER(X509_get_serialNumber(x), &ci->serial.value);
+	}
+	/* if len == 0, and value == NULL, then the cert did not have a serial number.*/
+	sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "cert. serial encoded length %i", ci->serial.len);
+
+#else
 	do   {
 		int encoded_len;
 		unsigned char encoded[0x40], *encoded_ptr;
@@ -1015,6 +1039,7 @@ awp_encode_cert_info(struct sc_pkcs15_card *p15card, struct sc_pkcs15_object *ob
 
 		sc_debug(ctx, SC_LOG_DEBUG_NORMAL, "cert. serial encoded length %i", encoded_len);
 	} while (0);
+#endif
 
 	ci->x509 = X509_dup(x);
 done:
@@ -1366,10 +1391,8 @@ awp_update_df_create_cert(struct sc_pkcs15_card *p15card, struct sc_profile *pro
 
 	awp_free_cert_info(&icert);
 
-	if (info_file)
-		sc_file_free(info_file);
-	if (obj_file)
-		sc_file_free(obj_file);
+	sc_file_free(info_file);
+	sc_file_free(obj_file);
 
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
 }
@@ -1452,8 +1475,7 @@ awp_update_df_create_prvkey(struct sc_pkcs15_card *p15card, struct sc_profile *p
 err:
 	if (p15cert)
 		sc_pkcs15_free_certificate(p15cert);
-	if (info_file)
-		sc_file_free(info_file);
+	sc_file_free(info_file);
 	if (cert_obj)
 		awp_free_cert_info(&icert);
 
@@ -1506,8 +1528,7 @@ awp_update_df_create_pubkey(struct sc_pkcs15_card *p15card, struct sc_profile *p
 	awp_free_key_info(&ikey);
 
 err:
-	if (info_file)
-		sc_file_free(info_file);
+	sc_file_free(info_file);
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
 }
 
@@ -1546,10 +1567,8 @@ awp_update_df_create_data(struct sc_pkcs15_card *p15card, struct sc_profile *pro
 
 	awp_free_data_info(&idata);
 
-	if (info_file)
-		sc_file_free(info_file);
-	if (obj_file)
-		sc_file_free(obj_file);
+	sc_file_free(info_file);
+	sc_file_free(obj_file);
 
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
 }
@@ -1663,8 +1682,8 @@ awp_delete_from_container(struct sc_pkcs15_card *p15card,
 	if (rv > 0)
 		rv = 0;
 
-	if (buff)		free(buff);
-	if (clist)		sc_file_free(clist);
+	free(buff);
+	sc_file_free(clist);
 	sc_file_free(file);
 
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
@@ -1740,8 +1759,7 @@ done:
 	if (buff)
 		free(buff);
 	sc_file_free(lst);
-	if (lst_file)
-		sc_file_free(lst_file);
+	sc_file_free(lst_file);
 
 	SC_FUNC_RETURN(ctx, SC_LOG_DEBUG_NORMAL, rv);
 }

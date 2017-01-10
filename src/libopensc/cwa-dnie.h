@@ -23,7 +23,7 @@
 #ifndef __CWADNIE_H__
 #define __CWADNIE_H__
 
-#ifdef ENABLE_OPENSSL
+#if defined(ENABLE_OPENSSL) && defined(ENABLE_SM)
 
 #include "libopensc/opensc.h"
 
@@ -60,6 +60,15 @@ struct cwa_provider_st;
  */
 #define GET_DNIE_PRIV_DATA(card) ((dnie_private_data_t *) ((card)->drv_data))
 #define GET_DNIE_UI_CTX(card) (((dnie_private_data_t *) ((card)->drv_data))->ui_ctx)
+
+#define DNIE_30_VERSION 0x04
+#define DNIE_30_CACHE_COUNTER 30000
+
+cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card);
+
+void dnie_change_cwa_provider_to_pin(sc_card_t * card);
+
+void dnie_change_cwa_provider_to_secure(sc_card_t * card);
 
 int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu);
 

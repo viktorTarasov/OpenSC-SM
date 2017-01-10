@@ -260,8 +260,7 @@ static int usage(int (*func)(int, char **))
 
 static void die(int ret)
 {
-	if (current_file != NULL)
-		sc_file_free(current_file);
+	sc_file_free(current_file);
 	if (card) {
 		sc_unlock(card);
 		sc_disconnect_card(card);
@@ -383,7 +382,10 @@ arg_to_path(const char *arg, sc_path_t *path, int is_id)
 static void print_file(const sc_file_t *file)
 {
 	const char *format = " %02X%02X ";
-	const char *st = "???";
+	const char *st = NULL;
+
+	if(!file->type_attr_len)
+		st = "???";
 
 	switch (file->type) {
 	case SC_FILE_TYPE_WORKING_EF:
@@ -398,7 +400,10 @@ static void print_file(const sc_file_t *file)
 		break;
 	}
 	printf(format, file->id >> 8, file->id & 0xFF);
-	printf("\t%4s", st);
+	if (st == NULL)
+		printf("\t0x%02X", *file->type_attr);
+	else
+		printf("\t%4s", st);
 	printf(" %5lu", (unsigned long)file->size);
 	if (file->namelen) {
 		printf("\tName: ");
@@ -678,8 +683,7 @@ static int do_cd(int argc, char **argv)
 			printf("unable to go up: %s\n", sc_strerror(r));
 			return -1;
 		}
-		if (current_file)
-			sc_file_free(current_file);
+		sc_file_free(current_file);
 		current_file = file;
 		current_path = path;
 		return 0;
@@ -699,8 +703,7 @@ static int do_cd(int argc, char **argv)
 		return -1;
 	}
 	current_path = path;
-	if (current_file)
-		sc_file_free(current_file);
+	sc_file_free(current_file);
 	current_file = file;
 
 	return 0;
@@ -812,8 +815,7 @@ static int do_cat(int argc, char **argv)
 	err = 0;
 err:
 	if (not_current) {
-		if (file != NULL)
-			sc_file_free(file);
+		sc_file_free(file);
 		select_current_path_or_die();
 	}
 
@@ -825,7 +827,7 @@ static int do_info(int argc, char **argv)
 	sc_file_t *file;
 	sc_path_t path;
 	size_t i;
-	const char *st;
+	const char *st = NULL;
 	int r, not_current = 1;
 	const id2str_t *ac_ops = NULL;
 
@@ -845,6 +847,9 @@ static int do_info(int argc, char **argv)
 	} else
 		return usage(do_info);
 
+	if(!file->type_attr_len)
+		st = "Unknown File";
+
 	switch (file->type) {
 	case SC_FILE_TYPE_WORKING_EF:
 	case SC_FILE_TYPE_INTERNAL_EF:
@@ -853,11 +858,11 @@ static int do_info(int argc, char **argv)
 	case SC_FILE_TYPE_DF:
 		st = "Dedicated File";
 		break;
-	default:
-		st = "Unknown File";
-		break;
 	}
-	printf("\n%s  ID %04X", st, file->id);
+	if (st == NULL)
+		printf("\nFile type [%02x] ID %04X", *file->type_attr, file->id);
+	else
+		printf("\n%s  ID %04X", st, file->id);
 	if (file->sid)
 		printf(", SFI %02X", file->sid);
 	printf("\n\n%-15s%s\n", "File path:", path_to_filename(&path, '/'));
@@ -1309,8 +1314,7 @@ static int do_get(int argc, char **argv)
 
 	err = 0;
 err:
-	if (file)
-		sc_file_free(file);
+	sc_file_free(file);
 	if (outf != NULL && outf != stdout)
 		fclose(outf);
 	select_current_path_or_die();
@@ -1483,8 +1487,7 @@ static int do_put(int argc, char **argv)
 
 	err = 0;
 err:
-	if (file)
-		sc_file_free(file);
+	sc_file_free(file);
 	if (outf)
 		fclose(outf);
 	select_current_path_or_die();
@@ -1737,8 +1740,7 @@ err:
 	if (buf)
 		free(buf);
 	if (not_current) {
-		if (file)
-			sc_file_free(file);
+		sc_file_free(file);
 		select_current_path_or_die();
 	}
 	return -err;

@@ -89,9 +89,7 @@ static int sc_hsm_select_file_ex(sc_card_t *card,
 
 	if (file_out == NULL) {				// Versions before 0.16 of the SmartCard-HSM do not support P2='0C'
 		rv = sc_hsm_select_file_ex(card, in_path, forceselect, &file);
-		if (file != NULL) {
-			sc_file_free(file);
-		}
+		sc_file_free(file);
 		return rv;
 	}
 

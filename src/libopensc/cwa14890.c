@@ -27,7 +27,7 @@
 #include "config.h"
 #endif
 
-#ifdef ENABLE_OPENSSL		/* empty file without openssl */
+#if defined(ENABLE_OPENSSL) && defined(ENABLE_SM)	/* empty file without openssl or sm */
 
 #include <stdlib.h>
 #include <string.h>
@@ -36,12 +36,15 @@
 #include "opensc.h"
 #include "cardctl.h"
 #include "internal.h"
+#include <openssl/rsa.h>
+#include <openssl/bn.h>
 #include <openssl/x509.h>
 #include <openssl/des.h>
 #include <openssl/rand.h>
+#include "cwa14890.h"
 #include "cwa-dnie.h"
 
-#include "cwa14890.h"
+#define MAX_RESP_BUFFER_SIZE 2048
 
 /**
  * Structure used to compose BER-TLV encoded data
@@ -433,6 +436,7 @@ static int cwa_verify_cvc_certificate(sc_card_t * card,
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
 	sc_context_t *ctx = NULL;
+	u8 resp[MAX_RESP_BUFFER_SIZE];
 
 	/* safety check */
 	if (!card || !card->ctx)
@@ -443,8 +447,8 @@ static int cwa_verify_cvc_certificate(sc_card_t * card,
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	/* compose apdu for Perform Security Operation (Verify cert) cmd */
-	dnie_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x2A, 0x00, 0xAE, 0, len,
-					NULL, 0, cert, len);
+	dnie_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x2A, 0x00, 0xAE, 255, len,
+					resp, MAX_RESP_BUFFER_SIZE, cert, len);
 
 	/* send composed apdu and parse result */
 	result = dnie_transmit_apdu(card, &apdu);
@@ -473,6 +477,7 @@ static int cwa_set_security_env(sc_card_t * card,
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
 	sc_context_t *ctx = NULL;
+	u8 resp[MAX_RESP_BUFFER_SIZE];
 
 	/* safety check */
 	if (!card || !card->ctx)
@@ -483,8 +488,8 @@ static int cwa_set_security_env(sc_card_t * card,
 		LOG_FUNC_RETURN(ctx, SC_ERROR_INVALID_ARGUMENTS);
 
 	/* compose apdu for Manage Security Environment cmd */
-	dnie_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x22, p1, p2, 0, length,
-					NULL, 0, buffer, length);
+	dnie_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x22, p1, p2, 255, length,
+					resp, MAX_RESP_BUFFER_SIZE, buffer, length);
 
 	/* send composed apdu and parse result */
 	result = dnie_transmit_apdu(card, &apdu);
@@ -588,6 +593,7 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 	BIGNUM *bnsub = NULL;
 	BIGNUM *bnres = NULL;
 	sc_context_t *ctx = NULL;
+	const BIGNUM *ifd_privkey_n, *ifd_privkey_e, *ifd_privkey_d;
 
 	/* safety check */
 	if (!card || !card->ctx)
@@ -641,7 +647,8 @@ static int cwa_prepare_external_auth(sc_card_t * card,
 		res = SC_ERROR_INTERNAL;
 		goto prepare_external_auth_end;
 	}
-	res = BN_sub(bnsub, ifd_privkey->n, bn);	/* eval N.IFD-SIG */
+	RSA_get0_key(ifd_privkey, &ifd_privkey_n, &ifd_privkey_e, &ifd_privkey_d);
+	res = BN_sub(bnsub, ifd_privkey_n, bn);	/* eval N.IFD-SIG */
 	if (res == 0) {		/* 1:success 0 fail */
 		msg = "Prepare external auth: BN sigmin evaluation failed";
 		res = SC_ERROR_INTERNAL;
@@ -717,6 +724,7 @@ static int cwa_external_auth(sc_card_t * card, cwa_sm_status_t * sm)
 	sc_apdu_t apdu;
 	int result = SC_SUCCESS;
 	sc_context_t *ctx = NULL;
+	u8 resp[MAX_RESP_BUFFER_SIZE];
 
 	/* safety check */
 	if (!card || !card->ctx)
@@ -725,8 +733,8 @@ static int cwa_external_auth(sc_card_t * card, cwa_sm_status_t * sm)
 	LOG_FUNC_CALLED(ctx);
 
 	/* compose apdu for External Authenticate cmd */
-	dnie_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x82, 0x00, 0x00, 0, sizeof(sm->sig),
-					NULL, 0, sm->sig, sizeof(sm->sig));
+	dnie_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0x82, 0x00, 0x00, 255, sizeof(sm->sig),
+					resp, MAX_RESP_BUFFER_SIZE, sm->sig, sizeof(sm->sig));
 
 	/* send composed apdu and parse result */
 	result = dnie_transmit_apdu(card, &apdu);
@@ -889,6 +897,7 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 	BIGNUM *bn = NULL;
 	BIGNUM *sigbn = NULL;
 	sc_context_t *ctx = NULL;
+	const BIGNUM *icc_pubkey_n, *icc_pubkey_e, *icc_pubkey_d;
 
 	if (!card || !card->ctx)
 		return SC_ERROR_INVALID_ARGUMENTS;
@@ -959,7 +968,8 @@ static int cwa_verify_internal_auth(sc_card_t * card,
 		res = SC_ERROR_OUT_OF_MEMORY;
 		goto verify_internal_done;
 	}
-	res = BN_sub(sigbn, icc_pubkey->n, bn);	/* eval N.ICC-SIG */
+	RSA_get0_key(icc_pubkey, &icc_pubkey_n, &icc_pubkey_e, &icc_pubkey_d);
+	res = BN_sub(sigbn, icc_pubkey_n, bn);	/* eval N.ICC-SIG */
 	if (!res) {
 		msg = "Verify Signature: evaluation of N.ICC-SIG failed";
 		res = SC_ERROR_INTERNAL;
@@ -1066,6 +1076,7 @@ int cwa_create_secure_channel(sc_card_t * card,
 	switch (flag) {
 	case CWA_SM_OFF:	/* disable SM */
 		provider->status.session.state = CWA_SM_NONE;	/* just mark channel inactive */
+		card->sm_ctx.sm_mode = SM_MODE_NONE;
 		sc_log(ctx, "Setting CWA SM status to none");
 		LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 	case CWA_SM_WARM:	/* only initialize if not already done */
@@ -1075,7 +1086,16 @@ int cwa_create_secure_channel(sc_card_t * card,
 			LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 		}
 	case CWA_SM_COLD:	/* force sm initialization process */
-		sc_log(ctx, "CWA SM initialization requested");
+		sc_log(ctx, "CWA SM initialization requested => reset and re-initialize");
+		sc_reset(card, 0);
+		provider->status.session.state = CWA_SM_INPROGRESS;
+		card->sm_ctx.sm_mode = SM_MODE_NONE;
+		break;
+	case CWA_SM_OVER:	/* create another channel over an existing one */
+		if (provider->status.session.state != CWA_SM_ACTIVE) {
+			sc_log(ctx, "CWA SM over requested => not in active state");
+			LOG_FUNC_RETURN(ctx, SC_ERROR_SM_INVALID_LEVEL);
+		}
 		break;
 	default:
 		sc_log(ctx, "Invalid provided SM initialization flag");
@@ -1083,13 +1103,6 @@ int cwa_create_secure_channel(sc_card_t * card,
 	}
 
 	/* OK: lets start process */
-
-	/* reset card (warm reset, do not unpower card) */
-	sc_log(ctx, "Resseting card");
-	sc_reset(card, 0);
-
-	/* mark SM status as in progress */
-	provider->status.session.state = CWA_SM_INPROGRESS;
 
 	/* call provider pre-operation method */
 	sc_log(ctx, "CreateSecureChannel pre-operations");
@@ -1319,8 +1332,8 @@ int cwa_create_secure_channel(sc_card_t * card,
 
 	/* verify received signature */
 	sc_log(ctx, "Verify Internal Auth command response");
-	res = cwa_verify_internal_auth(card, icc_pubkey->pkey.rsa,	/* evaluated icc public key */
-				       ifd_privkey->pkey.rsa,	/* evaluated from DGP's Manual Annex 3 Data */
+	res = cwa_verify_internal_auth(card, EVP_PKEY_get0_RSA(icc_pubkey),	/* evaluated icc public key */
+				       EVP_PKEY_get0_RSA(ifd_privkey),	/* evaluated from DGP's Manual Annex 3 Data */
 				       rndbuf,	/* RND.IFD || SN.IFD */
 				       16,	/* rndbuf length; should be 16 */
 				       sm	/* sm data */
@@ -1340,8 +1353,8 @@ int cwa_create_secure_channel(sc_card_t * card,
 
 	/* compose signature data for external auth */
 	res = cwa_prepare_external_auth(card,
-					icc_pubkey->pkey.rsa,
-					ifd_privkey->pkey.rsa, sn_icc, sm);
+					EVP_PKEY_get0_RSA(icc_pubkey),
+					EVP_PKEY_get0_RSA(ifd_privkey), sn_icc, sm);
 	if (res != SC_SUCCESS) {
 		msg = "Prepare external auth failed";
 		goto csc_end;
@@ -1415,7 +1428,7 @@ int cwa_encode_apdu(sc_card_t * card,
 		    cwa_provider_t * provider, sc_apdu_t * from, sc_apdu_t * to)
 {
 	u8 *apdubuf = NULL;		/* to store resulting apdu */
-	size_t apdulen;
+	size_t apdulen, tlv_len;
 	u8 *ccbuf = NULL;		/* where to store data to eval cryptographic checksum CC */
 	size_t cclen = 0;
 	u8 macbuf[8];		/* to store and compute CC */
@@ -1523,13 +1536,17 @@ int cwa_encode_apdu(sc_card_t * card,
 			msg = "Error in compose tag 8x87 TLV";
 			goto encode_end;
 		}
-	}
+	} else if ((0xff & from->le) > 0) {
 
 	/* if le byte is declared, compose and add Le TLV */
 	/* FIXME: For DNIe we must not send the le bytes
 	  when le == 256 but this goes against the standard
 	  and might break other cards reusing this code */
-	if ((0xff & from->le) > 0) {
+        /* NOTE: In FNMT MultiPKCS11 code this is an if, i.e.,
+           the le is only sent if no data (lc) is set.
+           In DNIe 3.0 pin verification sending both TLV return
+           69 88 "SM Data Object incorrect". For the moment it is
+           fixed sendind le=0 in pin verification apdu */
 	    u8 le = 0xff & from->le;
 	    res = cwa_compose_tlv(card, 0x97, 1, &le, &ccbuf, &cclen);
 	    if (res != SC_SUCCESS) {
@@ -1568,7 +1585,9 @@ int cwa_encode_apdu(sc_card_t * card,
 			 &k1, &k2, DES_ENCRYPT);
 
 	/* compose and add computed MAC TLV to result buffer */
-	res = cwa_compose_tlv(card, 0x8E, 4, macbuf, &apdubuf, &apdulen);
+	tlv_len = (card->atr.value[15] >= DNIE_30_VERSION)? 8 : 4;
+	sc_log(ctx, "Using TLV lenght: %d", tlv_len);
+	res = cwa_compose_tlv(card, 0x8E, tlv_len, macbuf, &apdubuf, &apdulen);
 	if (res != SC_SUCCESS) {
 		msg = "Encode APDU compose_tlv(0x87) failed";
 		goto encode_end;
@@ -1614,7 +1633,7 @@ int cwa_decode_response(sc_card_t * card,
 			cwa_provider_t * provider,
 			sc_apdu_t * apdu)
 {
-	size_t i, j;
+	size_t i, j, tlv_len;
 	cwa_tlv_t tlv_array[4];
 	cwa_tlv_t *p_tlv = &tlv_array[0];	/* to store plain data (Tag 0x81) */
 	cwa_tlv_t *e_tlv = &tlv_array[1];	/* to store pad encoded data (Tag 0x87) */
@@ -1648,8 +1667,10 @@ int cwa_decode_response(sc_card_t * card,
 	/* cwa14890 sect 9.3: check SW1 or SW2 for SM related errors */
 	if (apdu->sw1 == 0x69) {
 		if ((apdu->sw2 == 0x88) || (apdu->sw2 == 0x87)) {
+			/* configure the driver to re-establish the SM */
 			msg = "SM related errors in APDU response";
-			res = SC_ERROR_SM_ENCRYPT_FAILED;	/* tell driver to restart SM */
+			cwa_create_secure_channel(card, provider, CWA_SM_OFF);
+			res = SC_ERROR_SECURITY_STATUS_NOT_SATISFIED;
 			goto response_decode_end;
 		}
 	}
@@ -1700,7 +1721,8 @@ int cwa_decode_response(sc_card_t * card,
 		res = SC_ERROR_INVALID_DATA;
 		goto response_decode_end;
 	}
-	if (m_tlv->len != 4) {
+	tlv_len = (card->atr.value[15] >= DNIE_30_VERSION)? 8 : 4;
+	if (m_tlv->len != tlv_len) {
 		msg = "Invalid MAC TAG Length";
 		res = SC_ERROR_INVALID_DATA;
 		goto response_decode_end;

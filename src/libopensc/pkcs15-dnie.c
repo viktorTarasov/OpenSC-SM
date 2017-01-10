@@ -27,13 +27,13 @@
 #include "libopensc/log.h"
 #include "libopensc/asn1.h"
 #include "libopensc/pkcs15.h"
+#include "libopensc/cwa14890.h"
+#include "libopensc/cwa-dnie.h"
 
 /* Card driver related */
-#ifdef ENABLE_OPENSSL
+#if defined(ENABLE_OPENSSL) && defined(ENABLE_SM)
+
 extern int dnie_match_card(struct sc_card *card);
-#else
-#define dnie_match_card(card) 0
-#endif
 
 /* Helper functions to get the pkcs15 stuff bound. */
 
@@ -46,8 +46,7 @@ int dump_ef(sc_card_t * card, const char *path, u8 * buf, size_t * buf_len)
 	sc_format_path(path, &scpath);
 	rv = sc_select_file(card, &scpath, &file);
 	if (rv < 0) {
-		if (file)
-			sc_file_free(file);
+		sc_file_free(file);
 		return rv;
 	}
 	if (file->size > *buf_len) {
@@ -156,6 +155,19 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 	if (dnie_match_card(p15card->card) != 1)
 		return SC_ERROR_WRONG_CARD;
 
+	/* The two keys inside DNIe 3.0 needs login before performing any signature.
+	 * They are CKA_ALWAYS_AUTHENTICATE although they are not tagged like that.
+	 * For the moment caching is forced if 3.0 is detected to make it work properly. */
+	if (p15card->card->atr.value[15] >= DNIE_30_VERSION) {
+		p15card->opts.use_pin_cache = 1;
+		p15card->opts.pin_cache_counter = DNIE_30_CACHE_COUNTER;
+		sc_log(ctx, "DNIe 3.0 detected - PKCS#15 options reset: use_file_cache=%d use_pin_cache=%d pin_cache_counter=%d pin_cache_ignore_user_consent=%d",
+			p15card->opts.use_file_cache,
+			p15card->opts.use_pin_cache,
+			p15card->opts.pin_cache_counter,
+			p15card->opts.pin_cache_ignore_user_consent);
+        }
+
 	/* Set root path of this application */
 	p15card->file_app = sc_file_new();
 	sc_format_path("3F00", &p15card->file_app->path);
@@ -256,6 +268,7 @@ static int sc_pkcs15emu_dnie_init(sc_pkcs15_card_t * p15card)
 	
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
+#endif
 
 /****************************************/
 /* public functions for in-built module */
@@ -268,6 +281,7 @@ int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t * p15card,
 	sc_context_t *ctx = p15card->card->ctx;
 	LOG_FUNC_CALLED(ctx);
 
+#if defined(ENABLE_OPENSSL) && defined(ENABLE_SM)
 	/* if no check flag execute unconditionally */
 	if (opts && opts->flags & SC_PKCS15EMU_FLAGS_NO_CHECK)
 		LOG_FUNC_RETURN(ctx, sc_pkcs15emu_dnie_init(p15card));
@@ -277,4 +291,8 @@ int sc_pkcs15emu_dnie_init_ex(sc_pkcs15_card_t * p15card,
 		LOG_FUNC_RETURN(ctx, SC_ERROR_WRONG_CARD);
 	/* ok: initialize and return */
 	LOG_FUNC_RETURN(ctx, sc_pkcs15emu_dnie_init(p15card));
+#else
+	r = SC_ERROR_WRONG_CARD;
+	LOG_FUNC_RETURN(ctx, r);
+#endif
 }

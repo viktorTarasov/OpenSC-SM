@@ -26,6 +26,7 @@
 
 #ifdef ENABLE_OPENSSL
 #include <openssl/opensslv.h>
+#include <openssl/bn.h>
 #include <openssl/rsa.h>
 #include <openssl/evp.h>
 #include <openssl/pem.h>
@@ -33,6 +34,7 @@
 #include <openssl/bio.h>
 #endif
 
+#include "libopensc/sc-ossl-compat.h"
 #include "libopensc/opensc.h"
 #include "libopensc/cardctl.h"
 #include "pkcs15-init.h"
@@ -115,8 +117,7 @@ static int westcos_pkcs15_create_pin(sc_profile_t *profile,
 		if(r) return (r);
 	}
 
-	if(pinfile)
-		sc_file_free(pinfile);
+	sc_file_free(pinfile);
 
 	if(pin != NULL)
 	{
@@ -255,7 +256,7 @@ static int westcos_pkcs15init_generate_key(sc_profile_t *profile,
 		goto out;
 	}
 
-	rsa->meth = RSA_PKCS1_SSLeay();
+	RSA_set_method(rsa, RSA_PKCS1_OpenSSL());
 
 	if(pubkey != NULL)
 	{
@@ -312,8 +313,7 @@ out:
 		BN_free(bn);
 	if(rsa)
 		RSA_free(rsa);
-	if(prkf)
-		sc_file_free(prkf);
+	sc_file_free(prkf);
 
 	return r;
 #endif

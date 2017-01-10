@@ -1182,7 +1182,8 @@ static int westcos_sign_decipher(int mode, sc_card_t *card,
 	}
 
 	/* pkcs11 reset openssl functions */
-	rsa->meth = RSA_PKCS1_SSLeay();
+	RSA_set_method(rsa, RSA_PKCS1_OpenSSL());
+
 	if ((size_t)RSA_size(rsa) > outlen) {
 		sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "Buffer too small\n");
 		r = SC_ERROR_OUT_OF_MEMORY;
@@ -1237,8 +1238,7 @@ out:
 		RSA_free(rsa);
 out2:
 #endif /* ENABLE_OPENSSL */
-	if (keyfile)
-		sc_file_free(keyfile);
+	sc_file_free(keyfile);
 	return r;
 }
 
