@@ -5117,6 +5117,9 @@ DWORD WINAPI CardGetProperty(__in PCARD_DATA pCardData,
 		if (cbData < sizeof(*p))
 			return ERROR_INSUFFICIENT_BUFFER;
 		*p = CARD_PIN_STRENGTH_PLAINTEXT;
+		if (vs->p15card->card->caps & SC_CARD_CAP_SESSION_PIN) {
+			*p |= CARD_PIN_STRENGTH_SESSION_PIN;
+		}
 	}
 	else if (wcscmp(CP_KEY_IMPORT_SUPPORT, wszProperty) == 0)   {
 		DWORD *p = (DWORD *)pbData;
