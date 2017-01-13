@@ -2265,6 +2265,7 @@ static int cardmod_init(sc_context_t *ctx)
 	}
 
 	gpriv->SCardStatus = (SCardStatus_t)sc_dlsym(gpriv->dlhandle, "SCardStatus");
+	gpriv->SCardCancel = (SCardCancel_t)sc_dlsym(gpriv->dlhandle, "SCardCancel");
 	gpriv->SCardGetStatusChange = (SCardGetStatusChange_t)sc_dlsym(gpriv->dlhandle, "SCardGetStatusChange");
 	gpriv->SCardTransmit = (SCardTransmit_t)sc_dlsym(gpriv->dlhandle, "SCardTransmit");
 
@@ -2287,6 +2288,7 @@ static int cardmod_init(sc_context_t *ctx)
 
 	if (
 		gpriv->SCardStatus == NULL ||
+		gpriv->SCardCancel == NULL ||
 		gpriv->SCardGetStatusChange == NULL ||
 		gpriv->SCardControl == NULL ||
 		gpriv->SCardTransmit == NULL ||
