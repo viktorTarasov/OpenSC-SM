@@ -57,6 +57,8 @@ export OPENPACE_LIBS="`  env PKG_CONFIG_PATH=$BUILDPATH/openpace_bin/$PREFIX/lib
 if ! test -e ${BUILDPATH}/target/$PREFIX/lib/pkgconfig; then
 	./configure --prefix=$PREFIX \
 		--sysconfdir=$PREFIX/etc \
+		--enable-cvcdir=$PREFIX/etc/cvc \
+		--enable-x509dir=$PREFIX/etc/x509 \
 		--disable-dependency-tracking \
 		--enable-shared \
 		--disable-static \
