@@ -935,22 +935,25 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 		LOG_FUNC_RETURN(card->ctx, r);
 
 
-	memset(&pindata, 0, sizeof(pindata));
-	pindata.cmd = SC_PIN_CMD_GET_INFO;
-	pindata.pin_type = SC_AC_CHV;
-	pindata.pin_reference = 0x85;
+	if (card->type == SC_CARD_TYPE_SC_HSM_SOC) {
+		/* SC-HSM of this type always has a PIN-Pad */
+		r = SC_SUCCESS;
+	} else {
+		memset(&pindata, 0, sizeof(pindata));
+		pindata.cmd = SC_PIN_CMD_GET_INFO;
+		pindata.pin_type = SC_AC_CHV;
+		pindata.pin_reference = 0x85;
 
-	r = sc_pin_cmd(card, &pindata, NULL);
+		r = sc_pin_cmd(card, &pindata, NULL);
+	}
+	if (r == SC_ERROR_DATA_OBJECT_NOT_FOUND) {
+		memset(&pindata, 0, sizeof(pindata));
+		pindata.cmd = SC_PIN_CMD_GET_INFO;
+		pindata.pin_type = SC_AC_CHV;
+		pindata.pin_reference = 0x86;
 
-	if (r != SC_ERROR_DATA_OBJECT_NOT_FOUND)
-		card->caps |= SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
-
-	memset(&pindata, 0, sizeof(pindata));
-	pindata.cmd = SC_PIN_CMD_GET_INFO;
-	pindata.pin_type = SC_AC_CHV;
-	pindata.pin_reference = 0x86;
-
-	r = sc_pin_cmd(card, &pindata, NULL);
+		r = sc_pin_cmd(card, &pindata, NULL);
+	}
 
 	if (r != SC_ERROR_DATA_OBJECT_NOT_FOUND)
 		card->caps |= SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
