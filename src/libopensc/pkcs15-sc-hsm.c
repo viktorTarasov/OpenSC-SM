@@ -181,7 +181,7 @@ static const struct sc_asn1_entry c_asn1_req[C_ASN1_REQ_SIZE] = {
 
 
 static int read_file(sc_pkcs15_card_t * p15card, u8 fid[2],
-		u8 *efbin, size_t *len)
+		u8 *efbin, size_t *len, int optional)
 {
 	sc_path_t path;
 	int r;
@@ -196,12 +196,24 @@ static int read_file(sc_pkcs15_card_t * p15card, u8 fid[2],
 		/* avoid re-selection of SC-HSM */
 		path.aid.len = 0;
 		r = sc_select_file(p15card->card, &path, NULL);
-		LOG_TEST_RET(p15card->card->ctx, r, "Could not select EF");
+		if (r < 0) {
+			sc_log(p15card->card->ctx, "Could not select EF");
+		} else {
+			r = sc_read_binary(p15card->card, 0, efbin, *len, 0);
+		}
 
-		r = sc_read_binary(p15card->card, 0, efbin, *len, 0);
-		LOG_TEST_RET(p15card->card->ctx, r, "Could not read EF");
-
-		*len = r;
+		if (r < 0) {
+			sc_log(p15card->card->ctx, "Could not read EF");
+			if (!optional) {
+				return r;
+			}
+			/* optional files are saved as empty files to avoid card
+			 * transactions. Parsing the file's data will reveal that they were
+			 * missing. */
+			*len = 0;
+		} else {
+			*len = r;
+		}
 
 		if (p15card->opts.use_file_cache) {
 			/* save this with our AID */
@@ -592,7 +604,7 @@ static int sc_pkcs15emu_sc_hsm_add_prkd(sc_pkcs15_card_t * p15card, u8 keyid) {
 
 	/* Try to select a related EF containing the PKCS#15 description of the key */
 	len = sizeof efbin;
-	r = read_file(p15card, fid, efbin, &len);
+	r = read_file(p15card, fid, efbin, &len, 1);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF.PRKD");
 
 	ptr = efbin;
@@ -626,7 +638,7 @@ static int sc_pkcs15emu_sc_hsm_add_prkd(sc_pkcs15_card_t * p15card, u8 keyid) {
 	fid[0] = EE_CERTIFICATE_PREFIX;
 
 	len = sizeof efbin;
-	r = read_file(p15card, fid, efbin, &len);
+	r = read_file(p15card, fid, efbin, &len, 0);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF");
 
 	if (r < 0) {
@@ -685,7 +697,7 @@ static int sc_pkcs15emu_sc_hsm_add_dcod(sc_pkcs15_card_t * p15card, u8 id) {
 
 	/* Try to select a related EF containing the PKCS#15 description of the data */
 	len = sizeof efbin;
-	r = read_file(p15card, fid, efbin, &len);
+	r = read_file(p15card, fid, efbin, &len, 1);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF.DCOD");
 
 	ptr = efbin;
@@ -724,7 +736,7 @@ static int sc_pkcs15emu_sc_hsm_add_cd(sc_pkcs15_card_t * p15card, u8 id) {
 
 	/* Try to select a related EF containing the PKCS#15 description of the data */
 	len = sizeof efbin;
-	r = read_file(p15card, fid, efbin, &len);
+	r = read_file(p15card, fid, efbin, &len, 1);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF.DCOD");
 
 	ptr = efbin;
@@ -755,7 +767,7 @@ static int sc_pkcs15emu_sc_hsm_read_tokeninfo (sc_pkcs15_card_t * p15card)
 
 	/* Read token info */
 	len = sizeof efbin;
-	r = read_file(p15card, (u8 *) "\x2F\x03", efbin, &len);
+	r = read_file(p15card, (u8 *) "\x2F\x03", efbin, &len, 1);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF.TokenInfo");
 
 	r = sc_pkcs15_parse_tokeninfo(card->ctx, p15card->tokeninfo, efbin, len);
@@ -818,7 +830,7 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 		len = priv->EF_C_DevAut_len;
 	} else {
 		len = sizeof efbin;
-		r = read_file(p15card, (u8 *) "\x2F\x02", efbin, &len);
+		r = read_file(p15card, (u8 *) "\x2F\x02", efbin, &len, 1);
 		LOG_TEST_RET(card->ctx, r, "Could not select EF.C_DevAut");
 
 		/* save EF_C_DevAut for further use */
