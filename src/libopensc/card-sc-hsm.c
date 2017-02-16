@@ -110,7 +110,14 @@ static int sc_hsm_select_file_ex(sc_card_t *card,
 	}
 
 	// Prevent selection of applet unless this is the first time, selection is forced or the device is not authenticated
-	if (in_path->type == SC_PATH_TYPE_DF_NAME) {
+	if (in_path->type == SC_PATH_TYPE_DF_NAME
+			|| (in_path->type == SC_PATH_TYPE_PATH
+				&& in_path->len == sc_hsm_aid.len
+				&& !memcmp(in_path->value, sc_hsm_aid.value, sc_hsm_aid.len))
+			|| (in_path->type == SC_PATH_TYPE_PATH
+				&& in_path->len == 0
+				&& in_path->aid.len == sc_hsm_aid.len
+				&& !memcmp(in_path->aid.value, sc_hsm_aid.value, sc_hsm_aid.len))) {
 		if ((priv->dffcp == NULL) || forceselect) {
 			rv = (*iso_ops->select_file)(card, in_path, file_out);
 			LOG_TEST_RET(card->ctx, rv, "Could not select SmartCard-HSM application");
@@ -156,6 +163,7 @@ static int sc_hsm_select_file(sc_card_t *card,
 
 static int sc_hsm_match_card(struct sc_card *card)
 {
+	sc_hsm_private_data_t *priv;
 	sc_path_t path;
 	int i, r;
 
@@ -167,9 +175,43 @@ static int sc_hsm_match_card(struct sc_card *card)
 	if (i < 0)
 		return 0;
 
+	priv = calloc(1, sizeof(sc_hsm_private_data_t));
+	if (!priv)
+		LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
+
+	card->drv_data = priv;
+
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
-	r = (*iso_ops->select_file)(card, &path, NULL);
+	r = (*iso_ops->select_file)(card, &path, &priv->dffcp);
 	LOG_TEST_RET(card->ctx, r, "Could not select SmartCard-HSM application");
+
+	if (priv->dffcp) {
+		if (priv->dffcp->prop_attr && priv->dffcp->prop_attr_len >= 5) {
+			static char card_name[SC_MAX_APDU_BUFFER_SIZE];
+			u8 type = priv->dffcp->prop_attr[2];
+			u8 major = priv->dffcp->prop_attr[3];
+			u8 minor = priv->dffcp->prop_attr[4];
+			char p00[] = "SmartCard-HSM Applet for JCOP";
+			char p01[] = "SmartCard-HSM Demo Applet for JCOP";
+			char *p = "SmartCard-HSM";
+			switch (type) {
+				case 0x00:
+					p = p00;
+					break;
+				case 0x01:
+					p = p01;
+					break;
+				default:
+					break;
+			}
+			snprintf(card_name, sizeof card_name, "%s version %u.%u", p, major, minor);
+			card->name = card_name;
+
+			if (priv->dffcp->prop_attr[1] & 0x04) {
+				card->caps |= SC_CARD_CAP_SESSION_PIN;
+			}
+		}
+	}
 
 	// Select Applet to be sure
 	return 1;
@@ -1458,18 +1500,12 @@ static int sc_hsm_card_ctl(sc_card_t *card, unsigned long cmd, void *ptr)
 
 static int sc_hsm_init(struct sc_card *card)
 {
-	sc_hsm_private_data_t *priv;
 	int flags,ext_flags;
 	sc_file_t *file;
 	sc_path_t path;
+	sc_hsm_private_data_t *priv = card->drv_data;
 
 	LOG_FUNC_CALLED(card->ctx);
-
-	priv = calloc(1, sizeof(sc_hsm_private_data_t));
-	if (!priv)
-		LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
-
-	card->drv_data = priv;
 
 	flags = SC_ALGORITHM_RSA_RAW|SC_ALGORITHM_ONBOARD_KEY_GEN;
 
@@ -1498,7 +1534,7 @@ static int sc_hsm_init(struct sc_card *card)
 	card->caps |= SC_CARD_CAP_RNG|SC_CARD_CAP_APDU_EXT|SC_CARD_CAP_ISO7816_PIN_INFO;
 
 	sc_path_set(&path, SC_PATH_TYPE_DF_NAME, sc_hsm_aid.value, sc_hsm_aid.len, 0, 0);
-	if (sc_hsm_select_file_ex(card, &path, 1, &file) == SC_SUCCESS
+	if (sc_hsm_select_file_ex(card, &path, 0, &file) == SC_SUCCESS
 			&& file->prop_attr && file->prop_attr_len >= 5) {
 		static char card_name[SC_MAX_APDU_BUFFER_SIZE];
 		u8 type = file->prop_attr[2];
