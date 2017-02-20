@@ -134,18 +134,26 @@ static int sc_hsm_select_file_ex(sc_card_t *card,
 		return rv;
 	}
 
-	if ((in_path->len == 2) && (in_path->value[0] == 0x3F) && (in_path->value[1] == 0x00)) {
+	if ((in_path->value[0] == 0x3F) && (in_path->value[1] == 0x00)) {
 		// The SmartCard-HSM is an applet that is not default selected. Simulate selection of the MF
-		file = sc_file_new();
-		if (file == NULL)
-			LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
-		file->path = *in_path;
-		file->id = 0x3F00;
-		file->type = SC_FILE_TYPE_DF;
-		file->magic = SC_FILE_MAGIC;
+		if (in_path->len == 2) {
+			file = sc_file_new();
+			if (file == NULL)
+				LOG_FUNC_RETURN(card->ctx, SC_ERROR_OUT_OF_MEMORY);
+			file->path = *in_path;
+			file->id = 0x3F00;
+			file->type = SC_FILE_TYPE_DF;
+			file->magic = SC_FILE_MAGIC;
 
-		*file_out = file;
-		return SC_SUCCESS;
+			*file_out = file;
+			return SC_SUCCESS;
+		} else {
+			sc_path_t truncated;
+			memcpy(&truncated, in_path, sizeof truncated);
+			truncated.len = in_path->len - 2;
+			memcpy(truncated.value, in_path->value+2, truncated.len);
+			return (*iso_ops->select_file)(card, &truncated, file_out);
+		}
 	}
 	return (*iso_ops->select_file)(card, in_path, file_out);
 }
