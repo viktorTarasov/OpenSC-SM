@@ -877,6 +877,7 @@ AM_CONDITIONAL([ENABLE_THREAD_LOCKING], [test "${enable_thread_locking}" = "yes"
 AM_CONDITIONAL([ENABLE_ZLIB], [test "${enable_zlib}" = "yes"])
 AM_CONDITIONAL([ENABLE_READLINE], [test "${enable_readline}" = "yes"])
 AM_CONDITIONAL([ENABLE_OPENSSL], [test "${enable_openssl}" = "yes"])
+AM_CONDITIONAL([ENABLE_OPENPACE], [test "${enable_openpace}" = "yes"])
 AM_CONDITIONAL([ENABLE_OPENCT], [test "${enable_openct}" = "yes"])
 AM_CONDITIONAL([ENABLE_DOC], [test "${enable_doc}" = "yes"])
 AM_CONDITIONAL([WIN32], [test "${WIN32}" = "yes"])

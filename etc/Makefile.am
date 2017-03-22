@@ -41,9 +41,11 @@ install-exec-hook: opensc.conf
 uninstall-hook: opensc.conf
 	rm -f "$(DESTDIR)$(sysconfdir)/opensc.conf.new" "$(DESTDIR)$(sysconfdir)/opensc.conf"
 
+if ENABLE_OPENPACE
 install-data-local:
 	$(MKDIR_P) "$(DESTDIR)$(CVCDIR)"
 	for cert in $(CV_CERTS);   do $(INSTALL_DATA) $(srcdir)/$${cert} "$(DESTDIR)$(CVCDIR)";  done
 
 uninstall-local:
 	for cert in $(CV_CERTS);   do rm -f "$(DESTDIR)$(CVCDIR)/$${cert}";  done
+endif
