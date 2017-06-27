@@ -162,6 +162,15 @@ struct sc_pkcs15_u8 {
 };
 typedef struct sc_pkcs15_u8 sc_pkcs15_u8_t;
 
+struct sc_pkcs15_data {
+	u8 *data;	/* DER encoded raw data object */
+	size_t data_len;
+};
+typedef struct sc_pkcs15_data sc_pkcs15_data_t;
+
+#define sc_pkcs15_skey sc_pkcs15_data
+#define sc_pkcs15_skey_t sc_pkcs15_data_t
+
 struct sc_pkcs15_pubkey_rsa {
 	sc_pkcs15_bignum_t modulus;
 	sc_pkcs15_bignum_t exponent;
@@ -251,6 +260,7 @@ struct sc_pkcs15_prkey {
 		struct sc_pkcs15_prkey_dsa dsa;
 		struct sc_pkcs15_prkey_ec ec;
 		struct sc_pkcs15_prkey_gostr3410 gostr3410;
+		struct sc_pkcs15_skey secret;
 	} u;
 };
 typedef struct sc_pkcs15_prkey sc_pkcs15_prkey_t;
@@ -295,12 +305,6 @@ struct sc_pkcs15_cert_info {
 	struct sc_pkcs15_der value;
 };
 typedef struct sc_pkcs15_cert_info sc_pkcs15_cert_info_t;
-
-struct sc_pkcs15_data {
-	u8 *data;	/* DER encoded raw data object */
-	size_t data_len;
-};
-typedef struct sc_pkcs15_data sc_pkcs15_data_t;
 
 struct sc_pkcs15_data_info {
 	/* FIXME: there is no pkcs15 ID in DataType */
@@ -423,14 +427,11 @@ struct sc_pkcs15_skey_info {
 	int native, key_reference;
 	size_t value_len;
 	unsigned long key_type;
-	int algo_refs[SC_MAX_SUPPORTED_ALGORITHMS];
+	unsigned int algo_refs[SC_MAX_SUPPORTED_ALGORITHMS];
 	struct sc_path path; /* if on card */
 	struct sc_pkcs15_der data;
 };
 typedef struct sc_pkcs15_skey_info sc_pkcs15_skey_info_t;
-
-#define sc_pkcs15_skey sc_pkcs15_data
-#define sc_pkcs15_skey_t sc_pkcs15_data_t
 
 #define SC_PKCS15_TYPE_CLASS_MASK		0xF00
 
@@ -609,6 +610,18 @@ typedef struct sc_pkcs15_card {
 
 /* flags suitable for struct sc_pkcs15_card */
 #define SC_PKCS15_CARD_FLAG_EMULATED			0x02000000
+
+/* X509 bits for certificate usage extansion */
+#define SC_X509_DIGITAL_SIGNATURE     0x0001UL
+#define SC_X509_NON_REPUDIATION       0x0002UL
+#define SC_X509_KEY_ENCIPHERMENT      0x0004UL
+#define SC_X509_DATA_ENCIPHERMENT     0x0008UL
+#define SC_X509_KEY_AGREEMENT         0x0010UL
+#define SC_X509_KEY_CERT_SIGN         0x0020UL
+#define SC_X509_CRL_SIGN              0x0040UL
+#define SC_X509_ENCIPHER_ONLY         0x0080UL
+#define SC_X509_DECIPHER_ONLY         0x0100UL
+
 
 /* sc_pkcs15_bind:  Binds a card object to a PKCS #15 card object
  * and initializes a new PKCS #15 card object.  Will return
@@ -816,6 +829,9 @@ int sc_pkcs15_encode_prkdf_entry(struct sc_context *ctx,
 int sc_pkcs15_encode_pukdf_entry(struct sc_context *ctx,
 			const struct sc_pkcs15_object *obj, u8 **buf,
 			size_t *bufsize);
+int sc_pkcs15_encode_skdf_entry(struct sc_context *ctx,
+			const struct sc_pkcs15_object *obj, u8 **buf,
+			size_t *buflen);
 int sc_pkcs15_encode_dodf_entry(struct sc_context *ctx,
 			const struct sc_pkcs15_object *obj, u8 **buf,
 			size_t *bufsize);

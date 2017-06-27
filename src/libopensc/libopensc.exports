@@ -208,6 +208,7 @@ sc_pkcs15_free_prkey_info
 sc_pkcs15_free_pubkey
 sc_pkcs15_free_pubkey_info
 sc_pkcs15_get_application_by_type
+sc_pkcs15_get_name_from_dn
 sc_pkcs15_get_object_guid
 sc_pkcs15_get_object_id
 sc_pkcs15_get_objects
@@ -270,6 +271,8 @@ sc_write_binary
 sc_write_record
 sc_erase_binary
 sc_get_iso7816_driver
+iso7816_write_binary_sfid
+iso7816_read_binary_sfid
 sc_pkcs15init_add_app
 sc_pkcs15init_authenticate
 sc_pkcs15init_bind
@@ -282,6 +285,7 @@ sc_pkcs15init_erase_card_recursively
 sc_pkcs15init_finalize_card
 sc_pkcs15init_fixup_file
 sc_pkcs15init_generate_key
+sc_pkcs15init_generate_secret_key
 sc_pkcs15init_get_asepcos_ops
 sc_pkcs15init_get_cardos_ops
 sc_pkcs15init_get_cryptoflex_ops
@@ -310,6 +314,7 @@ sc_pkcs15init_store_data_object
 sc_pkcs15init_store_pin
 sc_pkcs15init_store_private_key
 sc_pkcs15init_store_public_key
+sc_pkcs15init_store_secret_key
 sc_pkcs15init_unbind
 sc_pkcs15init_update_any_df
 sc_pkcs15init_update_certificate
@@ -352,9 +357,9 @@ perform_chip_authentication
 npa_default_flags
 npa_reset_retry_counter
 npa_pace_get_tries_left
-boxing_pace_input_to_buf
-boxing_buf_to_pace_input
-boxing_pace_output_to_buf
-boxing_buf_to_pace_output
-boxing_pace_capabilities_to_buf
-boxing_buf_to_pace_capabilities
+escape_pace_input_to_buf
+escape_buf_to_pace_input
+escape_pace_output_to_buf
+escape_buf_to_pace_output
+escape_pace_capabilities_to_buf
+escape_buf_to_pace_capabilities

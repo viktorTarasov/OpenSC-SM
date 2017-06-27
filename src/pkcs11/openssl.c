@@ -3,6 +3,20 @@
  * et al
  *
  * Copyright (C) 2002 Olaf Kirch <okir@suse.de>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "config.h"
@@ -272,8 +286,8 @@ static CK_RV sc_pkcs11_openssl_md_final(sc_pkcs11_operation_t *op,
 	EVP_MD_CTX *md_ctx = DIGEST_CTX(op);
 
 	if (*pulDigestLen < (unsigned) EVP_MD_CTX_size(md_ctx)) {
-		sc_log(context, "Provided buffer too small: %ul < %d",
-			*pulDigestLen, EVP_MD_CTX_size(md_ctx));
+		sc_log(context, "Provided buffer too small: %lu < %d",
+		       *pulDigestLen, EVP_MD_CTX_size(md_ctx));
 		*pulDigestLen = EVP_MD_CTX_size(md_ctx);
 		return CKR_BUFFER_TOO_SMALL;
 	}
@@ -391,7 +405,8 @@ CK_RV sc_pkcs11_verify_data(const unsigned char *pubkey, int pubkey_len,
 {
 	int res;
 	CK_RV rv = CKR_GENERAL_ERROR;
-	EVP_PKEY *pkey;
+	EVP_PKEY *pkey = NULL;
+	const unsigned char *pubkey_tmp = NULL;
 
 	if (mech == CKM_GOSTR3410)
 	{
@@ -405,7 +420,15 @@ CK_RV sc_pkcs11_verify_data(const unsigned char *pubkey, int pubkey_len,
 #endif
 	}
 
-	pkey = d2i_PublicKey(EVP_PKEY_RSA, NULL, &pubkey, pubkey_len);
+	/*
+	 * PKCS#11 does not define CKA_VALUE for public keys, and different cards
+	 * return either the raw or spki versions as defined in PKCS#15
+	 * And we need to support more then just RSA.
+	 * We can use d2i_PUBKEY which works for SPKI and any key type. 
+	 */
+	pubkey_tmp = pubkey; /* pass in so pubkey pointer is not modified */
+
+	pkey = d2i_PUBKEY(NULL, &pubkey_tmp, pubkey_len);
 	if (pkey == NULL)
 		return CKR_GENERAL_ERROR;
 
@@ -435,6 +458,7 @@ CK_RV sc_pkcs11_verify_data(const unsigned char *pubkey, int pubkey_len,
 		 case CKM_RSA_X_509:
 		 	pad = RSA_NO_PADDING;
 		 	break;
+		/* TODO support more then RSA */
 		 default:
 			EVP_PKEY_free(pkey);
 		 	return CKR_ARGUMENTS_BAD;

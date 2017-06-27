@@ -1,22 +1,24 @@
 OPENSC_FEATURES = pcsc
 
-!IF "$(BUILD_ON)" == "WIN32"
-PROGRAMFILES_PATH = C:\Program Files
-!ELSE
-PROGRAMFILES_PATH = C:\Program Files (x86)
-!ENDIF
-
 #Include support for minidriver
 MINIDRIVER_DEF = /DENABLE_MINIDRIVER
 
 #Build MSI with the Windows Installer XML (WIX) toolkit, requires WIX >= 3.9
-WIX_PATH = $(PROGRAMFILES_PATH)\WiX Toolset v3.10
-WIX_INCL_DIR = "/I$(WIX_PATH)\SDK\VS2010\inc"
-!IF "$(BUILD_FOR)" == "WIN64"
-WIX_LIBS = "$(WIX_PATH)\SDK\VS2010\lib\x64\dutil.lib" "$(WIX_PATH)\SDK\VS2010\lib\x64\wcautil.lib"
-!ELSE
-WIX_LIBS = "$(WIX_PATH)\SDK\VS2010\lib\x86\dutil.lib" "$(WIX_PATH)\SDK\VS2010\lib\x86\wcautil.lib"
+!IF "$(WIX)" == ""
+# at least WiX 3.11 sets the WIX environment variable to its path
+WIX = C:\Program Files\WiX Toolset v3.10
 !ENDIF
+!IF "$(DEVENVDIR)" == "C:\Program Files (x86)\Microsoft Visual Studio 10.0\Common7\IDE\" || "$(DEVENVDIR)" == "C:\Program Files\Microsoft Visual Studio 10.0\Common7\IDE\"
+WIXVSVER = VS2010
+!ENDIF
+!IF "$(VISUALSTUDIOVERSION)" == "12.0"
+WIXVSVER = VS2013
+!ENDIF
+!IF "$(VISUALSTUDIOVERSION)" == "14.0"
+WIXVSVER = VS2015
+!ENDIF
+WIX_INCL_DIR = "/I$(WIX)\SDK\$(WIXVSVER)\inc"
+WIX_LIBS = "$(WIX)\SDK\$(WIXVSVER)\lib\$(PLATFORM)\dutil.lib" "$(WIX)\SDK\$(WIXVSVER)\lib\$(PLATFORM)\wcautil.lib"
 
 #Include support for Secure Messaging
 SM_DEF = /DENABLE_SM
@@ -31,10 +33,10 @@ SM_DEF = /DENABLE_SM
 # - set the OPENSSL_LIB below to your openssl lib file
 #OPENSSL_DEF= /DENABLE_OPENSSL
 !IF "$(OPENSSL_DEF)" == "/DENABLE_OPENSSL"
-!IF "$(BUILD_FOR)" == "WIN64"
-OPENSSL_DIR = C:\OpenSSL-Win64
-!ELSE
+!IF "$(PLATFORM)" == "x86"
 OPENSSL_DIR = C:\OpenSSL-Win32
+!ELSE
+OPENSSL_DIR = C:\OpenSSL-Win64
 !ENDIF
 OPENSSL_INCL_DIR = /I$(OPENSSL_DIR)\include
 
@@ -62,12 +64,20 @@ CANDLEFLAGS = -dOpenSSL="$(OPENSSL_DIR)" $(CANDLEFLAGS)
 #ZLIB_DEF = /DENABLE_ZLIB
 !IF "$(ZLIBSTATIC_DEF)" == "/DENABLE_ZLIB_STATIC"
 ZLIB_DEF = /DENABLE_ZLIB
+!IF "$(ZLIB_INCL_DIR)" == ""
 ZLIB_INCL_DIR = /IC:\zlib
+!ENDIF
+!IF "$(ZLIB_LIB)" == ""
 ZLIB_LIB = C:\zlib\zlib.lib
+!ENDIF
 OPENSC_FEATURES = $(OPENSC_FEATURES) zlib
-!ELSE IF "$(ZLIB_DEF)" == "/DENABLE_ZLIB"
+!ELSEIF "$(ZLIB_DEF)" == "/DENABLE_ZLIB"
+!IF "$(ZLIB_INCL_DIR)" == ""
 ZLIB_INCL_DIR = /IC:\zlib-dll\include
+!ENDIF
+!IF "$(ZLIB_LIB)" == ""
 ZLIB_LIB = C:\zlib-dll\lib\zdll.lib
+!ENDIF
 OPENSC_FEATURES = $(OPENSC_FEATURES) zlib
 CANDLEFLAGS = -dzlib="C:\zlib-dll" $(CANDLEFLAGS)
 !ENDIF
@@ -80,7 +90,9 @@ CANDLEFLAGS = -dzlib="C:\zlib-dll" $(CANDLEFLAGS)
 # - set the OPENPACE_LIB  below to your OpenPACE lib file
 #OPENPACE_DEF= /DENABLE_OPENPACE
 !IF "$(OPENPACE_DEF)" == "/DENABLE_OPENPACE"
+!IF "$(OPENPACE_DIR)" == ""
 OPENPACE_DIR = C:\openpace
+!ENDIF
 OPENPACE_INCL_DIR = /I$(OPENPACE_DIR)\src
 OPENPACE_LIB = $(OPENPACE_DIR)\src\libeac.lib
 CANDLEFLAGS = -dOpenPACE="$(OPENPACE_DIR)" $(CANDLEFLAGS)
@@ -88,7 +100,10 @@ CANDLEFLAGS = -dOpenPACE="$(OPENPACE_DIR)" $(CANDLEFLAGS)
 
 
 # Used for MiniDriver
-CNGSDK_INCL_DIR = "/I$(PROGRAMFILES_PATH)\Microsoft CNG Development Kit\Include"
+CNGSDK_INCL_DIR = "/IC:\Program Files (x86)\Microsoft CNG Development Kit\Include"
+!IF "$(PROCESSOR_ARCHITECTURE)" == "x86" && "$(PROCESSOR_ARCHITEW6432)" == ""
+CNGSDK_INCL_DIR = "/IC:\Program Files\Microsoft CNG Development Kit\Include"
+!ENDIF
 # Mandatory path to 'ISO C9x compliant stdint.h and inttypes.h for Microsoft Visual Studio'
 # http://msinttypes.googlecode.com/files/msinttypes-r26.zip
 # INTTYPES_INCL_DIR =  /IC:\opensc\dependencies\msys\local
@@ -109,14 +124,12 @@ COPTS =  /GS /W3 /D_CRT_SECURE_NO_DEPRECATE /MT /nologo /DHAVE_CONFIG_H $(ALL_IN
 !ENDIF
 
 
-!IF "$(BUILD_FOR)" == "WIN64"
-LINKFLAGS = /NOLOGO /INCREMENTAL:NO /MACHINE:X64 /NODEFAULTLIB:MSVCRTD  /NODEFAULTLIB:MSVCRT /NXCOMPAT /DYNAMICBASE $(LINKDEBUGFLAGS)
-LIBFLAGS =  /nologo /machine:x64
-CANDLEFLAGS = -dPlatform=x64 $(CANDLEFLAGS)
-!ELSE
-LINKFLAGS = /NOLOGO /INCREMENTAL:NO /MACHINE:X86 /NODEFAULTLIB:MSVCRTD  /NODEFAULTLIB:MSVCRT /NXCOMPAT /DYNAMICBASE /SAFESH $(LINKDEBUGFLAGS)
-LIBFLAGS =  /nologo /machine:x86
+LINKFLAGS = /NOLOGO /INCREMENTAL:NO /MACHINE:$(PLATFORM) /NODEFAULTLIB:MSVCRTD  /NODEFAULTLIB:MSVCRT /NXCOMPAT /DYNAMICBASE $(LINKDEBUGFLAGS)
+LIBFLAGS =  /nologo /machine:$(PLATFORM)
+!IF "$(PLATFORM)" == "x86"
 CANDLEFLAGS = -dPlatform=x86 $(CANDLEFLAGS)
+!ELSE
+CANDLEFLAGS = -dPlatform=x64 $(CANDLEFLAGS)
 !ENDIF
 
 .c.obj::

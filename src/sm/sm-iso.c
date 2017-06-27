@@ -591,7 +591,8 @@ static int sm_decrypt(const struct iso_sm_ctx *ctx, sc_card_t *card,
 
 		if (apdu->resplen < (size_t) r || (r && !apdu->resp)) {
 			sc_debug(card->ctx, SC_LOG_DEBUG_VERBOSE,
-					"Response of SM APDU %u byte%s too long", r-apdu->resplen,
+					"Response of SM APDU %"SC_FORMAT_LEN_SIZE_T"u byte%s too long",
+					r-apdu->resplen,
 					r-apdu->resplen < 2 ? "" : "s");
 			r = SC_ERROR_OUT_OF_MEMORY;
 			goto err;
@@ -689,7 +690,7 @@ int iso_get_sm_apdu(struct sc_card *card, struct sc_apdu *apdu, struct sc_apdu *
 
 int iso_free_sm_apdu(struct sc_card *card, struct sc_apdu *apdu, struct sc_apdu **sm_apdu)
 {
-	struct sc_apdu *p = *sm_apdu;
+	struct sc_apdu *p;
 	int r;
 
 	if (!sm_apdu)

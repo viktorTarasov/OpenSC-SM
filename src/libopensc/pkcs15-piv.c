@@ -710,7 +710,7 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 		struct sc_pkcs15_cert_info cert_info;
 		struct sc_pkcs15_object    cert_obj;
 		sc_pkcs15_der_t   cert_der;
-		sc_pkcs15_cert_t *cert_out;
+		sc_pkcs15_cert_t *cert_out = NULL;
 		
 		ckis[i].cert_found = 0;
 		ckis[i].key_alg = -1;
@@ -761,6 +761,8 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 		r =  sc_pkcs15_read_certificate(p15card, &cert_info, &cert_out);
 		if (r < 0 || cert_out->key == NULL) {
 			sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "Failed to read/parse the certificate r=%d",r);
+			if (cert_out != NULL)
+				sc_pkcs15_free_certificate(cert_out);
 			continue;
 		}
 		/* 
@@ -791,7 +793,7 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 				ckis[i].pubkey_len = cert_out->key->u.rsa.modulus.len * 8;
 				/* See RFC 5280 and PKCS#11 V2.40 */
 				if (ckis[i].cert_keyUsage_present) {
-					if (ckis[i].cert_keyUsage & 0x01u) { /* digitalSignature  RFC 5280 */
+					if (ckis[i].cert_keyUsage & SC_X509_DIGITAL_SIGNATURE) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT /* extra*/
 									|SC_PKCS15_PRKEY_USAGE_WRAP
 									|SC_PKCS15_PRKEY_USAGE_VERIFY
@@ -801,7 +803,7 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 									|SC_PKCS15_PRKEY_USAGE_SIGN
 									|SC_PKCS15_PRKEY_USAGE_SIGNRECOVER;
 					}
-					if(ckis[i].cert_keyUsage & 0x02u) { /* nonRepudation */
+					if (ckis[i].cert_keyUsage & SC_X509_NON_REPUDIATION) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT /* extra */
 									|SC_PKCS15_PRKEY_USAGE_NONREPUDIATION
 									|SC_PKCS15_PRKEY_USAGE_VERIFY
@@ -811,31 +813,31 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 									|SC_PKCS15_PRKEY_USAGE_SIGN
 									|SC_PKCS15_PRKEY_USAGE_SIGNRECOVER;
 					}
-					if(ckis[i].cert_keyUsage &  0x04u) { /* KeyEncipherment */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_ENCIPHERMENT) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT| SC_PKCS15_PRKEY_USAGE_WRAP;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT| SC_PKCS15_PRKEY_USAGE_UNWRAP;
 					}
-					if(ckis[i].cert_keyUsage & 0x08u) { /* dataEncipherment */
+					if (ckis[i].cert_keyUsage & SC_X509_DATA_ENCIPHERMENT) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT;
 					}
-					if(ckis[i].cert_keyUsage & 0x10u) { /* keyAgreement */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_AGREEMENT) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
 					}
-					if(ckis[i].cert_keyUsage & 0x20u) { /* keyCertSign */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_CERT_SIGN) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_VERIFY|SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER;
 						ckis[i].priv_usage |=  SC_PKCS15_PRKEY_USAGE_SIGN;
 					}
-					if(ckis[i].cert_keyUsage & 0x40u) { /* crlSign */
+					if (ckis[i].cert_keyUsage & SC_X509_CRL_SIGN) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_VERIFY|SC_PKCS15_PRKEY_USAGE_VERIFYRECOVER;
 						ckis[i].priv_usage |=  SC_PKCS15_PRKEY_USAGE_SIGN;
 					}
-					if(ckis[i].cert_keyUsage & 0x80u) { /*encipherOnly */
+					if (ckis[i].cert_keyUsage & SC_X509_ENCIPHER_ONLY) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT|SC_PKCS15_PRKEY_USAGE_WRAP;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT|SC_PKCS15_PRKEY_USAGE_UNWRAP;
 					}
-					if (ckis[i].cert_keyUsage & 0x100u) { /*decipherOnly */ /* TODO is this correct */
+					if (ckis[i].cert_keyUsage & SC_X509_DECIPHER_ONLY) { /* TODO is this correct */
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_DECRYPT|SC_PKCS15_PRKEY_USAGE_UNWRAP;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_ENCRYPT|SC_PKCS15_PRKEY_USAGE_WRAP;
 					}
@@ -845,39 +847,39 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 			case SC_ALGORITHM_EC:
 				ckis[i].pubkey_len = cert_out->key->u.ec.params.field_length;
 				if (ckis[i].cert_keyUsage_present) {
-					if(ckis[i].cert_keyUsage & 0x01u) { /*digitalSignature  RFC 5280 */
+					if (ckis[i].cert_keyUsage & SC_X509_DIGITAL_SIGNATURE) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_VERIFY;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_SIGN;
 					}
-					if(ckis[i].cert_keyUsage & 0x02u) { /* nonRepudation */
+					if (ckis[i].cert_keyUsage & SC_X509_NON_REPUDIATION) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_NONREPUDIATION;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_NONREPUDIATION;
 					}
-					if(ckis[i].cert_keyUsage & 0x04u) {/* KeyEncipherment */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_ENCIPHERMENT) {
 						ckis[i].pub_usage |= 0;
 						ckis[i].priv_usage |= 0;
 					}
-					if(ckis[i].cert_keyUsage & 0x08u) { /* dataEncipherment */
+					if (ckis[i].cert_keyUsage & SC_X509_DATA_ENCIPHERMENT) {
 						ckis[i].pub_usage |= 0;
 						ckis[i].priv_usage |= 0;
 					}
-					if(ckis[i].cert_keyUsage & 0x10u) { /* keyAgreement */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_AGREEMENT) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_DERIVE;
 					}
-					if(ckis[i].cert_keyUsage & 0x20u) { /* keyCertSign */
+					if (ckis[i].cert_keyUsage & SC_X509_KEY_CERT_SIGN) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_VERIFY;
 						ckis[i].priv_usage |= SC_PKCS15_PRKEY_USAGE_SIGN;
 					}
-					if(ckis[i].cert_keyUsage & 0x40u) { /* crlSign */
+					if (ckis[i].cert_keyUsage & SC_X509_CRL_SIGN) {
 						ckis[i].pub_usage |= SC_PKCS15_PRKEY_USAGE_VERIFY;
 						ckis[i].priv_usage |=  SC_PKCS15_PRKEY_USAGE_SIGN;
 					}
-					if(ckis[i].cert_keyUsage & 0x80u) { /*encipherOnly */
+					if (ckis[i].cert_keyUsage & SC_X509_ENCIPHER_ONLY) {
 						ckis[i].pub_usage |= 0;
 						ckis[i].priv_usage |= 0;
 					}
-					if (ckis[i].cert_keyUsage & 0x100u) { /*decipherOnly */
+					if (ckis[i].cert_keyUsage & SC_X509_DECIPHER_ONLY) {
 						ckis[i].pub_usage |= 0;
 						ckis[i].priv_usage |= 0;
 					}
@@ -934,6 +936,14 @@ static int sc_pkcs15emu_piv_init(sc_pkcs15_card_t *p15card)
 sc_debug(card->ctx, SC_LOG_DEBUG_NORMAL, "DEE Adding pin %d label=%s",i, label);
 		strncpy(pin_obj.label, label, SC_PKCS15_MAX_LABEL_SIZE - 1);
 		pin_obj.flags = pins[i].obj_flags;
+		if (i == 0 && pin_info.attrs.pin.reference == 0x80) {
+			/*
+			 * according to description of "RESET RETRY COUNTER"
+			 * command in specs PUK can only unblock PIV PIN
+			 */
+			pin_obj.auth_id.len = 1;
+			pin_obj.auth_id.value[0] = 2;
+		}
 
 		r = sc_pkcs15emu_add_pin_obj(p15card, &pin_obj, &pin_info);
 		if (r < 0)

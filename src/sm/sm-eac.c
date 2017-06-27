@@ -25,7 +25,6 @@
 #include "libopensc/asn1.h"
 #include "libopensc/log.h"
 #include "libopensc/opensc.h"
-#include "rw_sfid.h"
 #include "sm-eac.h"
 #include "sslutil.h"
 #include <stdlib.h>
@@ -385,7 +384,7 @@ err:
 static int get_ef_card_access(sc_card_t *card,
 		u8 **ef_cardaccess, size_t *length_ef_cardaccess)
 {
-	return read_binary_sfid(card, SFID_EF_CARDACCESS, ef_cardaccess, length_ef_cardaccess);
+	return iso7816_read_binary_sfid(card, SFID_EF_CARDACCESS, ef_cardaccess, length_ef_cardaccess);
 }
 
 static int format_mse_cdata(struct sc_context *ctx, int protocol,
@@ -540,7 +539,7 @@ static int npa_mse(sc_card_t *card,
 
 	if (apdu.resplen) {
 		sc_debug(card->ctx, SC_LOG_DEBUG_VERBOSE, "MSE:Set AT response data should be empty "
-				"(contains %u bytes)", apdu.resplen);
+				"(contains %"SC_FORMAT_LEN_SIZE_T"u bytes)", apdu.resplen);
 		r = SC_ERROR_UNKNOWN_DATA_RECEIVED;
 		goto err;
 	}
@@ -1052,7 +1051,7 @@ int perform_pace(sc_card_t *card,
 	int r;
 	const unsigned char *pp;
 
-	if (!card || !pace_output)
+	if (!card || !card->reader || !card->reader->ops || !pace_output)
 		return SC_ERROR_INVALID_ARGUMENTS;
 
 	/* show description in advance to give the user more time to read it...
@@ -1756,7 +1755,7 @@ err:
 static int get_ef_card_security(sc_card_t *card,
 		u8 **ef_security, size_t *length_ef_security)
 {
-	return read_binary_sfid(card, SFID_EF_CARDSECURITY, ef_security, length_ef_security);
+	return iso7816_read_binary_sfid(card, SFID_EF_CARDSECURITY, ef_security, length_ef_security);
 }
 
 int perform_chip_authentication(sc_card_t *card,
@@ -2382,7 +2381,8 @@ int perform_pace(sc_card_t *card,
 {
 	int r;
 
-	if (card->reader->capabilities & SC_READER_CAP_PACE_GENERIC
+	if (card && card->reader
+			&& card->reader->capabilities & SC_READER_CAP_PACE_GENERIC
 			&& card->reader->ops->perform_pace) {
 		r = card->reader->ops->perform_pace(card->reader, &pace_input, pace_output);
 	} else {

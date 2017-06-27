@@ -210,6 +210,17 @@ enum {
 	SC_CARDCTL_PIV_PIN_PREFERENCE,
 	SC_CARDCTL_PIV_OBJECT_PRESENT,
 
+	/*
+	 * CAC specific calls
+	 */
+	SC_CARDCTL_CAC_BASE = _CTL_PREFIX('C', 'A', 'C'),
+	SC_CARDCTL_CAC_INIT_GET_GENERIC_OBJECTS,
+	SC_CARDCTL_CAC_GET_NEXT_GENERIC_OBJECT,
+	SC_CARDCTL_CAC_FINAL_GET_GENERIC_OBJECTS,
+	SC_CARDCTL_CAC_INIT_GET_CERT_OBJECTS,
+	SC_CARDCTL_CAC_GET_NEXT_CERT_OBJECT,
+	SC_CARDCTL_CAC_FINAL_GET_CERT_OBJECTS,
+
         /*
 	 * AuthentIC v3
 	 */
@@ -867,7 +878,9 @@ typedef struct sc_rtecp_genkey_data {
  */
 	enum SC_CARDCTL_MYEID_KEY_TYPE {
 		SC_CARDCTL_MYEID_KEY_RSA = 0x11,
-		SC_CARDCTL_MYEID_KEY_EC  = 0x22
+		SC_CARDCTL_MYEID_KEY_DES = 0x19,
+		SC_CARDCTL_MYEID_KEY_EC  = 0x22,
+		SC_CARDCTL_MYEID_KEY_AES = 0x29
 	};
 
 	struct sc_cardctl_myeid_data_obj {
@@ -896,8 +909,8 @@ typedef struct sc_rtecp_genkey_data {
 		unsigned int    invq_len;  
 		unsigned char  *invq;
 		/* new for MyEID > 3.6.0 */
-		unsigned char  *d;                  /* EC private key */
-		unsigned int    d_len;              /* EC */ 
+		unsigned char  *d;                  /* EC private key / Symmetric key */
+		unsigned int    d_len;              /* EC / Symmetric */
 		unsigned char  *ecpublic_point;     /* EC public key */
 		unsigned int    ecpublic_point_len; /* EC */
     };

@@ -24,7 +24,6 @@
 #ifdef ENABLE_OPENPACE
 #include "npa-tool-cmdline.h"
 #include "fread_to_eof.h"
-#include "sm/rw_sfid.c"
 #include "sm/sslutil.h"
 #include "sm/sm-eac.h"
 #include <eac/pace.h>
@@ -36,20 +35,6 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-
-#include <openssl/asn1t.h>
-
-#define ASN1_APP_IMP_OPT(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION|ASN1_TFLG_OPTIONAL, tag, stname, field, type)
-#define ASN1_APP_IMP(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION, tag, stname, field, type)
-
-/* 0x67
- * Auxiliary authenticated data */
-ASN1_ITEM_TEMPLATE(ASN1_AUXILIARY_DATA) = 
-	ASN1_EX_TEMPLATE_TYPE(
-			ASN1_TFLG_SEQUENCE_OF|ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION,
-			7, AuxiliaryAuthenticatedData, CVC_DISCRETIONARY_DATA_TEMPLATE)
-ASN1_ITEM_TEMPLATE_END(ASN1_AUXILIARY_DATA)
-IMPLEMENT_ASN1_FUNCTIONS(ASN1_AUXILIARY_DATA)
 
 #ifdef HAVE_SYS_TIME_H
 #include <sys/time.h>
@@ -95,6 +80,21 @@ static int getline(char **lineptr, size_t *n, FILE *stream)
 	return strlen(p);
 }
 #endif
+
+/* we don't want to export this from libopensc so we implement it here, again */
+#include <openssl/asn1t.h>
+
+#define ASN1_APP_IMP_OPT(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION|ASN1_TFLG_OPTIONAL, tag, stname, field, type)
+#define ASN1_APP_IMP(stname, field, type, tag) ASN1_EX_TYPE(ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION, tag, stname, field, type)
+
+/* 0x67
+ * Auxiliary authenticated data */
+ASN1_ITEM_TEMPLATE(ASN1_AUXILIARY_DATA) = 
+	ASN1_EX_TEMPLATE_TYPE(
+			ASN1_TFLG_SEQUENCE_OF|ASN1_TFLG_IMPTAG|ASN1_TFLG_APPLICATION,
+			7, AuxiliaryAuthenticatedData, CVC_DISCRETIONARY_DATA_TEMPLATE)
+ASN1_ITEM_TEMPLATE_END(ASN1_AUXILIARY_DATA)
+IMPLEMENT_ASN1_FUNCTIONS(ASN1_AUXILIARY_DATA)
 
 /** 
  * @brief Print binary data to a file stream
@@ -166,7 +166,7 @@ static int initialize(int reader_id, int verbose,
 static void read_dg(sc_card_t *card, unsigned char sfid, const char *dg_str,
 		unsigned char **dg, size_t *dg_len)
 {
-	int r = read_binary_sfid(card, sfid, dg, dg_len);
+	int r = iso7816_read_binary_sfid(card, sfid, dg, dg_len);
 	if (r < 0)
 		fprintf(stderr, "Coult not read DG %02u %s (%s)\n",
 				sfid, dg_str, sc_strerror(r));
@@ -189,7 +189,7 @@ static void write_dg(sc_card_t *card, unsigned char sfid, const char *dg_str,
 		fprintf(stderr, "Could not parse DG %02u %s (%s)\n",
 				sfid, dg_str, sc_strerror(r));
 	} else {
-		r = write_binary_sfid(card, sfid, dg, dg_len);
+		r = iso7816_write_binary_sfid(card, sfid, dg, dg_len);
 		if (r < 0)
 			fprintf(stderr, "Could not write DG %02u %s (%s)\n",
 					sfid, dg_str, sc_strerror(r));
@@ -486,7 +486,7 @@ main (int argc, char **argv)
 		} else if (cmdline.puk_given) {
 			pace_input.pin_id = PACE_PUK;
 			pace_input.pin_length = 10;
-			maxsecret = 9999999999LLU;
+			maxsecret = 9999999999;
 			if (puk) {
 				if (sscanf(puk, "%llu", &secret) != 1) {
 					fprintf(stderr, "%s is not an unsigned long long.\n",

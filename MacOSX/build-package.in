@@ -11,8 +11,7 @@ test -x ./configure || ./bootstrap
 BUILDPATH=${PWD}
 
 # Locate the latest OSX SDK
-SDKS_PATH="$(xcode-select -p)/Platforms/MacOSX.platform/Developer/SDKs"
-SDK_PATH="${SDK_PATH:-$SDKS_PATH/$(ls -1 ${SDKS_PATH} | sort -n -k2 -t. -r | head -1)}"
+SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
 
 # Set SDK path
 export CFLAGS="$CFLAGS -isysroot $SDK_PATH -arch x86_64 -mmacosx-version-min=10.10"
@@ -50,9 +49,9 @@ if ! test -e $BUILDPATH/openpace_bin/$PREFIX/lib/pkgconfig; then
 	./configure --disable-shared --prefix=$PREFIX CRYPTO_CFLAGS="$OPENSSL_CFLAGS" CRYPTO_LIBS="$OPENSSL_LIBS"
 	make DESTDIR=$BUILDPATH/openpace_bin install
 	cd ..
+	export OPENPACE_CFLAGS="`env PKG_CONFIG_PATH=$BUILDPATH/openpace_bin/$PREFIX/lib/pkgconfig PKG_CONFIG_SYSROOT_DIR=$BUILDPATH/openpace_bin pkg-config --static --cflags libeac` $OPENSSL_CFLAGS"
+	export OPENPACE_LIBS="`  env PKG_CONFIG_PATH=$BUILDPATH/openpace_bin/$PREFIX/lib/pkgconfig PKG_CONFIG_SYSROOT_DIR=$BUILDPATH/openpace_bin pkg-config --static --libs   libeac` $OPENSSL_LIBS"
 fi
-export OPENPACE_CFLAGS="`env PKG_CONFIG_PATH=$BUILDPATH/openpace_bin/$PREFIX/lib/pkgconfig PKG_CONFIG_SYSROOT_DIR=$BUILDPATH/openpace_bin pkg-config --static --cflags libeac` $OPENSSL_CFLAGS"
-export OPENPACE_LIBS="`  env PKG_CONFIG_PATH=$BUILDPATH/openpace_bin/$PREFIX/lib/pkgconfig PKG_CONFIG_SYSROOT_DIR=$BUILDPATH/openpace_bin pkg-config --static --libs   libeac` $OPENSSL_LIBS"
 
 if ! test -e ${BUILDPATH}/target/$PREFIX/lib/pkgconfig; then
 	./configure --prefix=$PREFIX \
@@ -102,16 +101,15 @@ cp MacOSX/opensc-uninstall target/usr/local/bin
 # Build package
 pkgbuild --root target --scripts MacOSX/scripts --identifier org.opensc-project.mac --version @PACKAGE_VERSION@ --install-location / OpenSC.pkg
 # Build product
-productbuild --distribution MacOSX/Distribution.xml --package-path . --resources MacOSX/resources OpenSC-@PACKAGE_VERSION@.pkg
+productbuild --distribution MacOSX/Distribution.xml --package-path . --resources MacOSX/resources "OpenSC @PACKAGE_VERSION@.pkg"
 
 # Build "uninstaller"
-pkgbuild --nopayload --identifier org.opensc-project.mac.uninstall --scripts MacOSX/uninstaller-scripts Uninstall_OpenSC.pkg
+osacompile -o "OpenSC Uninstaller.app" "MacOSX/OpenSC_Uninstaller.applescript"
 
 # Create .dmg
 rm -f OpenSC-@PACKAGE_VERSION@.dmg
-TIMESTAMP=$(date +%Y.%m.%d)
 i=0
-while ! hdiutil create -srcfolder Uninstall_OpenSC.pkg -srcfolder OpenSC-@PACKAGE_VERSION@.pkg -volname "OpenSC @PACKAGE_VERSION@ for Mac OS X 10.10+ (${TIMESTAMP})" OpenSC-@PACKAGE_VERSION@.dmg
+while ! hdiutil create -srcfolder "OpenSC @PACKAGE_VERSION@.pkg" -srcfolder "OpenSC Uninstaller.app" -volname "@PACKAGE_NAME@" OpenSC-@PACKAGE_VERSION@.dmg
 do
 	i=$[$i+1]
 	if [ $i -gt 2 ]

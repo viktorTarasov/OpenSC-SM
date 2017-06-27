@@ -472,6 +472,7 @@ static int sc_pkcs15emu_sc_hsm_get_ec_public_key(struct sc_context *ctx, sc_cvc_
 	memcpy(pubkey->u.ec.params.der.value, ecp->der.value, ecp->der.len);
 	pubkey->u.ec.params.der.len = ecp->der.len;
 
+	/* FIXME: check return value? */
 	sc_pkcs15_fix_ec_parameters(ctx, &pubkey->u.ec.params);
 
 	return SC_SUCCESS;
@@ -641,9 +642,7 @@ static int sc_pkcs15emu_sc_hsm_add_prkd(sc_pkcs15_card_t * p15card, u8 keyid) {
 	r = read_file(p15card, fid, efbin, &len, 0);
 	LOG_TEST_RET(card->ctx, r, "Could not read EF");
 
-	if (r < 0) {
-		return SC_SUCCESS;
-	}
+	LOG_TEST_RET(card->ctx, r, "Could not read EF");
 
 	if (efbin[0] == 0x67) {		/* Decode CSR and create public key object */
 		sc_pkcs15emu_sc_hsm_add_pubkey(p15card, efbin, len, key_info, prkd.label);
@@ -903,6 +902,8 @@ static int sc_pkcs15emu_sc_hsm_init (sc_pkcs15_card_t * p15card)
 	pin_info.tries_left = 3;
 	pin_info.max_tries = 3;
 
+	pin_obj.auth_id.len = 1;
+	pin_obj.auth_id.value[0] = 2;
 	strlcpy(pin_obj.label, "UserPIN", sizeof(pin_obj.label));
 	pin_obj.flags = SC_PKCS15_CO_FLAG_PRIVATE|SC_PKCS15_CO_FLAG_MODIFIABLE;
 

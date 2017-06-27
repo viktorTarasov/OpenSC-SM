@@ -158,6 +158,16 @@
 
 				<varlistentry>
 					<term>
+						<option>--clear-cache</option>
+					</term>
+					<listitem><para>Removes the user's cache directory. On
+					Windows, this option additionally removes the system's
+					caching directory (requires administrator
+					privileges).</para></listitem>
+				</varlistentry>
+
+				<varlistentry>
+					<term>
 						<option>--output</option> <replaceable>filename</replaceable>,
 						<option>-o</option> <replaceable>filename</replaceable>
 					</term>
@@ -265,6 +275,13 @@
 					</term>
 					<listitem><para>Verify PIN after card binding and before issuing any command
                                         (without 'auth-id' the first non-SO, non-Unblock PIN will be verified)</para></listitem>
+				</varlistentry>
+
+				<varlistentry>
+					<term>
+						<option>--use-pinpad</option>
+					</term>
+					<listitem><para>Do not prompt the user; if no PINs supplied, pinpad will be used.</para></listitem>
 				</varlistentry>
 
 			</variablelist>

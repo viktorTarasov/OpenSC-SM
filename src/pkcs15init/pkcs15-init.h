@@ -2,6 +2,20 @@
  * Function prototypes for pkcs15-init
  *
  * Copyright (C) 2002 Olaf Kirch <okir@suse.de>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #ifndef PKCS15_INIT_H
@@ -14,6 +28,7 @@ extern "C" {
 #include "libopensc/pkcs15.h"
 
 #define DEFAULT_PRIVATE_KEY_LABEL "Private Key"
+#define DEFAULT_SECRET_KEY_LABEL  "Secret Key"
 
 #define SC_PKCS15INIT_X509_DIGITAL_SIGNATURE     0x0080UL
 #define SC_PKCS15INIT_X509_NON_REPUDIATION       0x0040UL
@@ -257,9 +272,10 @@ struct sc_pkcs15init_skeyargs {
 	unsigned long           usage;
 	unsigned int		flags;
 	unsigned int		access_flags;
+	unsigned long		algorithm; /* User requested algorithm */
 	unsigned long		value_len; /* User requested length */
 
-	struct sc_pkcs15_der	data_value; /* Wrong name: is not DER encoded */
+	struct sc_pkcs15_skey	key;
 };
 
 struct sc_pkcs15init_certargs {
@@ -302,6 +318,10 @@ extern int	sc_pkcs15init_generate_key(struct sc_pkcs15_card *,
 				struct sc_pkcs15init_keygen_args *,
 				unsigned int keybits,
 				struct sc_pkcs15_object **);
+extern int	sc_pkcs15init_generate_secret_key(struct sc_pkcs15_card *,
+				struct sc_profile *,
+				struct sc_pkcs15init_skeyargs *,
+				struct sc_pkcs15_object **);
 extern int	sc_pkcs15init_store_private_key(struct sc_pkcs15_card *,
 				struct sc_profile *,
 				struct sc_pkcs15init_prkeyargs *,
@@ -314,6 +334,10 @@ extern int	sc_pkcs15init_store_split_key(struct sc_pkcs15_card *,
 extern int	sc_pkcs15init_store_public_key(struct sc_pkcs15_card *,
 				struct sc_profile *,
 				struct sc_pkcs15init_pubkeyargs *,
+				struct sc_pkcs15_object **);
+extern int	sc_pkcs15init_store_secret_key(struct sc_pkcs15_card *,
+				struct sc_profile *,
+				struct sc_pkcs15init_skeyargs *,
 				struct sc_pkcs15_object **);
 extern int	sc_pkcs15init_store_certificate(struct sc_pkcs15_card *,
 				struct sc_profile *,

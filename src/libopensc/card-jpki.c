@@ -145,8 +145,9 @@ jpki_select_file(struct sc_card *card,
 	struct sc_file *file = NULL;
 
 	LOG_FUNC_CALLED(card->ctx);
-	sc_log(card->ctx, "jpki_select_file: path=%s, len=%d",
-			sc_print_path(path), path->len);
+	sc_log(card->ctx,
+	       "jpki_select_file: path=%s, len=%"SC_FORMAT_LEN_SIZE_T"u",
+	       sc_print_path(path), path->len);
 	if (path->len == 2 && memcmp(path->value, "\x3F\x00", 2) == 0) {
 		drvdata->selected = SELECT_MF;
 		if (file_out) {
@@ -182,8 +183,13 @@ jpki_select_file(struct sc_card *card,
 		LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 	}
 
-	/* read size of auth certificate file */
-	if (path->len == 2 && memcmp(path->value, "\x00\x0a", 2) == 0) {
+	/* read certificate file size */
+	if (path->len == 2 && (
+		    memcmp(path->value, "\x00\x0A", 2) == 0 ||
+		    memcmp(path->value, "\x00\x01", 2) == 0 ||
+		    memcmp(path->value, "\x00\x0B", 2) == 0 ||
+		    memcmp(path->value, "\x00\x02", 2) == 0 )
+		) {
 		u8 buf[4];
 		rc = sc_read_binary(card, 0, buf, 4, 0);
 		LOG_TEST_RET(card->ctx, rc, "SW Check failed");
@@ -195,7 +201,6 @@ jpki_select_file(struct sc_card *card,
 		file->size = (buf[2] << 8 | buf[3]) + 4;
 		*file_out = file;
 	}
-
 	LOG_FUNC_RETURN(card->ctx, SC_SUCCESS);
 }
 
@@ -214,11 +219,13 @@ jpki_read_binary(sc_card_t * card, unsigned int idx,
 }
 
 static int
-jpki_pin_cmd(sc_card_t * card, struct sc_pin_cmd_data *data, int *tries_left)
+jpki_pin_cmd(sc_card_t *card, struct sc_pin_cmd_data *data, int *tries_left)
 {
 	int rc;
 	sc_path_t path;
 	sc_apdu_t apdu;
+	struct jpki_private_data *priv = JPKI_DRVDATA(card);
+	int max_tries = 0;
 
 	LOG_FUNC_CALLED(card->ctx);
 
@@ -231,11 +238,13 @@ jpki_pin_cmd(sc_card_t * card, struct sc_pin_cmd_data *data, int *tries_left)
 		sc_format_path(JPKI_AUTH_PIN, &path);
 		path.type = SC_PATH_TYPE_FILE_ID;
 		rc = sc_select_file(card, &path, NULL);
+		max_tries = JPKI_AUTH_PIN_MAX_TRIES;
 		break;
 	case 2:
 		sc_format_path(JPKI_SIGN_PIN, &path);
 		path.type = SC_PATH_TYPE_FILE_ID;
 		rc = sc_select_file(card, &path, NULL);
+		max_tries = JPKI_SIGN_PIN_MAX_TRIES;
 		break;
 	default:
 		sc_log(card->ctx, "Unknown PIN reference: %d", data->pin_reference);
@@ -252,6 +261,14 @@ jpki_pin_cmd(sc_card_t * card, struct sc_pin_cmd_data *data, int *tries_left)
 		rc = sc_transmit_apdu(card, &apdu);
 		LOG_TEST_RET(card->ctx, rc, "APDU transmit failed");
 		rc = sc_check_sw(card, apdu.sw1, apdu.sw2);
+		if (rc == SC_SUCCESS) {
+			data->pin1.logged_in = SC_PIN_STATE_LOGGED_IN;
+			data->pin1.tries_left = max_tries;
+		} else {
+			data->pin1.logged_in = SC_PIN_STATE_LOGGED_OUT;
+			data->pin1.tries_left = apdu.sw2 & 0xF;
+		}
+		priv->logged_in = data->pin1.logged_in;
 		LOG_TEST_RET(card->ctx, rc, "VERIFY failed");
 		break;
 	case SC_PIN_CMD_GET_INFO:
@@ -262,8 +279,10 @@ jpki_pin_cmd(sc_card_t * card, struct sc_pin_cmd_data *data, int *tries_left)
 			sc_log(card->ctx, "VERIFY GET_INFO error");
 			LOG_FUNC_RETURN(card->ctx, SC_ERROR_CARD_CMD_FAILED);
 		}
+		data->pin1.logged_in = priv->logged_in;
+		data->pin1.tries_left = apdu.sw2 & 0xF;
 		if (tries_left) {
-			*tries_left = apdu.sw2 - 0xC0;
+			*tries_left = data->pin1.tries_left;
 		}
 		break;
 	default:
@@ -283,10 +302,10 @@ jpki_set_security_env(sc_card_t * card,
 
 	LOG_FUNC_CALLED(card->ctx);
 	sc_log(card->ctx,
-		"flags=%08x op=%d alg=%d algf=%08x algr=%08x kr0=%02x, krfl=%d",
-		env->flags, env->operation, env->algorithm,
-		env->algorithm_flags, env->algorithm_ref, env->key_ref[0],
-		env->key_ref_len);
+	       "flags=%08lx op=%d alg=%d algf=%08x algr=%08x kr0=%02x, krfl=%"SC_FORMAT_LEN_SIZE_T"u",
+	       env->flags, env->operation, env->algorithm,
+	       env->algorithm_flags, env->algorithm_ref, env->key_ref[0],
+	       env->key_ref_len);
 
 	switch (env->operation) {
 	case SC_SEC_OPERATION_SIGN:

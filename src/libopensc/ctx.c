@@ -56,10 +56,8 @@ int _sc_delete_reader(sc_context_t *ctx, sc_reader_t *reader)
 	}
 	if (reader->ops->release)
 			reader->ops->release(reader);
-	if (reader->name)
-		free(reader->name);
-	if (reader->vendor)
-		free(reader->vendor);
+	free(reader->name);
+	free(reader->vendor);
 	list_delete(&ctx->readers, reader);
 	free(reader);
 	return SC_SUCCESS;
@@ -115,6 +113,7 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "muscle",	(void *(*)(void)) sc_get_muscle_driver },
 	{ "atrust-acos",(void *(*)(void)) sc_get_atrust_acos_driver },
 	{ "PIV-II",	(void *(*)(void)) sc_get_piv_driver },
+	{ "cac",	(void *(*)(void)) sc_get_cac_driver },
 	{ "itacns",	(void *(*)(void)) sc_get_itacns_driver },
 	{ "isoApplet",	(void *(*)(void)) sc_get_isoApplet_driver },
 #ifdef ENABLE_ZLIB
@@ -123,6 +122,7 @@ static const struct _sc_driver_entry internal_card_drivers[] = {
 	{ "openpgp",	(void *(*)(void)) sc_get_openpgp_driver },
 	{ "jpki",	(void *(*)(void)) sc_get_jpki_driver },
 	{ "coolkey",	(void *(*)(void)) sc_get_coolkey_driver },
+	{ "npa",	(void *(*)(void)) sc_get_npa_driver },
 	/* The default driver should be last, as it handles all the
 	 * unrecognized cards. */
 	{ "default",	(void *(*)(void)) sc_get_default_driver },
@@ -143,8 +143,7 @@ sc_ctx_win32_get_config_value(char *name_env, char *name_reg, char *name_key,
 #ifdef _WIN32
 	char temp[PATH_MAX + 1];
 	char *value = NULL;
-	int temp_len = PATH_MAX;
-	int rv = SC_ERROR_INTERNAL;
+	DWORD temp_len = PATH_MAX;
 	long rc;
 	HKEY hKey;
 
@@ -431,7 +430,7 @@ static void *load_dynamic_driver(sc_context_t *ctx, void **dll, const char *name
 	const char *(**tmodv)(void) = &modversion;
 
 	if (name == NULL) { /* should not occurr, but... */
-		sc_log(ctx, "No module specified", name);
+		sc_log(ctx, "No module specified");
 		return NULL;
 	}
 	libname = find_library(ctx, name);
@@ -527,8 +526,6 @@ static int load_card_drivers(sc_context_t *ctx, struct _sc_ctx_options *opts)
 		ctx->card_drivers[drv_count] = func();
 		if (ctx->card_drivers[drv_count] == NULL) {
 			sc_log(ctx, "Driver '%s' not available.", ent->name);
-			if (dll)
-				sc_dlclose(dll);
 			continue;
 		}
 
@@ -673,12 +670,12 @@ static void process_config_file(sc_context_t *ctx, struct _sc_ctx_options *opts)
 		return;
 	}
 	blocks = scconf_find_blocks(ctx->conf, NULL, "app", ctx->app_name);
-	if (blocks[0])
+	if (blocks && blocks[0])
 		ctx->conf_blocks[count++] = blocks[0];
 	free(blocks);
 	if (strcmp(ctx->app_name, "default") != 0) {
 		blocks = scconf_find_blocks(ctx->conf, NULL, "app", "default");
-		if (blocks[0])
+		if (blocks && blocks[0])
 			ctx->conf_blocks[count] = blocks[0];
 		free(blocks);
 	}
@@ -778,7 +775,9 @@ int sc_context_create(sc_context_t **ctx_out, const sc_context_param_t *parm)
 	ctx->flags = parm->flags;
 	set_defaults(ctx, &opts);
 
-	list_init(&ctx->readers);
+	if (0 != list_init(&ctx->readers)) {
+		return SC_ERROR_OUT_OF_MEMORY;
+	}
 	list_attributes_seeker(&ctx->readers, reader_list_seeker);
 	/* set thread context and create mutex object (if specified) */
 	if (parm->thread_ctx != NULL)
@@ -795,11 +794,8 @@ int sc_context_create(sc_context_t **ctx_out, const sc_context_param_t *parm)
 
 #ifdef ENABLE_PCSC
 	ctx->reader_driver = sc_get_pcsc_driver();
-/* XXX: remove cardmod pseudoreader driver */
-#ifdef ENABLE_MINIDRIVER
-	if(strcmp(ctx->app_name, "cardmod") == 0)
-		ctx->reader_driver = sc_get_cardmod_driver();
-#endif
+#elif defined(ENABLE_CRYPTOTOKENKIT)
+	ctx->reader_driver = sc_get_cryptotokenkit_driver();
 #elif defined(ENABLE_CTAPI)
 	ctx->reader_driver = sc_get_ctapi_driver();
 #elif defined(ENABLE_OPENCT)
@@ -822,8 +818,8 @@ int sc_context_create(sc_context_t **ctx_out, const sc_context_param_t *parm)
 		}
 	}
 	if (opts.forced_card_driver) {
-		/* FIXME: check return value? */
-		sc_set_card_driver(ctx, opts.forced_card_driver);
+		if (SC_SUCCESS != sc_set_card_driver(ctx, opts.forced_card_driver))
+			sc_log(ctx, "Warning: Could not load %s.", opts.forced_card_driver);
 		free(opts.forced_card_driver);
 	}
 	del_drvs(&opts);

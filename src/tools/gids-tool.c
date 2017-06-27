@@ -33,10 +33,19 @@
 #include <ctype.h>
 #include <sys/stat.h>
 
+#include <openssl/opensslv.h>
+#include "libopensc/sc-ossl-compat.h"
+#if OPENSSL_VERSION_NUMBER >= 0x10000000L
+#include <openssl/opensslconf.h>
+#include <openssl/crypto.h>
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x00907000L
+#include <openssl/conf.h>
+#endif
+
 #include <openssl/evp.h>
 #include <openssl/err.h>
 
-#include "libopensc/sc-ossl-compat.h"
 #include "libopensc/opensc.h"
 #include "libopensc/cardctl.h"
 #include "libopensc/card-gids.h"
@@ -277,7 +286,7 @@ static int changeAdminKey(sc_card_t* card, const char *so_pin, const char* new_k
 
 	if (new_key == NULL) {
 		printf("Enter new admin key (48 hexadecimal characters) : ");
-		util_getpass(&_so_pin, NULL, stdin);
+		util_getpass(&_new_key, NULL, stdin);
 		printf("\n");
 	} else {
 		_new_key = (char *)new_key;
@@ -385,12 +394,7 @@ static int print_info(sc_card_t *card) {
 				if (r < 0) {
 					printf("      unable to read the file: %s\n", sc_strerror(r));
 				} else {
-#ifdef _WIN32
-					// visual studio doesn't support %zu
-					printf("      Size: %Iu\n", size);
-#else
-					printf("      Size: %zu\n", size);
-#endif
+					printf("      Size: %"SC_FORMAT_LEN_SIZE_T"u\n", size);
 				}
 				printf("\n");
 				if (strcmp(records[i].directory, "mscp") == 0 && strcmp(records[i].filename, "cmapfile") == 0 ) {
@@ -522,11 +526,23 @@ int main(int argc, char * const argv[])
 		}
 	}
 
+
+	/* OpenSSL magic */
+#if (OPENSSL_VERSION_NUMBER >= 0x00907000L && OPENSSL_VERSION_NUMBER < 0x10100000L) || defined(LIBRESSL_VERSION_NUMBER)
+	OPENSSL_config(NULL);
+#endif
+#if OPENSSL_VERSION_NUMBER >= 0x10100000L && !defined(LIBRESSL_VERSION_NUMBER)
+	OPENSSL_init_crypto(OPENSSL_INIT_LOAD_CRYPTO_STRINGS
+		| OPENSSL_INIT_ADD_ALL_CIPHERS
+		| OPENSSL_INIT_ADD_ALL_DIGESTS,
+               NULL);
+#else
 	/* OpenSSL magic */
 	OPENSSL_malloc_init();
 
 	ERR_load_crypto_strings();
 	OpenSSL_add_all_algorithms();
+#endif
 
 	memset(&ctx_param, 0, sizeof(sc_context_param_t));
 	ctx_param.app_name = app_name;

@@ -103,9 +103,11 @@ app default {
 		# Default: true
 		# enable_pinpad = false;
 		#
-		# Detect boxing commands for PIN operations (BSI TR-03119)
+		# Detect reader capabilities with escape commands (wrapped APDUs with
+		# CLA=0xFF as defined by PC/SC pt. 3 and BSI TR-03119, e.g. for getting
+		# the UID, escaped PIN commands and the reader's firmware version)
 		# Default: false
-		# enable_boxing = true;
+		# enable_escape = true;
 		#
 		# Use specific pcsc provider.
 		# Default: @DEFAULT_PCSC_PROVIDER@
@@ -122,7 +124,18 @@ app default {
 		# Default: n/a
 		# max_send_size = 255;
 		# max_recv_size = 256;
-	};
+	}
+
+	# Options for CryptoTokenKit support
+	reader_driver cryptotokenkit {
+		# Limit command and response sizes. Some Readers don't propagate their
+		# transceive capabilities correctly. max_send_size and max_recv_size
+		# allow setting the limits manually, for example to enable extended
+		# length capabilities.
+		# Default: autodetect
+		# max_send_size = 65535;
+		# max_recv_size = 65536;
+	}
 
 	# Whitelist of card drivers to load at start-up
 	#
@@ -150,9 +163,6 @@ app default {
 	# }
 
 	card_driver npa {
-		# The location of the driver library
-		module = @LIBDIR@@LIB_PRE@cardnpa@DYN_LIB_EXT@;
-
 		# German ID card requires the CAN to be verified before QES PIN. This,
 		# however, is not part of the PKCS#15 profile of the card. So for
 		# verifying the QES PIN we actually need both. The CAN may be given
@@ -759,7 +769,7 @@ app onepin-opensc-pkcs11 {
 	}
 }
 
-# Used by OpenSC.tokend on Mac OS X only.
+# Used by OpenSC.tokend on Mac OS X only
 app tokend {
 	# The file to which debug log will be written
 	# Default: /tmp/opensc-tokend.log
@@ -775,14 +785,6 @@ app tokend {
 	}
 }
 
-# XXX: remove cardmod pseudodriver
+# Used by OpenSC minidriver on Windows only
 app cardmod {
-	# cardmod app name use special pcsc reader subset
-	# fix options for this reader driver here.
-
-	reader_driver cardmod {
-		# Enable pinpad if detected (PC/SC v2.0.2 Part 10)
-		# Default: true
-		# enable_pinpad = false;
-	}
 }

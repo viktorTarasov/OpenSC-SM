@@ -6,7 +6,7 @@ define([PRODUCT_NAME], [OpenSC])
 define([PRODUCT_TARNAME], [opensc])
 define([PRODUCT_BUGREPORT], [https://github.com/OpenSC/OpenSC/issues])
 define([PACKAGE_VERSION_MAJOR], [0])
-define([PACKAGE_VERSION_MINOR], [16])
+define([PACKAGE_VERSION_MINOR], [17])
 define([PACKAGE_VERSION_FIX], [0])
 define([PACKAGE_SUFFIX], [])
 
@@ -43,8 +43,8 @@ OPENSC_VS_FF_PRODUCT_URL="VS_FF_PRODUCT_URL"
 #   (Code changed:                      REVISION++)
 #   (Oldest interface removed:          OLDEST++)
 #   (Interfaces added:                  CURRENT++, REVISION=0)
-OPENSC_LT_CURRENT="4"
-OPENSC_LT_OLDEST="4"
+OPENSC_LT_CURRENT="5"
+OPENSC_LT_OLDEST="5"
 OPENSC_LT_REVISION="0"
 OPENSC_LT_AGE="0"
 OPENSC_LT_AGE="$((${OPENSC_LT_CURRENT}-${OPENSC_LT_OLDEST}))"
@@ -58,6 +58,7 @@ AC_CANONICAL_HOST
 AC_PROG_CC
 # AC_PROG_CXX is needed to built the win32 custom action. Indeed dutil.h use [extern "C"] definition which fails on pure c compiler
 AC_PROG_CXX
+AC_PROG_OBJC
 PKG_PROG_PKG_CONFIG
 AC_C_BIGENDIAN
 
@@ -126,6 +127,12 @@ AC_DEFINE_UNQUOTED([DEBUG_FILE], ["${DEBUG_FILE}"], [Debug file])
 AC_DEFINE_UNQUOTED([PROFILE_DIR], ["${PROFILE_DIR}"], [Directory of profiles])
 AC_DEFINE_UNQUOTED([PROFILE_DIR_DEFAULT], ["${PROFILE_DIR_DEFAULT}"], [Default directory of profiles])
 
+case "${host}" in
+	*-mingw*)
+		CPPFLAGS="${CPPFLAGS} -D__USE_MINGW_ANSI_STDIO=1"
+	;;
+esac
+
 AC_ARG_ENABLE(
 	[strict],
 	[AS_HELP_STRING([--disable-strict],[disable strict compile mode @<:@disabled@:>@])],
@@ -187,6 +194,13 @@ AC_ARG_ENABLE(
 	[AS_HELP_STRING([--disable-pcsc],[disable pcsc support @<:@enabled@:>@])],
 	,
 	[enable_pcsc="yes"]
+)
+
+AC_ARG_ENABLE(
+	[cryptotokenkit],
+	[AS_HELP_STRING([--disable-cryptotokenkit],[disable CryptoTokenKit support @<:@enabled@:>@])],
+	,
+	[enable_cryptotokenkit="no"]
 )
 
 AC_ARG_ENABLE(
@@ -261,11 +275,11 @@ AC_ARG_WITH(
 
 dnl ./configure check
 reader_count=""
-for rdriver in "${enable_pcsc}" "${enable_openct}" "${enable_ctapi}"; do
+for rdriver in "${enable_pcsc}" "${enable_cryptotokenkit}" "${enable_openct}" "${enable_ctapi}"; do
 	test "${rdriver}" = "yes" && reader_count="${reader_count}x"
 done
 if test "${reader_count}" != "x"; then
-	AC_MSG_ERROR([Only one of --enable-pcsc, --enable-openct, --enable-ctapi can be specified!])
+	AC_MSG_ERROR([Only one of --enable-pcsc, --enable-cryptotokenkit, --enable-openct, --enable-ctapi can be specified!])
 fi
 
 dnl Checks for programs.
@@ -405,16 +419,23 @@ if test "${WIN32}" = "no"; then
 fi
 
 if test "${enable_thread_locking}" = "yes"; then
-	CPPFLAGS="${CPPFLAGS} -DPKCS11_THREAD_LOCKING"
+	OPENSC_PKCS11_PTHREAD_CFLAGS="${PTHREAD_CFLAGS} -DPKCS11_THREAD_LOCKING"
+else
+	OPENSC_PKCS11_PTHREAD_CFLAGS=""
 fi
+AC_SUBST(OPENSC_PKCS11_PTHREAD_CFLAGS)
 
 if test "${enable_minidriver}" = "yes"; then
 	dnl win32 special test for minidriver
 	AC_CHECK_HEADER(
 		[cardmod.h],
 		,
-		[AC_MSG_ERROR([cardmod.h is not found and required for minidriver])]
-	)
+		[AC_MSG_ERROR([cardmod.h from CNG is required for minidriver])],
+		[#if defined(__MINGW32__)
+#include "${srcdir}/src/minidriver/cardmod-mingw-compat.h"
+#endif
+	])
+
 	AC_DEFINE([ENABLE_MINIDRIVER], [1], [Enable minidriver support])
 fi
 
@@ -652,25 +673,6 @@ else
 	OPENPACE_LIBS=""
 fi
 
-
-
-if test "${enable_sm}" = "yes"; then
-	AC_DEFINE([ENABLE_SM], [1], [Enable secure messaging support])
-
-	DEFAULT_SM_MODULE="${LIB_PRE}smm-local${DYN_LIB_EXT}"
-	case "${host}" in
-		*-mingw*|*-winnt*|*-cygwin*)
-			DEFAULT_SM_MODULE_PATH="\# module_path = \"\";"
-		;;
-		*)
-			DEFAULT_SM_MODULE="libsmm-local.so"
-			DEFAULT_SM_MODULE_PATH="module_path = \$(libdir);"
-		;;
-	esac
-	AC_DEFINE_UNQUOTED([DEFAULT_SM_MODULE], ["${DEFAULT_SM_MODULE}"], [Default SM module])
-	AC_DEFINE_UNQUOTED([DEFAULT_SM_MODULE_PATH], ["${DEFAULT_SM_MODULE_PATH}"], [Default SM module path])
-fi
-
 if test "${enable_openct}" = "yes"; then
 	PKG_CHECK_MODULES(
 		[OPENCT],
@@ -688,7 +690,7 @@ if test "${enable_pcsc}" = "yes"; then
 	if test "${WIN32}" != "yes"; then
 		PKG_CHECK_EXISTS(
 			[libpcsclite],
-			[PKG_CHECK_MODULES([PCSC], [libpcsclite >= 1.6.5],
+			[PKG_CHECK_MODULES([PCSC], [libpcsclite >= 1.8.22],
 				[AC_DEFINE([PCSCLITE_GOOD], [1], [Sufficient version of PCSC-Lite with all the required features])],
 				[:]
 			)]
@@ -697,13 +699,8 @@ if test "${enable_pcsc}" = "yes"; then
 			case "${host}" in
 				*-*-darwin*)
 					# Locate the latest SDK.
-					SDKS_PATH="$(xcode-select --print-path)/Platforms/MacOSX.platform/Developer/SDKs"
-					if test -d $SDKS_PATH; then
-					    SDK_PATH="${SDK_PATH:-$SDKS_PATH/$(ls -1 ${SDKS_PATH} | sort -n -t. -k2 -r | head -1)}"
-					    PCSC_CFLAGS="-I$SDK_PATH/System/Library/Frameworks/PCSC.framework/Versions/Current/Headers"
-					else
-					    PCSC_CFLAGS="-I/System/Library/Frameworks/PCSC.framework/Headers"
-					fi
+					SDK_PATH=$(xcrun --sdk macosx --show-sdk-path)
+					PCSC_CFLAGS="-I$SDK_PATH/System/Library/Frameworks/PCSC.framework/Versions/Current/Headers"
 				;;
 				*)
 					PCSC_CFLAGS="-I/usr/include/PCSC"
@@ -738,6 +735,22 @@ if test "${enable_pcsc}" = "yes"; then
 	AC_DEFINE([ENABLE_PCSC], [1], [Define if PC/SC is to be enabled])
 fi
 
+if test "${enable_cryptotokenkit}" = "yes"; then
+	if test -z "${CRYPTOTOKENKIT_CFLAGS}"; then
+		case "${host}" in
+			*-apple-*)
+				CRYPTOTOKENKIT_CFLAGS="-framework CryptoTokenKit -framework Foundation"
+				LDFLAGS="${LDFLAGS} -framework CryptoTokenKit -framework Foundation"
+			;;
+			*)
+				AC_MSG_ERROR([CryptoTokenKit only supported on Darwin])
+			;;
+		esac
+	fi
+	AC_DEFINE([ENABLE_CRYPTOTOKENKIT], [1], [Define if CryptoTokenKit is to be enabled])
+fi
+
+
 AC_SUBST(DYN_LIB_EXT)
 AC_SUBST(LIBDIR)
 AC_SUBST(LIB_PRE)
@@ -754,6 +767,21 @@ case "${host}" in
 		;;
 esac
 
+if test "${enable_sm}" = "yes"; then
+	AC_DEFINE([ENABLE_SM], [1], [Enable secure messaging support])
+
+	DEFAULT_SM_MODULE="${LIB_PRE}smm-local${DYN_LIB_EXT}"
+	case "${host}" in
+		*-mingw*|*-winnt*|*-cygwin*)
+			DEFAULT_SM_MODULE_PATH="\# module_path = \"\";"
+		;;
+		*)
+			DEFAULT_SM_MODULE_PATH="module_path = \$(libdir);"
+		;;
+	esac
+	AC_DEFINE_UNQUOTED([DEFAULT_SM_MODULE], ["${DEFAULT_SM_MODULE}"], [Default SM module])
+	AC_DEFINE_UNQUOTED([DEFAULT_SM_MODULE_PATH], ["${DEFAULT_SM_MODULE_PATH}"], [Default SM module path])
+fi
 
 if test "${with_pkcs11_provider}" = "detect"; then
 	DEFAULT_PKCS11_PROVIDER="opensc-pkcs11${DYN_LIB_EXT}"
@@ -814,8 +842,23 @@ if test "${enable_pcsc}" = "yes"; then
 	OPENSC_FEATURES="${OPENSC_FEATURES} pcsc(${DEFAULT_PCSC_PROVIDER})"
 	OPTIONAL_PCSC_CFLAGS="${PCSC_CFLAGS}"
 fi
+if test "${enable_cryptotokenkit}" = "yes"; then
+	OPTIONAL_CRYPTOTOKENKIT_CFLAGS="${CRYPTOTOKENKIT_CFLAGS}"
+fi
 if test "${enable_ctapi}" = "yes"; then
 	OPENSC_FEATURES="${OPENSC_FEATURES} ctapi"
+fi
+
+if test "${enable_minidriver}" = "yes"; then
+	AC_MSG_CHECKING([WiX SDK])
+	AC_CHECK_HEADERS([wcautil.h],[enable_minidriver_ca="yes"],[enable_minidriver_ca="no"])
+	if test "${enable_minidriver_ca}" = "yes"; then
+		AC_MSG_RESULT([found, minidriver setup custom action will be built])
+	else
+		AC_MSG_RESULT([not found, minidriver setup custom action will be skipped])
+	fi
+else
+	enable_minidriver_ca="no"
 fi
 
 AC_DEFINE_UNQUOTED([OPENSC_VERSION_MAJOR], [${OPENSC_VERSION_MAJOR}], [OpenSC version major component])
@@ -878,11 +921,13 @@ AM_CONDITIONAL([ENABLE_ZLIB], [test "${enable_zlib}" = "yes"])
 AM_CONDITIONAL([ENABLE_READLINE], [test "${enable_readline}" = "yes"])
 AM_CONDITIONAL([ENABLE_OPENSSL], [test "${enable_openssl}" = "yes"])
 AM_CONDITIONAL([ENABLE_OPENPACE], [test "${enable_openpace}" = "yes"])
+AM_CONDITIONAL([ENABLE_CRYPTOTOKENKIT], [test "${enable_cryptotokenkit}" = "yes"])
 AM_CONDITIONAL([ENABLE_OPENCT], [test "${enable_openct}" = "yes"])
 AM_CONDITIONAL([ENABLE_DOC], [test "${enable_doc}" = "yes"])
 AM_CONDITIONAL([WIN32], [test "${WIN32}" = "yes"])
 AM_CONDITIONAL([CYGWIN], [test "${CYGWIN}" = "yes"])
 AM_CONDITIONAL([ENABLE_MINIDRIVER], [test "${enable_minidriver}" = "yes"])
+AM_CONDITIONAL([ENABLE_MINIDRIVER_SETUP_CUSTOMACTION], [test "${enable_minidriver_ca}" = "yes"])
 AM_CONDITIONAL([ENABLE_SM], [test "${enable_sm}" = "yes"])
 AM_CONDITIONAL([ENABLE_DNIE_UI], [test "${enable_dnie_ui}" = "yes"])
 AM_CONDITIONAL([ENABLE_NPATOOL], [test "${ENABLE_NPATOOL}" = "yes"])
@@ -936,7 +981,6 @@ AC_CONFIG_FILES([
 	MacOSX/Makefile
 	MacOSX/build-package
 	MacOSX/Distribution.xml
-	MacOSX/resources/ReadMe.html
 	MacOSX/resources/Welcome.html
 ])
 AC_OUTPUT
@@ -970,6 +1014,7 @@ zlib support:            ${enable_zlib}
 readline support:        ${enable_readline}
 OpenSSL support:         ${enable_openssl}
 PC/SC support:           ${enable_pcsc}
+CryptoTokenKit support:  ${enable_cryptotokenkit}
 OpenCT support:          ${enable_openct}
 CT-API support:          ${enable_ctapi}
 minidriver support:      ${enable_minidriver}
@@ -999,6 +1044,7 @@ OPENPACE_LIBS:           ${OPENPACE_LIBS}
 OPENCT_CFLAGS:           ${OPENCT_CFLAGS}
 OPENCT_LIBS:             ${OPENCT_LIBS}
 PCSC_CFLAGS:             ${PCSC_CFLAGS}
+CRYPTOTOKENKIT_CFLAGS:   ${CRYPTOTOKENKIT_CFLAGS}
 
 EOF
 

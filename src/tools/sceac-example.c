@@ -41,106 +41,106 @@ const unsigned char apdubuf[] = {0x00, 0xA4, 0x00, 0x0C, 0x02, 0x3F, 0x00};
 int
 main (int argc, char **argv)
 {
-    /* Set up the environment */
-    int r;
+	/* Set up the environment */
+	int r;
 
-    sc_context_t *ctx = NULL;
-    sc_card_t *card = NULL;
-    sc_reader_t *reader = NULL;
+	sc_context_t *ctx = NULL;
+	sc_card_t *card = NULL;
+	sc_reader_t *reader = NULL;
 
-    sc_apdu_t apdu;
-    u8 buf[0xffff];
+	sc_apdu_t apdu;
+	u8 buf[0xffff];
 
-    struct establish_pace_channel_input pace_input;
-    struct establish_pace_channel_output pace_output;
+	struct establish_pace_channel_input pace_input;
+	struct establish_pace_channel_output pace_output;
 
-    memset(&pace_input, 0, sizeof pace_input);
-    memset(&pace_output, 0, sizeof pace_output);
+	memset(&pace_input, 0, sizeof pace_input);
+	memset(&pace_output, 0, sizeof pace_output);
 
 
-    /* Connect to a reader */
-    r = sc_establish_context(&ctx, "example");
-    if (r < 0 || !ctx) {
-        fprintf(stderr, "Failed to create initial context: %s", sc_strerror(r));
-        exit(1);
-    }
-    reader = sc_ctx_get_reader(ctx, 0);
-    if (!reader) {
-        fprintf(stderr, "Failed to access reader 0");
-        exit(1);
-    }
+	/* Connect to a reader */
+	r = sc_establish_context(&ctx, "example");
+	if (r < 0 || !ctx) {
+		fprintf(stderr, "Failed to create initial context: %s", sc_strerror(r));
+		exit(1);
+	}
+	reader = sc_ctx_get_reader(ctx, 0);
+	if (!reader) {
+		fprintf(stderr, "Failed to access reader 0");
+		exit(1);
+	}
 
-    /* Connect to a nPA */
+	/* Connect to a nPA */
 	ctx->flags |= SC_CTX_FLAG_ENABLE_DEFAULT_DRIVER;
-    if (sc_connect_card(reader, &card) < 0) {
-        fprintf(stderr, "Could not connect to card\n");
-        sc_release_context(ctx);
-        exit(1);
-    }
+	if (sc_connect_card(reader, &card) < 0) {
+		fprintf(stderr, "Could not connect to card\n");
+		sc_release_context(ctx);
+		exit(1);
+	}
 
-    /* initialize OpenPACE */
-    EAC_init();
-
-
-    /* Now we try to change the PIN. Therefor we need to establish a SM channel
-     * with PACE.
-     *
-     * You could set your PIN with pin=“123456”; or just leave it at NULL to be
-     * asked for it. The same applies to the new PIN newpin. */
-    pace_input.pin_id = PACE_PIN;
-    pace_input.pin = (unsigned char *) pin;
-    pace_input.pin_length = pin ? strlen(pin) : 0;
-
-    r = perform_pace(card, pace_input, &pace_output, EAC_TR_VERSION_2_02);
-    if (r < 0)
-        goto err;
-    printf("Established PACE channel with PIN.\n");
-
-    r = npa_change_pin(card, newpin, newpin ? strlen(newpin) : 0);
-    if (r < 0)
-        goto err;
-    printf("Changed PIN.\n");
+	/* initialize OpenPACE */
+	EAC_init();
 
 
-    /* Now we want to transmit additional APDUs in the established SM channel.
-     *
-     * Here we are parsing the raw apdu buffer apdubuf to be transformed into
-     * an sc_apdu_t. Alternatively you could also set CLA, INS, P1, P2, ... by
-     * hand in the sc_apdu_t object. */
-    r = sc_bytes2apdu(ctx, apdubuf, sizeof apdubuf, &apdu);
-    if (r < 0)
-        goto err;
+	/* Now we try to change the PIN. Therefor we need to establish a SM channel
+	 * with PACE.
+	 *
+	 * You could set your PIN with pin=“123456”; or just leave it at NULL to be
+	 * asked for it. The same applies to the new PIN newpin. */
+	pace_input.pin_id = PACE_PIN;
+	pace_input.pin = (unsigned char *) pin;
+	pace_input.pin_length = pin ? strlen(pin) : 0;
 
-    /* write the response data to buf */
-    apdu.resp = buf;
-    apdu.resplen = sizeof buf;
+	r = perform_pace(card, pace_input, &pace_output, EAC_TR_VERSION_2_02);
+	if (r < 0)
+		goto err;
+	printf("Established PACE channel with PIN.\n");
 
-    /* Transmit the APDU with SM */
-    r = sc_transmit_apdu(card, &apdu);
+	r = npa_change_pin(card, newpin, newpin ? strlen(newpin) : 0);
+	if (r < 0)
+		goto err;
+	printf("Changed PIN.\n");
+
+
+	/* Now we want to transmit additional APDUs in the established SM channel.
+	 *
+	 * Here we are parsing the raw apdu buffer apdubuf to be transformed into
+	 * an sc_apdu_t. Alternatively you could also set CLA, INS, P1, P2, ... by
+	 * hand in the sc_apdu_t object. */
+	r = sc_bytes2apdu(ctx, apdubuf, sizeof apdubuf, &apdu);
+	if (r < 0)
+		goto err;
+
+	/* write the response data to buf */
+	apdu.resp = buf;
+	apdu.resplen = sizeof buf;
+
+	/* Transmit the APDU with SM */
+	r = sc_transmit_apdu(card, &apdu);
 
 
 err:
-    fprintf(r < 0 ? stderr : stdout, "%s\n", sc_strerror(r));
+	fprintf(r < 0 ? stderr : stdout, "%s\n", sc_strerror(r));
 
-    /* Free up memory and wipe it if necessary (e.g. for keys stored in sm_ctx) */
-    free(pace_output.ef_cardaccess);
-    free(pace_output.recent_car);
-    free(pace_output.previous_car);
-    free(pace_output.id_icc);
-    free(pace_output.id_pcd);
+	/* Free up memory and wipe it if necessary (e.g. for keys stored in sm_ctx) */
+	free(pace_output.ef_cardaccess);
+	free(pace_output.recent_car);
+	free(pace_output.previous_car);
+	free(pace_output.id_icc);
+	free(pace_output.id_pcd);
 
-    sc_sm_stop(card);
-    sc_reset(card, 1);
-    sc_disconnect_card(card);
-    sc_release_context(ctx);
-    EAC_cleanup();
+	sc_sm_stop(card);
+	sc_reset(card, 1);
+	sc_disconnect_card(card);
+	sc_release_context(ctx);
+	EAC_cleanup();
 
-    return -r;
+	return -r;
 }
 #else
 int
 main (int argc, char **argv)
 {
-    return 1;
+	return 1;
 }
 #endif

@@ -91,8 +91,6 @@ static int finalize = 0;
 static int install_pin = 0;
 static int overwrite = 0;
 
-static const char *pin = NULL;
-static const char *puk = NULL;
 static char *cert = NULL;
 
 static int keylen = 0;
@@ -108,7 +106,8 @@ static int do_convert_bignum(sc_pkcs15_bignum_t *dst, const BIGNUM *src)
 	if (src == 0) return 0;
 	dst->len = BN_num_bytes(src);
 	dst->data = malloc(dst->len);
-	BN_bn2bin(src, dst->data);
+	if (!dst->data) return 0;
+	if (!BN_bn2bin(src, dst->data)) return 0;
 	return 1;
 }
 
@@ -260,7 +259,7 @@ static int unlock_pin(sc_card_t *card,
 	}
 	else
 	{
-		if(pin == NULL || puk == NULL)
+		if(pin_value == NULL || puk_value == NULL)
 		{
 			return SC_ERROR_INVALID_ARGUMENTS;
 		}
@@ -372,6 +371,8 @@ int main(int argc, char *argv[])
 	RSA	*rsa = NULL;
 	BIGNUM	*bn = NULL;
 	BIO	*mem = NULL;
+	static const char *pin = NULL;
+	static const char *puk = NULL;
 
 	while (1)
 	{
@@ -656,8 +657,9 @@ int main(int argc, char *argv[])
 
 			file->path = path;
 
-			printf("File key creation %s, size %zd.\n", file->path.value,
-				file->size);
+			printf("File key creation %s, size %"SC_FORMAT_LEN_SIZE_T"d.\n",
+			       file->path.value,
+			       file->size);
 
 			r = sc_create_file(card, file);
 			if(r) goto out;
@@ -672,7 +674,7 @@ int main(int argc, char *argv[])
 			}
 		}
 
-		printf("Private key length is %zd\n", lg);
+		printf("Private key length is %"SC_FORMAT_LEN_SIZE_T"d\n", lg);
 
 		printf("Write private key.\n");
 		r = sc_update_binary(card,0,pdata,lg,0);
@@ -696,7 +698,7 @@ int main(int argc, char *argv[])
 		r = sc_pkcs15_encode_pubkey(ctx, &key, &pdata, &lg);
 		if(r) goto out;
 
-		printf("Public key length %zd\n", lg);
+		printf("Public key length %"SC_FORMAT_LEN_SIZE_T"d\n", lg);
 
 		sc_format_path("3F000002", &path);
 		r = sc_select_file(card, &path, NULL);

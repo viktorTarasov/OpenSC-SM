@@ -96,7 +96,7 @@ static int npa_load_options(sc_context_t *ctx, struct npa_drv_data *drv_data)
 	scconf_block **found_blocks, *block;
 	const char *file;
 
-	if (!ctx || !drv_data || !ctx->conf_blocks) {
+	if (!ctx || !drv_data) {
 		r = SC_ERROR_INTERNAL;
 		goto err;
 	}
@@ -117,7 +117,7 @@ static int npa_load_options(sc_context_t *ctx, struct npa_drv_data *drv_data)
 				if (!fread_to_eof(file,
 							(unsigned char **) &drv_data->st_dv_certificate,
 							&drv_data->st_dv_certificate_len))
-					sc_log(ctx, "Waring: Could not read %s.\n", file);
+					sc_log(ctx, "Warning: Could not read %s.\n", file);
 			}
 
 			if (!drv_data->st_certificate
@@ -126,7 +126,7 @@ static int npa_load_options(sc_context_t *ctx, struct npa_drv_data *drv_data)
 				if (!fread_to_eof(file,
 							(unsigned char **) &drv_data->st_certificate,
 							&drv_data->st_certificate_len))
-					sc_log(ctx, "Waring: Could not read %s.\n", file);
+					sc_log(ctx, "Warning: Could not read %s.\n", file);
 			}
 
 			if (!drv_data->st_key
@@ -135,7 +135,7 @@ static int npa_load_options(sc_context_t *ctx, struct npa_drv_data *drv_data)
 				if (!fread_to_eof(file,
 							(unsigned char **) &drv_data->st_key,
 							&drv_data->st_key_len))
-					sc_log(ctx, "Waring: Could not read %s.\n", file);
+					sc_log(ctx, "Warning: Could not read %s.\n", file);
 			}
 		}
 		
@@ -371,6 +371,10 @@ static int npa_init(sc_card_t * card)
 	EAC_init();
 #endif
 	card->drv_data = npa_drv_data_create();
+	if (!card->drv_data) {
+		r = SC_ERROR_OUT_OF_MEMORY;
+		goto err;
+	}
 	r = npa_load_options(card->ctx, card->drv_data);
 	if (r != SC_SUCCESS)
 		goto err;
@@ -528,7 +532,7 @@ static int npa_pace_verify(struct sc_card *card,
 			r = perform_pace(card, pace_input, &pace_output, EAC_TR_VERSION_2_02);
 
 			if (r == SC_SUCCESS) {
-				sc_log(card->ctx, "%s resumed.\n");
+				sc_log(card->ctx, "%s resumed.\n", npa_secret_name(pin_reference));
 				if (tries_left) {
 					*tries_left = MAX_PIN_TRIES;
 				}
@@ -684,13 +688,13 @@ static int npa_logout(sc_card_t *card)
 		 * disable SM on the reader. */
 		sc_format_apdu(card, &apdu, SC_APDU_CASE_1, 0xA4, 0x00, 0x00);
 		apdu.cla = 0x0C;
-		sc_transmit_apdu(card, &apdu);
-		/* ignore result */
+		if (SC_SUCCESS != sc_transmit_apdu(card, &apdu))
+			sc_log(card->ctx, "Warning: Could not logout.");
 	}
 	return sc_select_file(card, sc_get_mf_path(), NULL);
 }
 
-static struct sc_card_driver *npa_get_driver(void)
+struct sc_card_driver *sc_get_npa_driver(void)
 {
 	struct sc_card_driver *iso_drv = sc_get_iso7816_driver();
 
@@ -703,22 +707,4 @@ static struct sc_card_driver *npa_get_driver(void)
 	npa_ops.logout = npa_logout;
 
 	return &npa_drv;
-}
-
-void *sc_module_init(const char *name)
-{
-	const char npa_name[] = "npa";
-	if (name) {
-		if (strcmp(npa_name, name) == 0)
-			return npa_get_driver;
-	}
-	return NULL;
-}
-
-const char *sc_driver_version(void)
-{
-	/* Tested with OpenSC 0.12 and 0.13.0, which can't be captured by checking
-	 * our version info against OpenSC's PACKAGE_VERSION. For this reason we
-	 * tell OpenSC that everything is fine, here. */
-	return sc_get_version();
 }

@@ -726,7 +726,8 @@ sc_pkcs15_decode_pubkey_ec(sc_context_t *ctx,
 	if (*ecpoint_data != 0x04)
 		LOG_TEST_RET(ctx, SC_ERROR_NOT_SUPPORTED, "Supported only uncompressed EC pointQ value");
 
-	sc_log(ctx, "decode-EC key=%p, buf=%p, buflen=%d", key, buf, buflen);
+	sc_log(ctx, "decode-EC key=%p, buf=%p, buflen=%"SC_FORMAT_LEN_SIZE_T"u",
+	       key, buf, buflen);
 
 	key->ecpointQ.len = ecpoint_len;
 	key->ecpointQ.value = ecpoint_data;
@@ -755,7 +756,9 @@ sc_pkcs15_encode_pubkey_ec(sc_context_t *ctx, struct sc_pkcs15_pubkey_ec *key,
 	r = sc_asn1_encode(ctx, asn1_ec_pointQ, buf, buflen);
 	LOG_TEST_RET(ctx, r, "ASN.1 encoding failed");
 
-	sc_log(ctx, "EC key->ecpointQ=%p:%d *buf=%p:%d", key->ecpointQ.value, key->ecpointQ.len, *buf, *buflen);
+	sc_log(ctx,
+	       "EC key->ecpointQ=%p:%"SC_FORMAT_LEN_SIZE_T"u *buf=%p:%"SC_FORMAT_LEN_SIZE_T"u",
+	       key->ecpointQ.value, key->ecpointQ.len, *buf, *buflen);
 	LOG_FUNC_RETURN(ctx, SC_SUCCESS);
 }
 
@@ -900,16 +903,19 @@ int
 sc_pkcs15_read_pubkey(struct sc_pkcs15_card *p15card, const struct sc_pkcs15_object *obj,
 		struct sc_pkcs15_pubkey **out)
 {
-	struct sc_context *ctx = p15card->card->ctx;
+	struct sc_context *ctx;
 	const struct sc_pkcs15_pubkey_info *info = NULL;
 	struct sc_pkcs15_pubkey *pubkey = NULL;
 	unsigned char *data = NULL;
 	size_t	len;
 	int	algorithm, r;
 
-	if (p15card == NULL || obj == NULL || out == NULL) {
+	if (p15card == NULL || p15card->card == NULL || p15card->card->ops == NULL
+			|| obj == NULL || out == NULL) {
 		return SC_ERROR_INVALID_ARGUMENTS;
 	}
+	ctx = p15card->card->ctx;
+
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx, "Public key type 0x%X", obj->type);
 
@@ -1092,6 +1098,8 @@ sc_pkcs15_dup_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key, struc
 		rv = sc_asn1_encode_algorithm_id(ctx, &alg, &alglen,key->alg_id, 0);
 		if (rv == SC_SUCCESS) {
 			pubkey->alg_id = (struct sc_algorithm_id *)calloc(1, sizeof(struct sc_algorithm_id));
+			if (pubkey->alg_id == NULL)
+				LOG_FUNC_RETURN(ctx, SC_ERROR_OUT_OF_MEMORY);
 			rv = sc_asn1_decode_algorithm_id(ctx, alg, alglen, pubkey->alg_id, 0);
 			free(alg);
 		}
@@ -1265,7 +1273,7 @@ sc_pkcs15_read_der_file(sc_context_t *ctx, char * filename,
 	}
 
 	offs = body - tagbuf;
-	if (offs > len || offs < 2)   {
+	if (offs > len || offs < 2 || offs > offs + bodylen)   {
 		r = SC_ERROR_INVALID_ASN1_OBJECT;
 		goto out;
 	}
@@ -1314,7 +1322,9 @@ sc_pkcs15_pubkey_from_spki_fields(struct sc_context *ctx, struct sc_pkcs15_pubke
 	unsigned char *tmp_buf = NULL;
 	int r;
 
-	sc_log(ctx, "sc_pkcs15_pubkey_from_spki_fields() called: %p:%d\n%s", buf, buflen, sc_dump_hex(buf, buflen));
+	sc_log(ctx,
+	       "sc_pkcs15_pubkey_from_spki_fields() called: %p:%"SC_FORMAT_LEN_SIZE_T"u\n%s",
+	       buf, buflen, sc_dump_hex(buf, buflen));
 
 	tmp_buf = malloc(buflen);
 	if (!tmp_buf) {
@@ -1525,7 +1535,8 @@ sc_pkcs15_fix_ec_parameters(struct sc_context *ctx, struct sc_ec_parameters *ecp
 			sc_format_oid(&ecparams->id, ec_curve_infos[ii].oid_str);
 
 		ecparams->field_length = ec_curve_infos[ii].size;
-		sc_log(ctx, "Curve length %i", ecparams->field_length);
+		sc_log(ctx, "Curve length %"SC_FORMAT_LEN_SIZE_T"u",
+		       ecparams->field_length);
 	}
 	else if (ecparams->named_curve)   {	/* it can be name of curve or OID in ASCII form */
 		for (ii=0; ec_curve_infos[ii].name; ii++)   {

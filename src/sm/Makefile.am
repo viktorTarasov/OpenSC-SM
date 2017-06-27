@@ -9,7 +9,6 @@ noinst_HEADERS = \
 		 sm-iso-internal.h \
 		 sm-iso.h \
 		 sslutil.h \
-		 rw_sfid.h \
 		 sm-eac.h
 
 if ENABLE_OPENSSL
@@ -24,6 +23,6 @@ libsm_la_SOURCES = sm-common.c sm-common.h
 
 libsmiso_la_SOURCES = sm-iso.c
 
-libsmeac_la_SOURCES = sm-eac.c rw_sfid.c
+libsmeac_la_SOURCES = sm-eac.c
 libsmeac_la_LIBADD = $(OPENPACE_LIBS) $(OPENSSL_LIBS) libsmiso.la
 libsmeac_la_CFLAGS = $(OPENPACE_CFLAGS) $(OPENSSL_CFLAGS) -I$(top_srcdir)/src

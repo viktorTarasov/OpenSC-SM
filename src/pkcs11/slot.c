@@ -95,10 +95,14 @@ CK_RV create_slot(sc_reader_t *reader)
 			return CKR_HOST_MEMORY;
 
 		list_append(&virtual_slots, slot);
-		list_init(&slot->objects);
+		if (0 != list_init(&slot->objects)) {
+			return CKR_HOST_MEMORY;
+		}
 		list_attributes_seeker(&slot->objects, object_list_seeker);
 
-		list_init(&slot->logins);
+		if (0 != list_init(&slot->logins)) {
+			return CKR_HOST_MEMORY;
+		}
 	} else {
 		/* reuse the old list of logins/objects since they should be empty */
 		list_t logins = slot->logins;
@@ -280,11 +284,11 @@ again:
 			return sc_to_cryptoki_error(rc, NULL);
 		}
 
-		/* boxing commands are only guaranteed to be working with a card
+		/* escape commands are only guaranteed to be working with a card
 		 * inserted. That's why by now, after sc_connect_card() the reader's
 		 * metadata may have changed. We re-initialize the metadata for every
 		 * slot of this reader here. */
-		if (reader->flags & SC_READER_TEST_BOXING) {
+		if (reader->flags & SC_READER_ENABLE_ESCAPE) {
 			for (i = 0; i<list_size(&virtual_slots); i++) {
 				sc_pkcs11_slot_t *slot = (sc_pkcs11_slot_t *) list_get_at(&virtual_slots, i);
 				if (slot->reader == reader)
@@ -329,14 +333,18 @@ again:
 				rv = CKR_OK;
 			}
 			if (rv != CKR_OK)   {
-				sc_log(context, "%s: cannot bind 'generic' token: rv 0x%X", reader->name, rv);
+				sc_log(context,
+				       "%s: cannot bind 'generic' token: rv 0x%lX",
+				       reader->name, rv);
 				return rv;
 			}
 
 			sc_log(context, "%s: Creating 'generic' token.", reader->name);
 			rv = frameworks[i]->create_tokens(p11card, app_generic);
 			if (rv != CKR_OK)   {
-				sc_log(context, "%s: create 'generic' token error 0x%X", reader->name, rv);
+				sc_log(context,
+				       "%s: create 'generic' token error 0x%lX",
+				       reader->name, rv);
 				return rv;
 			}
 		}
@@ -352,14 +360,17 @@ again:
 			sc_log(context, "%s: Binding %s token.", reader->name, app_name);
 			rv = frameworks[i]->bind(p11card, app_info);
 			if (rv != CKR_OK)   {
-				sc_log(context, "%s: bind %s token error Ox%X", reader->name, app_name, rv);
+				sc_log(context, "%s: bind %s token error Ox%lX",
+				       reader->name, app_name, rv);
 				continue;
 			}
 
 			sc_log(context, "%s: Creating %s token.", reader->name, app_name);
 			rv = frameworks[i]->create_tokens(p11card, app_info);
 			if (rv != CKR_OK)   {
-				sc_log(context, "%s: create %s token error 0x%X", reader->name, app_name, rv);
+				sc_log(context,
+				       "%s: create %s token error 0x%lX",
+				       reader->name, app_name, rv);
 				return rv;
 			}
 		}
@@ -509,7 +520,9 @@ CK_RV slot_find_changed(CK_SLOT_ID_PTR idp, int mask)
 	card_detect_all();
 	for (i=0; i<list_size(&virtual_slots); i++) {
 		sc_pkcs11_slot_t *slot = (sc_pkcs11_slot_t *) list_get_at(&virtual_slots, i);
-		sc_log(context, "slot 0x%lx token: %d events: 0x%02X",slot->id, (slot->slot_info.flags & CKF_TOKEN_PRESENT), slot->events);
+		sc_log(context, "slot 0x%lx token: %lu events: 0x%02X",
+		       slot->id, (slot->slot_info.flags & CKF_TOKEN_PRESENT),
+		       slot->events);
 		if ((slot->events & SC_EVENT_CARD_INSERTED)
 				&& !(slot->slot_info.flags & CKF_TOKEN_PRESENT)) {
 			/* If a token has not been initialized, clear the inserted event */

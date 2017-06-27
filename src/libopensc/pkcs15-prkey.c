@@ -505,7 +505,8 @@ sc_pkcs15_prkey_attrs_from_cert(struct sc_pkcs15_card *p15card, struct sc_pkcs15
 	ERR_load_ERR_strings();
 	ERR_load_crypto_strings();
 
-	sc_log(ctx, "CertValue(%i) %p", cert_object->content.len, cert_object->content.value);
+	sc_log(ctx, "CertValue(%"SC_FORMAT_LEN_SIZE_T"u) %p",
+	       cert_object->content.len, cert_object->content.value);
 	mem = BIO_new_mem_buf(cert_object->content.value, cert_object->content.len);
 	if (!mem)
 		LOG_TEST_RET(ctx, SC_ERROR_INTERNAL, "MEM buffer allocation error");
@@ -618,6 +619,8 @@ sc_pkcs15_convert_bignum(sc_pkcs15_bignum_t *dst, const void *src)
 		return 0;
 	dst->len = BN_num_bytes(bn);
 	dst->data = malloc(dst->len);
+	if (!dst->data)
+		return 0;
 	BN_bn2bin(bn, dst->data);
 	return 1;
 #else
@@ -721,6 +724,8 @@ sc_pkcs15_convert_prkey(struct sc_pkcs15_prkey *pkcs15_key, void *evp_key)
 
 		/* copy the public key */
 		dst->ecpointQ.value = malloc(buflen);
+		if (!dst->ecpointQ.value)
+			return SC_ERROR_OUT_OF_MEMORY;
 		memcpy(dst->ecpointQ.value, buf, buflen);
 		dst->ecpointQ.len = buflen;
 

@@ -40,4 +40,8 @@ BEGIN
 	END
 END
 
+#ifndef __MINGW32__
 IDI_SMARTCARD          ICON                    "..\\..\\win32\\DDORes.dll_14_2302.ico"
+#else
+IDI_SMARTCARD          ICON                    "../../win32/DDORes.dll_14_2302.ico"
+#endif

@@ -58,6 +58,8 @@ static struct sc_atr_table cardos_atrs[] = {
 	{ "3b:d2:18:02:c1:0a:31:fe:58:c8:0d:51", NULL, NULL, SC_CARD_TYPE_CARDOS_M4_4, 0, NULL},
 	/* CardOS v5.0 */
 	{ "3b:d2:18:00:81:31:fe:58:c9:01:14", NULL, NULL, SC_CARD_TYPE_CARDOS_V5_0, 0, NULL},
+	/* CardOS v5.3 */
+	{ "3b:d2:18:00:81:31:fe:58:c9:03:16", NULL, NULL, SC_CARD_TYPE_CARDOS_V5_3, 0, NULL},
 	{ NULL, NULL, NULL, 0, 0, NULL }
 };
 
@@ -81,6 +83,8 @@ static int cardos_match_card(sc_card_t *card)
 	if (card->type == SC_CARD_TYPE_CARDOS_M4_4)
 		return 1;
 	if (card->type == SC_CARD_TYPE_CARDOS_V5_0)
+		return 1;
+	if (card->type == SC_CARD_TYPE_CARDOS_V5_3)
 		return 1;
 	if (card->type == SC_CARD_TYPE_CARDOS_M4_2) {
 		int rv;
@@ -173,11 +177,15 @@ static int cardos_init(sc_card_t *card)
 	card->cla = 0x00;
 
 	/* Set up algorithm info. */
-	flags = SC_ALGORITHM_NEED_USAGE
-		| SC_ALGORITHM_RSA_RAW
-		| SC_ALGORITHM_RSA_HASH_NONE
+	flags = SC_ALGORITHM_RSA_HASH_NONE
 		| SC_ALGORITHM_ONBOARD_KEY_GEN
 		;
+	if (card->type != SC_CARD_TYPE_CARDOS_V5_3)
+		flags |= SC_ALGORITHM_RSA_RAW
+			| SC_ALGORITHM_NEED_USAGE;
+	else
+		flags |= SC_ALGORITHM_RSA_PAD_PKCS1;
+
 	_sc_card_add_rsa_alg(card,  512, flags, 0);
 	_sc_card_add_rsa_alg(card,  768, flags, 0);
 	_sc_card_add_rsa_alg(card, 1024, flags, 0);
@@ -193,7 +201,8 @@ static int cardos_init(sc_card_t *card)
 		|| card->type == SC_CARD_TYPE_CARDOS_M4_2B
 		|| card->type == SC_CARD_TYPE_CARDOS_M4_2C
 		|| card->type == SC_CARD_TYPE_CARDOS_M4_4
-		|| card->type == SC_CARD_TYPE_CARDOS_V5_0) {
+		|| card->type == SC_CARD_TYPE_CARDOS_V5_0
+		|| card->type == SC_CARD_TYPE_CARDOS_V5_3) {
 		rsa_2048 = 1;
 		card->caps |= SC_CARD_CAP_APDU_EXT;
 	}
@@ -228,7 +237,8 @@ static int cardos_init(sc_card_t *card)
 		_sc_card_add_rsa_alg(card, 2048, flags, 0);
 	}
 
-	if (card->type == SC_CARD_TYPE_CARDOS_V5_0) {
+	if (card->type == SC_CARD_TYPE_CARDOS_V5_0
+		|| card->type == SC_CARD_TYPE_CARDOS_V5_3) {
 		/* Starting with CardOS 5, the card supports PIN query commands */
 		card->caps |= SC_CARD_CAP_ISO7816_PIN_INFO;
 	}
@@ -247,7 +257,7 @@ static const struct sc_card_error cardos_errors[] = {
 { 0x6f82, SC_ERROR_CARD_CMD_FAILED,	"not enough memory in xram"}, 
 { 0x6f84, SC_ERROR_CARD_CMD_FAILED,	"general protection fault"}, 
 
-/* the card doesn't now thic combination of ins+cla+p1+p2 */
+/* the card doesn't know this combination of ins+cla+p1+p2 */
 /* i.e. command will never work */
 { 0x6881, SC_ERROR_NO_CARD_SUPPORT,	"logical channel not supported"}, 
 { 0x6a86, SC_ERROR_INCORRECT_PARAMETERS,"p1/p2 invalid"}, 
@@ -779,6 +789,8 @@ cardos_set_security_env(sc_card_t *card,
 	if (card->type == SC_CARD_TYPE_CARDOS_CIE_V1) {
 		cardos_restore_security_env(card, 0x30);
 		apdu.p1 = 0xF1;
+	} else if (card->type == SC_CARD_TYPE_CARDOS_V5_3) {
+		apdu.p1 = 0x41;
 	} else {
 		apdu.p1 = 0x01;
 	}
@@ -1209,8 +1221,12 @@ cardos_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data,
 	data->pin_reference |= 0x80;
 
 	sc_log(ctx, "PIN_CMD(cmd:%i, ref:%i)", data->cmd, data->pin_reference);
-	sc_log(ctx, "PIN1(max:%i, min:%i)", data->pin1.max_length, data->pin1.min_length);
-	sc_log(ctx, "PIN2(max:%i, min:%i)", data->pin2.max_length, data->pin2.min_length);
+	sc_log(ctx,
+	       "PIN1(max:%"SC_FORMAT_LEN_SIZE_T"u, min:%"SC_FORMAT_LEN_SIZE_T"u)",
+	       data->pin1.max_length, data->pin1.min_length);
+	sc_log(ctx,
+	       "PIN2(max:%"SC_FORMAT_LEN_SIZE_T"u, min:%"SC_FORMAT_LEN_SIZE_T"u)",
+	       data->pin2.max_length, data->pin2.min_length);
 
 	/* FIXME: the following values depend on what pin length was
 	 * used when creating the BS objects */
@@ -1233,7 +1249,8 @@ cardos_logout(sc_card_t *card)
 		   	|| card->type == SC_CARD_TYPE_CARDOS_M4_2C
 		   	|| card->type == SC_CARD_TYPE_CARDOS_M4_3
 		   	|| card->type == SC_CARD_TYPE_CARDOS_M4_4
-			|| card->type == SC_CARD_TYPE_CARDOS_V5_0) {
+			|| card->type == SC_CARD_TYPE_CARDOS_V5_0
+			|| card->type == SC_CARD_TYPE_CARDOS_V5_3) {
 		sc_apdu_t apdu;
 		int       r;
 		sc_path_t path;

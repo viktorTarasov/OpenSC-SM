@@ -144,6 +144,7 @@ enum {
 	OPT_DECRYPT,
 	OPT_TEST_FORK,
 	OPT_GENERATE_KEY,
+	OPT_GENERATE_RANDOM,
 };
 
 static const struct option options[] = {
@@ -206,6 +207,7 @@ static const struct option options[] = {
 #ifndef _WIN32
 	{ "test-fork",		0, NULL,		OPT_TEST_FORK },
 #endif
+	{ "generate-random",	1, NULL,		OPT_GENERATE_RANDOM },
 
 	{ NULL, 0, NULL, 0 }
 };
@@ -237,7 +239,7 @@ static const char *option_help[] = {
 	"Unlock User PIN (without '--login' unlock in logged in session; otherwise '--login-type' has to be 'context-specific')",
 	"Key pair generation",
 	"Key generation",
-	"Specify the type and length of the key to create, for example rsa:1024 or EC:prime256v1",
+	"Specify the type and length of the key to create, for example rsa:1024 or EC:prime256v1 or GOSTR3410:A",
 	"Specify 'sign' key usage flag (sets SIGN in privkey, sets VERIFY in pubkey)",
 	"Specify 'decrypt' key usage flag (RSA only, set DECRYPT privkey, ENCRYPT in pubkey)",
 	"Specify 'derive' key usage flag (EC only)",
@@ -270,6 +272,7 @@ static const char *option_help[] = {
 #ifndef _WIN32
 	"Test forking and calling C_Initialize() in the child",
 #endif
+	"Generate given amount of random data",
 };
 
 static const char *	app_name = "pkcs11-tool"; /* for utils.c */
@@ -305,13 +308,13 @@ static char *		opt_key_type = NULL;
 static char *		opt_sig_format = NULL;
 static int		opt_is_private = 0;
 static int		opt_test_hotplug = 0;
-static int		opt_login = 0;
 static int		opt_login_type = -1;
 static int		opt_key_usage_sign = 0;
 static int		opt_key_usage_decrypt = 0;
 static int		opt_key_usage_derive = 0;
 static int		opt_key_usage_default = 1; /* uses defaults if no opt_key_usage options */
 static int		opt_derive_pass_der = 0;
+static unsigned long	opt_random_bytes = 0;
 
 static void *module = NULL;
 static CK_FUNCTION_LIST_PTR p11 = NULL;
@@ -413,6 +416,7 @@ static void		test_ec(CK_SLOT_ID slot, CK_SESSION_HANDLE session);
 #ifndef _WIN32
 static void		test_fork(void);
 #endif
+static void		generate_random(CK_SESSION_HANDLE session);
 static CK_RV		find_object_with_attributes(CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *out,
 				CK_ATTRIBUTE *attrs, CK_ULONG attrsLen, CK_ULONG obj_index);
 static CK_ULONG		get_private_key_length(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE prkey);
@@ -421,6 +425,80 @@ static CK_ULONG		get_private_key_length(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE
 #ifndef O_BINARY
 # define O_BINARY 0
 #endif
+
+#define ATTR_METHOD(ATTR, TYPE) \
+static TYPE \
+get##ATTR(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj) \
+{ \
+	TYPE		type = 0; \
+	CK_ATTRIBUTE	attr = { CKA_##ATTR, &type, sizeof(type) }; \
+	CK_RV		rv; \
+ \
+	rv = p11->C_GetAttributeValue(sess, obj, &attr, 1); \
+	if (rv != CKR_OK) \
+		p11_warn("C_GetAttributeValue(" #ATTR ")", rv); \
+	return type; \
+}
+
+#define VARATTR_METHOD(ATTR, TYPE) \
+static TYPE * \
+get##ATTR(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj, CK_ULONG_PTR pulCount) \
+{ \
+	CK_ATTRIBUTE	attr = { CKA_##ATTR, NULL, 0 };		\
+	CK_RV		rv;					\
+	if (pulCount)						\
+		*pulCount = 0;					\
+	rv = p11->C_GetAttributeValue(sess, obj, &attr, 1);	\
+	if (rv == CKR_OK) {					\
+		if (attr.ulValueLen == (CK_ULONG)(-1))		\
+			return NULL;				\
+		if (!(attr.pValue = calloc(1, attr.ulValueLen + 1)))		\
+			util_fatal("out of memory in get" #ATTR ": %m");	\
+		rv = p11->C_GetAttributeValue(sess, obj, &attr, 1);		\
+		if (attr.ulValueLen == (CK_ULONG)(-1)) {	\
+			free(attr.pValue);			\
+			return NULL;				\
+		}						\
+		if (pulCount)					\
+			*pulCount = attr.ulValueLen / sizeof(TYPE);	\
+	} else {						\
+		p11_warn("C_GetAttributeValue(" #ATTR ")", rv);	\
+	}							\
+	return (TYPE *) attr.pValue;				\
+}
+
+/*
+ * Define attribute accessors
+ */
+ATTR_METHOD(CLASS, CK_OBJECT_CLASS);
+ATTR_METHOD(ALWAYS_AUTHENTICATE, CK_BBOOL);
+ATTR_METHOD(PRIVATE, CK_BBOOL);
+ATTR_METHOD(MODIFIABLE, CK_BBOOL);
+ATTR_METHOD(ENCRYPT, CK_BBOOL);
+ATTR_METHOD(DECRYPT, CK_BBOOL);
+ATTR_METHOD(SIGN, CK_BBOOL);
+ATTR_METHOD(VERIFY, CK_BBOOL);
+ATTR_METHOD(WRAP, CK_BBOOL);
+ATTR_METHOD(UNWRAP, CK_BBOOL);
+ATTR_METHOD(DERIVE, CK_BBOOL);
+ATTR_METHOD(OPENSC_NON_REPUDIATION, CK_BBOOL);
+ATTR_METHOD(KEY_TYPE, CK_KEY_TYPE);
+ATTR_METHOD(CERTIFICATE_TYPE, CK_CERTIFICATE_TYPE);
+ATTR_METHOD(MODULUS_BITS, CK_ULONG);
+ATTR_METHOD(VALUE_LEN, CK_ULONG);
+VARATTR_METHOD(LABEL, char);
+VARATTR_METHOD(APPLICATION, char);
+VARATTR_METHOD(ID, unsigned char);
+VARATTR_METHOD(OBJECT_ID, unsigned char);
+VARATTR_METHOD(MODULUS, CK_BYTE);
+#ifdef ENABLE_OPENSSL
+VARATTR_METHOD(PUBLIC_EXPONENT, CK_BYTE);
+#endif
+VARATTR_METHOD(VALUE, unsigned char);
+VARATTR_METHOD(GOSTR3410_PARAMS, unsigned char);
+VARATTR_METHOD(EC_POINT, unsigned char);
+VARATTR_METHOD(EC_PARAMS, unsigned char);
+
 
 int main(int argc, char * argv[])
 {
@@ -449,11 +527,13 @@ int main(int argc, char * argv[])
 	int do_test_fork = 0;
 #endif
 	int need_session = 0;
+	int opt_login = 0;
 	int do_init_token = 0;
 	int do_init_pin = 0;
 	int do_change_pin = 0;
 	int do_unlock_pin = 0;
 	int action_count = 0;
+	int do_generate_random = 0;
 	CK_RV rv;
 
 #ifdef _WIN32
@@ -746,6 +826,13 @@ int main(int argc, char * argv[])
 			action_count++;
 			break;
 #endif
+		case OPT_GENERATE_RANDOM:
+			need_session |= NEED_SESSION_RO;
+			opt_random_bytes = strtoul(optarg, NULL, 0);
+			do_generate_random = 1;
+			action_count++;
+			break;
+
 		default:
 			util_print_usage_and_die(app_name, options, option_help, NULL);
 		}
@@ -983,6 +1070,11 @@ int main(int argc, char * argv[])
 		else
 			test_ec(opt_slot, session);
 	}
+
+	if (do_generate_random) {
+		generate_random(session);
+	}
+
 end:
 	if (session != CK_INVALID_HANDLE) {
 		rv = p11->C_CloseSession(session);
@@ -997,6 +1089,7 @@ end:
 
 	return err;
 }
+
 
 static void show_cryptoki_info(void)
 {
@@ -1035,7 +1128,7 @@ static void list_slots(int tokens, int refresh, int print)
 		p11_slots = calloc(p11_num_slots, sizeof(CK_SLOT_ID));
 		if (p11_slots == NULL) {
 			perror("calloc failed");
-			return;
+			exit(1);
 		}
 
 		rv = p11->C_GetSlotList(tokens, p11_slots, &p11_num_slots);
@@ -1086,6 +1179,9 @@ static void show_token(CK_SLOT_ID slot)
 	if (rv == CKR_TOKEN_NOT_RECOGNIZED) {
 		printf("  (token not recognized)\n");
 		return;
+	} else if (rv != CKR_OK) {
+		printf("C_GetTokenInfo() failed: rv = %s\n", CKR2Str(rv));
+		return;
 	}
 	if (!(info.flags & CKF_TOKEN_INITIALIZED) && (!verbose)) {
 		printf("  token state:   uninitialized\n");
@@ -1107,6 +1203,7 @@ static void show_token(CK_SLOT_ID slot)
 	printf("  firmware version   : %d.%d\n", info.firmwareVersion.major, info.firmwareVersion.minor);
 	printf("  serial num         : %s\n", p11_utf8_to_local(info.serialNumber,
 			sizeof(info.serialNumber)));
+	printf("  pin min/max        : %lu/%lu\n", info.ulMinPinLen, info.ulMaxPinLen);
 }
 
 static void list_mechs(CK_SLOT_ID slot)
@@ -1245,7 +1342,7 @@ static int login(CK_SESSION_HANDLE session, int login_type)
 
 		r = util_getpass(&pin, &len, stdin);
 		if (r < 0)
-			util_fatal("No PIN entered");
+			util_fatal("util_getpass error");
 		pin_allocated = 1;
 	}
 
@@ -1525,6 +1622,8 @@ static void sign_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 		rv = p11->C_SignInit(session, &mech, key);
 		if (rv != CKR_OK)
 			p11_fatal("C_SignInit", rv);
+		if (getALWAYS_AUTHENTICATE(session, key))
+			login(session,CKU_CONTEXT_SPECIFIC);
 
 		sig_len = sizeof(sig_buffer);
 		rv =  p11->C_Sign(session, in_buffer, r, sig_buffer, &sig_len);
@@ -1534,6 +1633,8 @@ static void sign_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 		rv = p11->C_SignInit(session, &mech, key);
 		if (rv != CKR_OK)
 			p11_fatal("C_SignInit", rv);
+		if (getALWAYS_AUTHENTICATE(session, key))
+			login(session,CKU_CONTEXT_SPECIFIC);
 
 		do   {
 			rv = p11->C_SignUpdate(session, in_buffer, r);
@@ -1612,6 +1713,8 @@ static void decrypt_data(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 	rv = p11->C_DecryptInit(session, &mech, key);
 	if (rv != CKR_OK)
 		p11_fatal("C_DecryptInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, key))
+		login(session,CKU_CONTEXT_SPECIFIC);
 
 	out_len = sizeof(out_buffer);
 	rv = p11->C_Decrypt(session, in_buffer, in_len, out_buffer, &out_len);
@@ -1698,6 +1801,7 @@ static int gen_keypair(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 	CK_ULONG modulusBits = 1024;
 	CK_BYTE publicExponent[] = { 0x01, 0x00, 0x01 }; /* 65537 in bytes */
 	CK_BBOOL _true = TRUE;
+	CK_BBOOL _false = FALSE;
 	CK_OBJECT_CLASS pubkey_class = CKO_PUBLIC_KEY;
 	CK_OBJECT_CLASS privkey_class = CKO_PRIVATE_KEY;
 	CK_ATTRIBUTE publicKeyTemplate[20] = {
@@ -1801,11 +1905,74 @@ static int gen_keypair(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 			FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_EC_PARAMS, ecparams, ecparams_size);
 			n_pubkey_attr++;
 		}
+		else if (strncmp(type, "GOSTR3410:", strlen("GOSTR3410:")) == 0 || strncmp(type, "gostr3410:", strlen("gostr3410:")) == 0) {
+			CK_BYTE key_paramset_encoded_oid[9];
+			CK_BYTE hash_paramset_encoded_oid[9];
+			const CK_BYTE GOST_PARAMSET_A_OID[] = {0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x23, 0x01};
+			const CK_BYTE GOST_PARAMSET_B_OID[] = {0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x23, 0x02};
+			const CK_BYTE GOST_PARAMSET_C_OID[] = {0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x23, 0x03};
+			const CK_BYTE GOST_HASH_PARAMSET_OID[] = {0x06, 0x07, 0x2a, 0x85, 0x03, 0x02, 0x02, 0x1e, 0x01};
+			unsigned long int  gost_key_type = CKK_GOSTR3410;
+			CK_MECHANISM_TYPE mtypes[] = {CKM_GOSTR3410_KEY_PAIR_GEN};
+			size_t mtypes_num = sizeof(mtypes)/sizeof(mtypes[0]);
+			const char *p_param_set = type + strlen("GOSTR3410:");
+
+			if (!opt_mechanism_used) {
+				if (!find_mechanism(slot, CKF_GENERATE_KEY_PAIR, mtypes, mtypes_num, &opt_mechanism))
+					util_fatal("Generate GOSTR3410 mechanism not supported");
+			}
+
+			if (p_param_set == NULL)
+				util_fatal("Unknown key type %s", type);
+
+			if (!strcmp("A", p_param_set)) {
+				memcpy(key_paramset_encoded_oid, GOST_PARAMSET_A_OID, sizeof(GOST_PARAMSET_A_OID));
+				memcpy(hash_paramset_encoded_oid, GOST_HASH_PARAMSET_OID, sizeof(GOST_HASH_PARAMSET_OID));
+			}
+			else if (!strcmp("B", p_param_set)) {
+				memcpy(key_paramset_encoded_oid, GOST_PARAMSET_B_OID, sizeof(GOST_PARAMSET_B_OID));
+				memcpy(hash_paramset_encoded_oid, GOST_HASH_PARAMSET_OID, sizeof(GOST_HASH_PARAMSET_OID));
+			}
+			else if (!strcmp("C", p_param_set)) {
+				memcpy(key_paramset_encoded_oid, GOST_PARAMSET_C_OID, sizeof(GOST_PARAMSET_C_OID));
+				memcpy(hash_paramset_encoded_oid, GOST_HASH_PARAMSET_OID, sizeof(GOST_HASH_PARAMSET_OID));
+			}
+			else
+				util_fatal("Unknown key type %s, valid key types for mechanism GOSTR3410 are GOSTR3410:A, GOSTR3410:B, GOSTR3410:C", type);
+
+			FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_GOSTR3410_PARAMS, key_paramset_encoded_oid, sizeof(key_paramset_encoded_oid));
+			n_pubkey_attr++;
+			FILL_ATTR(privateKeyTemplate[n_privkey_attr], CKA_GOSTR3410_PARAMS, key_paramset_encoded_oid, sizeof(key_paramset_encoded_oid));
+			n_privkey_attr++;
+
+			FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_GOSTR3411_PARAMS, hash_paramset_encoded_oid, sizeof(hash_paramset_encoded_oid));
+			n_pubkey_attr++;
+			FILL_ATTR(privateKeyTemplate[n_privkey_attr], CKA_GOSTR3411_PARAMS, hash_paramset_encoded_oid, sizeof(hash_paramset_encoded_oid));
+			n_privkey_attr++;
+
+			FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_KEY_TYPE, &gost_key_type, sizeof(gost_key_type));
+			n_pubkey_attr++;
+			FILL_ATTR(privateKeyTemplate[n_privkey_attr], CKA_KEY_TYPE, &gost_key_type, sizeof(gost_key_type));
+			n_privkey_attr++;
+
+			if (opt_key_usage_default || opt_key_usage_sign) {
+				FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_VERIFY, &_true, sizeof(_true));
+				n_pubkey_attr++;
+				FILL_ATTR(privateKeyTemplate[n_privkey_attr], CKA_SIGN, &_true, sizeof(_true));
+				n_privkey_attr++;
+			}
+
+			/* do not set 'derive' attribute unless it is specified directly */
+			if (opt_key_usage_derive) {
+				FILL_ATTR(privateKeyTemplate[n_privkey_attr], CKA_DERIVE, &_true, sizeof(_true));
+				n_privkey_attr++;
+			}
+		}
 		else {
 			util_fatal("Unknown key type %s", type);
 		}
 
-        mechanism.mechanism = opt_mechanism;
+		mechanism.mechanism = opt_mechanism;
 	}
 
 	if (opt_object_label != NULL) {
@@ -1824,6 +1991,17 @@ static int gen_keypair(CK_SLOT_ID slot, CK_SESSION_HANDLE session,
 			opt_object_id, opt_object_id_len);
 		n_pubkey_attr++;
 		n_privkey_attr++;
+	}
+
+	if (opt_is_private != 0) {
+		FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_PRIVATE,
+			&_true, sizeof(_true));
+		n_pubkey_attr++;
+	}
+	else {
+		FILL_ATTR(publicKeyTemplate[n_pubkey_attr], CKA_PRIVATE,
+			&_false, sizeof(_false));
+		n_pubkey_attr++;
 	}
 
 	rv = p11->C_GenerateKeyPair(session, &mechanism,
@@ -1964,22 +2142,34 @@ gen_key(CK_SLOT_ID slot, CK_SESSION_HANDLE session, CK_OBJECT_HANDLE *hSecretKey
 
 #ifdef ENABLE_OPENSSL
 static void	parse_certificate(struct x509cert_info *cert,
-		unsigned char *data, int len)
+		unsigned char *data, int len, unsigned char *contents,
+		int *contents_len)
 {
 	X509 *x = NULL;
 	unsigned char *p;
 	int n;
 
-	if (!strstr((char *)data, "-----BEGIN CERTIFICATE-----"))
-		x = d2i_X509(NULL, (const unsigned char **)&data, len);
-	else {
+	if (strstr((char *)data, "-----BEGIN CERTIFICATE-----")) {
 		BIO *mem = BIO_new_mem_buf(data, len);
 		x = PEM_read_bio_X509(mem, NULL, NULL, NULL);
+		/* Update what is written to the card to be DER encoded */
+		if (contents != NULL) {
+			unsigned char *contents_pointer = contents;
+			*contents_len = i2d_X509(x, &contents_pointer);
+			if (*contents_len < 0)
+				util_fatal("Failed to convert PEM to DER");
+		}
 		BIO_free(mem);
+	} else {
+		x = d2i_X509(NULL, (const unsigned char **)&data, len);
 	}
 	if (!x) {
 		util_fatal("OpenSSL error during X509 certificate parsing");
 	}
+	/* convert only (if needed) */
+	if (cert == NULL)
+		return;
+
 	/* check length first */
 	n = i2d_X509_NAME(X509_get_subject_name(x), NULL);
 	if (n < 0)
@@ -2265,15 +2455,30 @@ static int write_object(CK_SESSION_HANDLE session)
 		fclose(f);
 		need_to_parse_certdata = 1;
 	}
-	if (opt_object_class == CKO_CERTIFICATE && !opt_attr_from_file) {
-		memcpy(certdata, contents, MAX_OBJECT_SIZE);
-		certdata_len = contents_len;
-		need_to_parse_certdata = 1;
+	if (opt_object_class == CKO_CERTIFICATE) {
+		if (opt_attr_from_file) {
+			/* Convert  contents  from PEM to DER if needed
+			 * certdata  already read and will be validated later
+			 */
+#ifdef ENABLE_OPENSSL
+			parse_certificate(NULL, contents, contents_len, contents, &contents_len);
+#else
+			util_fatal("No OpenSSL support, cannot parse certificate");
+#endif
+		} else {
+			memcpy(certdata, contents, MAX_OBJECT_SIZE);
+			certdata_len = contents_len;
+			need_to_parse_certdata = 1;
+		}
 	}
 
 	if (need_to_parse_certdata) {
 #ifdef ENABLE_OPENSSL
-		parse_certificate(&cert, certdata, certdata_len);
+		/* Validate and get the certificate fields (from certdata)
+		 * and convert PEM to DER if needed
+		 */
+		parse_certificate(&cert, certdata, certdata_len,
+			(opt_attr_from_file ? NULL : contents), &contents_len);
 #else
 		util_fatal("No OpenSSL support, cannot parse certificate");
 #endif
@@ -2809,79 +3014,6 @@ find_mechanism(CK_SLOT_ID slot, CK_FLAGS flags,
 }
 
 
-#define ATTR_METHOD(ATTR, TYPE) \
-static TYPE \
-get##ATTR(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj) \
-{ \
-	TYPE		type = 0; \
-	CK_ATTRIBUTE	attr = { CKA_##ATTR, &type, sizeof(type) }; \
-	CK_RV		rv; \
- \
-	rv = p11->C_GetAttributeValue(sess, obj, &attr, 1); \
-	if (rv != CKR_OK) \
-		p11_warn("C_GetAttributeValue(" #ATTR ")", rv); \
-	return type; \
-}
-
-#define VARATTR_METHOD(ATTR, TYPE) \
-static TYPE * \
-get##ATTR(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj, CK_ULONG_PTR pulCount) \
-{ \
-	CK_ATTRIBUTE	attr = { CKA_##ATTR, NULL, 0 };		\
-	CK_RV		rv;					\
-	if (pulCount)						\
-		*pulCount = 0;					\
-	rv = p11->C_GetAttributeValue(sess, obj, &attr, 1);	\
-	if (rv == CKR_OK) {					\
-		if (attr.ulValueLen == (CK_ULONG)(-1))		\
-			return NULL;				\
-		if (!(attr.pValue = calloc(1, attr.ulValueLen + 1)))		\
-			util_fatal("out of memory in get" #ATTR ": %m");	\
-		rv = p11->C_GetAttributeValue(sess, obj, &attr, 1);		\
-		if (attr.ulValueLen == (CK_ULONG)(-1)) {	\
-			free(attr.pValue);			\
-			return NULL;				\
-		}						\
-		if (pulCount)					\
-			*pulCount = attr.ulValueLen / sizeof(TYPE);	\
-	} else {						\
-		p11_warn("C_GetAttributeValue(" #ATTR ")", rv);	\
-	}							\
-	return (TYPE *) attr.pValue;				\
-}
-
-/*
- * Define attribute accessors
- */
-ATTR_METHOD(CLASS, CK_OBJECT_CLASS);
-ATTR_METHOD(ALWAYS_AUTHENTICATE, CK_BBOOL);
-ATTR_METHOD(PRIVATE, CK_BBOOL);
-ATTR_METHOD(MODIFIABLE, CK_BBOOL);
-ATTR_METHOD(ENCRYPT, CK_BBOOL);
-ATTR_METHOD(DECRYPT, CK_BBOOL);
-ATTR_METHOD(SIGN, CK_BBOOL);
-ATTR_METHOD(VERIFY, CK_BBOOL);
-ATTR_METHOD(WRAP, CK_BBOOL);
-ATTR_METHOD(UNWRAP, CK_BBOOL);
-ATTR_METHOD(DERIVE, CK_BBOOL);
-ATTR_METHOD(OPENSC_NON_REPUDIATION, CK_BBOOL);
-ATTR_METHOD(KEY_TYPE, CK_KEY_TYPE);
-ATTR_METHOD(CERTIFICATE_TYPE, CK_CERTIFICATE_TYPE);
-ATTR_METHOD(MODULUS_BITS, CK_ULONG);
-ATTR_METHOD(VALUE_LEN, CK_ULONG);
-VARATTR_METHOD(LABEL, char);
-VARATTR_METHOD(APPLICATION, char);
-VARATTR_METHOD(ID, unsigned char);
-VARATTR_METHOD(OBJECT_ID, unsigned char);
-VARATTR_METHOD(MODULUS, CK_BYTE);
-#ifdef ENABLE_OPENSSL
-VARATTR_METHOD(PUBLIC_EXPONENT, CK_BYTE);
-#endif
-VARATTR_METHOD(VALUE, unsigned char);
-VARATTR_METHOD(GOSTR3410_PARAMS, unsigned char);
-VARATTR_METHOD(EC_POINT, unsigned char);
-VARATTR_METHOD(EC_PARAMS, unsigned char);
-
 static void list_objects(CK_SESSION_HANDLE sess, CK_OBJECT_CLASS  object_class)
 {
 	CK_OBJECT_HANDLE object;
@@ -3281,7 +3413,7 @@ show_key(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj)
 		printf("%sunwrap", sepa);
 		sepa = ", ";
 	}
-	if ((!pub || sec) && getDERIVE(sess, obj)) {
+	if (getDERIVE(sess, obj)) {
 		printf("%sderive", sepa);
 		sepa = ", ";
 	}
@@ -3301,7 +3433,7 @@ static void show_cert(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj)
 	unsigned char	*id;
 	char		*label;
 
-	printf("Certificate Object, type = ");
+	printf("Certificate Object; type = ");
 	switch (cert_type) {
 	case CKC_X_509:
 		printf("X.509 cert\n");
@@ -3310,10 +3442,10 @@ static void show_cert(CK_SESSION_HANDLE sess, CK_OBJECT_HANDLE obj)
 		printf("X.509 attribute cert\n");
 		break;
 	case CKC_VENDOR_DEFINED:
-		printf("vendor defined");
+		printf("vendor defined\n");
 		break;
 	default:
-		printf("; unknown cert type\n");
+		printf("unknown cert type\n");
 		break;
 	}
 
@@ -4021,7 +4153,6 @@ static int sign_verify_openssl(CK_SESSION_HANDLE session,
 		return errors;
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
-
 	if (getALWAYS_AUTHENTICATE(session, privKeyObject))
 		login(session,CKU_CONTEXT_SPECIFIC);
 	printf("    %s: ", p11_mechanism_to_name(ck_mech->mechanism));
@@ -4127,18 +4258,9 @@ static int test_signature(CK_SESSION_HANDLE sess)
 	rv = p11->C_GetSessionInfo(sess, &sessionInfo);
 	if (rv != CKR_OK)
 		p11_fatal("C_OpenSession", rv);
-	if ((sessionInfo.state & CKS_RO_USER_FUNCTIONS) == 0) {
-		if (opt_login) {
-			int r;
-			r = login(sess, CKU_CONTEXT_SPECIFIC);
-			if (r != 0){
-				printf("Signatures: failed to login, skipping signature tests\n");
-				return errors;
-			}
-		} else {
-			printf("Signatures: not logged in, skipping signature tests\n");
-			return errors;
-		}
+	if (!(sessionInfo.state & CKS_RW_USER_FUNCTIONS)) {
+		printf("Signature: not a R/W session, skipping signature tests\n");
+		return errors;
 	}
 
 	if (!find_mechanism(sessionInfo.slotID, CKF_SIGN | CKF_HW, mechTypes, mechTypes_num, &firstMechType)) {
@@ -4206,6 +4328,8 @@ static int test_signature(CK_SESSION_HANDLE sess)
 		return errors;
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
+	if (getALWAYS_AUTHENTICATE(sess, privKeyObject))
+		login(sess,CKU_CONTEXT_SPECIFIC);
 
 	rv = p11->C_SignUpdate(sess, data, 5);
 	if (rv == CKR_FUNCTION_NOT_SUPPORTED) {
@@ -4291,6 +4415,7 @@ static int test_signature(CK_SESSION_HANDLE sess)
 
 	/* Fill in data[0] and dataLens[0] */
 	dataLen = modLenBytes;
+	data[0] = 0x00;
 	data[1] = 0x01;
 	memset(data + 2, 0xFF, dataLen - 3 - dataLens[1]);
 	data[dataLen - 36] = 0x00;
@@ -4407,10 +4532,9 @@ static int sign_verify(CK_SESSION_HANDLE session,
 			printf("  ERR: C_SignInit() returned %s (0x%0x)\n", CKR2Str(rv), (int) rv);
 			return ++errors;
 		}
-
-		printf("    %s: ", p11_mechanism_to_name(*mech_type));
 		if (getALWAYS_AUTHENTICATE(session, priv_key))
 			login(session,CKU_CONTEXT_SPECIFIC);
+		printf("    %s: ", p11_mechanism_to_name(*mech_type));
 
 		signat_len = sizeof(signat);
 		rv = p11->C_Sign(session, datas[j], data_lens[j], signat, &signat_len);
@@ -4454,18 +4578,9 @@ static int test_verify(CK_SESSION_HANDLE sess)
 	rv = p11->C_GetSessionInfo(sess, &sessionInfo);
 	if (rv != CKR_OK)
 		p11_fatal("C_OpenSession", rv);
-	if ((sessionInfo.state & CKS_RO_USER_FUNCTIONS) == 0) {
-		if (opt_login) {
-			int r;
-			r = login(sess, CKU_CONTEXT_SPECIFIC);
-			if (r != 0){
-				printf("Verify: failed to login, skipping verify tests\n");
-				return errors;
-			}
-		} else {
-			printf("Verify: not logged in, skipping verify tests\n");
-			return errors;
-		}
+	if (!(sessionInfo.state & CKS_RW_USER_FUNCTIONS)) {
+		printf("Verify: not a R/W session, skipping verify tests\n");
+		return errors;
 	}
 
 	if (!find_mechanism(sessionInfo.slotID, CKF_VERIFY, NULL, 0, &first_mech_type)) {
@@ -4729,7 +4844,7 @@ static int encrypt_decrypt(CK_SESSION_HANDLE session,
 	encrypted_len = EVP_PKEY_encrypt(encrypted, orig_data, sizeof(orig_data), pkey);
 #endif
 	EVP_PKEY_free(pkey);
-	if (encrypted_len <= 0) {
+	if (((int) encrypted_len) <= 0) {
 		fprintf(stderr, "Encryption failed, returning\n");
 		return 0;
 	}
@@ -4742,6 +4857,8 @@ static int encrypt_decrypt(CK_SESSION_HANDLE session,
 	}
 	if (rv != CKR_OK)
 		p11_fatal("C_DecryptInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, privKeyObject))
+		login(session,CKU_CONTEXT_SPECIFIC);
 
 	data_len = encrypted_len;
 	rv = p11->C_Decrypt(session, encrypted, encrypted_len, data, &data_len);
@@ -4794,18 +4911,9 @@ static int test_decrypt(CK_SESSION_HANDLE sess)
 	rv = p11->C_GetSessionInfo(sess, &sessionInfo);
 	if (rv != CKR_OK)
 		p11_fatal("C_OpenSession", rv);
-	if ((sessionInfo.state & CKS_RO_USER_FUNCTIONS) == 0) {
-		if (opt_login) {
-			int r;
-			r = login(sess, CKU_CONTEXT_SPECIFIC);
-			if (r != 0){
-				printf("Decryption: failed to login, skipping decryption tests\n");
-				return errors;
-			}
-		} else {
-			printf("Decryption: not logged in, skipping decryption tests\n");
-			return errors;
-		}
+	if (!(sessionInfo.state & CKS_RW_USER_FUNCTIONS)) {
+		printf("Decryption: not a R/W session, skipping decryption tests\n");
+		return errors;
 	}
 
 	num_mechs = get_mechanisms(sessionInfo.slotID, &mechs, CKF_DECRYPT);
@@ -5051,6 +5159,9 @@ static CK_SESSION_HANDLE test_kpgen_certwrite(CK_SLOT_ID slot, CK_SESSION_HANDLE
 	rv = p11->C_SignInit(session, &mech, priv_key);
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, priv_key))
+		login(session,CKU_CONTEXT_SPECIFIC);
+
 	rv = p11->C_Sign(session, data, data_len, NULL, &sig_len);
 	if (rv != CKR_OK)
 		p11_fatal("C_Sign", rv);
@@ -5078,9 +5189,11 @@ static CK_SESSION_HANDLE test_kpgen_certwrite(CK_SLOT_ID slot, CK_SESSION_HANDLE
 	data = md5_and_digestinfo;
 	data_len = 20;
 	rv = p11->C_SignInit(session, &mech, priv_key);
-	rv = p11->C_Sign(session, data, data_len, sig, &sig_len);
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, priv_key))
+		login(session,CKU_CONTEXT_SPECIFIC);
+	rv = p11->C_Sign(session, data, data_len, sig, &sig_len);
 	if (rv != CKR_OK)
 		p11_fatal("C_Sign", rv);
 
@@ -5230,6 +5343,8 @@ static void test_ec(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	rv = p11->C_SignInit(session, &mech, priv_key);
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, priv_key))
+		login(session,CKU_CONTEXT_SPECIFIC);
 	rv = p11->C_Sign(session, data, data_len, NULL, &sig_len);
 	if (rv != CKR_OK)
 		p11_fatal("C_Sign", rv);
@@ -5248,6 +5363,8 @@ static void test_ec(CK_SLOT_ID slot, CK_SESSION_HANDLE session)
 	rv = p11->C_SignInit(session, &mech, priv_key);
 	if (rv != CKR_OK)
 		p11_fatal("C_SignInit", rv);
+	if (getALWAYS_AUTHENTICATE(session, priv_key))
+		login(session,CKU_CONTEXT_SPECIFIC);
 	rv = p11->C_Sign(session, data, data_len, sig, &sig_len);
 	if (rv != CKR_OK)
 		p11_fatal("C_Sign", rv);
@@ -5291,6 +5408,37 @@ static void test_fork(void)
 
 }
 #endif
+
+static void generate_random(CK_SESSION_HANDLE session)
+{
+	CK_RV rv;
+	CK_BYTE *buf;
+	FILE *out;
+
+	buf = malloc(opt_random_bytes);
+	if (!buf)
+		util_fatal("Not enough memory to allocate random data buffer");
+
+	rv = p11->C_GenerateRandom(session, buf, opt_random_bytes);
+	if (rv != CKR_OK)
+		util_fatal("Could not generate random bytes");
+
+	if (opt_output) {
+		out = fopen(opt_output, "wb");
+		if (out==NULL)
+			util_fatal("Cannot open '%s'", opt_output);
+	}
+	else
+		out = stdout;
+
+	if (fwrite(buf, 1, opt_random_bytes, out) != opt_random_bytes)
+		util_fatal("Cannot write to '%s'", opt_output);
+
+	if (opt_output)
+		fclose(out);
+
+	free(buf);
+}
 
 static const char *p11_flag_names(struct flag_info *list, CK_FLAGS value)
 {

@@ -2,6 +2,20 @@
  * reader-openct.c: backend for OpenCT
  *
  * Copyright (C) 2003  Olaf Kirch <okir@suse.de>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #if HAVE_CONFIG_H
@@ -101,9 +115,8 @@ openct_add_reader(sc_context_t *ctx, unsigned int num, ct_info_t *info)
 	int		rc;
 
 	if (!(reader = calloc(1, sizeof(*reader)))
-	 || !(data = (calloc(1, sizeof(*data))))) {
-		if (reader)
-			free(reader);
+			|| !(data = (calloc(1, sizeof(*data))))) {
+		free(reader);
 		return SC_ERROR_OUT_OF_MEMORY;
 	}
 
@@ -124,8 +137,8 @@ openct_add_reader(sc_context_t *ctx, unsigned int num, ct_info_t *info)
 	if (conf_block) {
 		reader->max_send_size = scconf_get_int(conf_block, "max_send_size", reader->max_send_size);
 		reader->max_recv_size = scconf_get_int(conf_block, "max_recv_size", reader->max_recv_size);
-		if (scconf_get_bool(conf_block, "enable_boxing", 0))
-			reader->flags |= SC_READER_TEST_BOXING;
+		if (scconf_get_bool(conf_block, "enable_escape", 0))
+			reader->flags |= SC_READER_ENABLE_ESCAPE;
 	}
 
 	if ((rc = _sc_add_reader(ctx, reader)) < 0) {

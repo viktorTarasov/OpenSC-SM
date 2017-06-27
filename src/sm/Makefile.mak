@@ -7,7 +7,7 @@ TARGET1 = libsmiso.lib
 OBJECTS1 = sm-iso.obj
 
 TARGET2 = libsmeac.lib
-OBJECTS2 = sm-eac.obj rw_sfid.obj
+OBJECTS2 = sm-eac.obj
 
 all: $(TARGET) $(TARGET1) $(TARGET2)
 

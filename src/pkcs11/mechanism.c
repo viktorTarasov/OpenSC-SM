@@ -2,6 +2,20 @@
  * Generic handling of PKCS11 mechanisms
  *
  * Copyright (C) 2002 Olaf Kirch <okir@suse.de>
+ *
+ * This library is free software; you can redistribute it and/or
+ * modify it under the terms of the GNU Lesser General Public
+ * License as published by the Free Software Foundation; either
+ * version 2.1 of the License, or (at your option) any later version.
+ *
+ * This library is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the GNU
+ * Lesser General Public License for more details.
+ *
+ * You should have received a copy of the GNU Lesser General Public
+ * License along with this library; if not, write to the Free Software
+ * Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA  02111-1307  USA
  */
 
 #include "config.h"
@@ -238,7 +252,8 @@ sc_pkcs11_sign_init(struct sc_pkcs11_session *session, CK_MECHANISM_PTR pMechani
 		LOG_FUNC_RETURN(context, CKR_ARGUMENTS_BAD);
 
 	/* See if we support this mechanism type */
-	sc_log(context, "mechanism 0x%X, key-type 0x%X", pMechanism->mechanism, key_type);
+	sc_log(context, "mechanism 0x%lX, key-type 0x%lX",
+	       pMechanism->mechanism, key_type);
 	mt = sc_pkcs11_find_mechanism(p11card, pMechanism->mechanism, CKF_SIGN);
 	if (mt == NULL)
 		LOG_FUNC_RETURN(context, CKR_MECHANISM_INVALID);
@@ -671,9 +686,9 @@ sc_pkcs11_verify_final(sc_pkcs11_operation_t *operation,
 {
 	struct signature_data *data;
 	struct sc_pkcs11_object *key;
-	unsigned char *pubkey_value;
+	unsigned char *pubkey_value = NULL;
 	CK_KEY_TYPE key_type;
-	CK_BYTE params[9 /* GOST_PARAMS_OID_SIZE */] = { 0 };
+	CK_BYTE params[9 /* GOST_PARAMS_ENCODED_OID_SIZE */] = { 0 };
 	CK_ATTRIBUTE attr = {CKA_VALUE, NULL, 0};
 	CK_ATTRIBUTE attr_key_type = {CKA_KEY_TYPE, &key_type, sizeof(key_type)};
 	CK_ATTRIBUTE attr_key_params = {CKA_GOSTR3410_PARAMS, &params, sizeof(params)};
@@ -685,17 +700,28 @@ sc_pkcs11_verify_final(sc_pkcs11_operation_t *operation,
 		return CKR_ARGUMENTS_BAD;
 
 	key = data->key;
+	rv = key->ops->get_attribute(operation->session, key, &attr_key_type);
+	if (rv != CKR_OK)
+		return rv;
+
+	if (key_type != CKK_GOSTR3410)
+		attr.type = CKA_SPKI;
+		
+
 	rv = key->ops->get_attribute(operation->session, key, &attr);
 	if (rv != CKR_OK)
 		return rv;
 	pubkey_value = calloc(1, attr.ulValueLen);
+	if (!pubkey_value) {
+		rv = CKR_HOST_MEMORY;
+		goto done;
+	}
 	attr.pValue = pubkey_value;
 	rv = key->ops->get_attribute(operation->session, key, &attr);
 	if (rv != CKR_OK)
 		goto done;
 
-	rv = key->ops->get_attribute(operation->session, key, &attr_key_type);
-	if (rv == CKR_OK && key_type == CKK_GOSTR3410) {
+	if (key_type == CKK_GOSTR3410) {
 		rv = key->ops->get_attribute(operation->session, key, &attr_key_params);
 		if (rv != CKR_OK)
 			goto done;
@@ -826,19 +852,19 @@ sc_pkcs11_deri(struct sc_pkcs11_session *session,
 
 	ulDataLen = 0;
 	rv = operation->type->derive(operation, basekey,
-	    pMechanism->pParameter, pMechanism->ulParameterLen,
-	    NULL, &ulDataLen);
+			pMechanism->pParameter, pMechanism->ulParameterLen,
+			NULL, &ulDataLen);
 	if (rv != CKR_OK)
-	    goto out;
+		goto out;
 
 	if (ulDataLen > 0)
-	    keybuf = calloc(1,ulDataLen);
+		keybuf = calloc(1,ulDataLen);
 	else
-	    keybuf = calloc(1,8); /* pass in  dummy buffer */
+		keybuf = calloc(1,8); /* pass in  dummy buffer */
 
-        if (!keybuf) {
-	    rv = CKR_HOST_MEMORY;
-	    goto out;
+	if (!keybuf) {
+		rv = CKR_HOST_MEMORY;
+		goto out;
 	}
 
 	/* Now do the actuall derivation */

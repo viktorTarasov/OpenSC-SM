@@ -266,12 +266,6 @@ static u8 sn_ifd[] = { 0x20, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01 };
  */
 static u8 sn_ifd_pin[] = { 0x40, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x01};
 
-/**
- * Serial number for ICC card.
- * This buffer is to be filled at runtime
- */
-static u8 sn_icc[] = { 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00 };
-
 /************ internal functions **********************************/
 
 /**
@@ -333,7 +327,8 @@ int dnie_read_file(sc_card_t * card,
 		goto dnie_read_file_err;
 	}
 	/* call sc_read_binary() to retrieve data */
-	sc_log(ctx, "read_binary(): expected '%d' bytes", fsize);
+	sc_log(ctx, "read_binary(): expected '%"SC_FORMAT_LEN_SIZE_T"u' bytes",
+	       fsize);
 	res = sc_read_binary(card, 0, data, fsize, 0L);
 	if (res < 0) {		/* read_binary returns number of bytes readed */
 		res = SC_ERROR_CARD_CMD_FAILED;
@@ -354,7 +349,7 @@ int dnie_read_file(sc_card_t * card,
 	}
  dnie_read_file_end:
 	if (msg)
-		sc_log(ctx, msg);
+		sc_log(ctx, "%s", msg);
 	LOG_FUNC_RETURN(ctx, res);
 }
 
@@ -403,7 +398,7 @@ static int dnie_read_certificate(sc_card_t * card, char *certpath, X509 ** cert)
 	sc_file_free(file);
 	file = NULL;
 	if (msg)
-		sc_log(card->ctx, msg);
+		sc_log(card->ctx, "%s", msg);
 	LOG_FUNC_RETURN(card->ctx, res);
 }
 
@@ -738,9 +733,10 @@ static int dnie_get_icc_privkey_ref(sc_card_t * card, u8 ** buf, size_t * len)
  * @param buf where to store result (8 bytes)
  * @return SC_SUCCESS if ok; else error
  */
-static int dnie_get_sn_ifd(sc_card_t * card, u8 ** buf)
+static int dnie_get_sn_ifd(sc_card_t * card)
 {
-	*buf = sn_ifd;
+	struct sm_cwa_session * sm = &card->sm_ctx.info.session.cwa;
+	memcpy(sm->ifd.sn, sn_ifd, sizeof(sm->ifd.sn));
 	return SC_SUCCESS;
 }
 
@@ -752,13 +748,12 @@ static int dnie_get_sn_ifd(sc_card_t * card, u8 ** buf)
  * return SC_SUCCESS
  *
  * @param card pointer to card structure
- * @param buf where to store result (8 bytes)
  * @return SC_SUCCESS if ok; else error
  */
-static int dnie_get_sn_ifd_pin(sc_card_t * card, u8 ** buf)
+static int dnie_get_sn_ifd_pin(sc_card_t * card)
 {
-	LOG_FUNC_CALLED(card->ctx);
-	*buf = sn_ifd_pin;
+	struct sm_cwa_session * sm = &card->sm_ctx.info.session.cwa;
+	memcpy(sm->ifd.sn, sn_ifd_pin, sizeof(sm->ifd.sn));
 	return SC_SUCCESS;
 }
 
@@ -768,21 +763,19 @@ static int dnie_get_sn_ifd_pin(sc_card_t * card, u8 ** buf)
  * Just retrieve it from cache and return success
  *
  * @param card pointer to card structure
- * @param buf where to store result (8 bytes)
  * @return SC_SUCCESS if ok; else error
  */
-static int dnie_get_sn_icc(sc_card_t * card, u8 ** buf)
+static int dnie_get_sn_icc(sc_card_t * card)
 {
 	int res=SC_SUCCESS;
 	sc_serial_number_t serial;
+	struct sm_cwa_session * sm = &card->sm_ctx.info.session.cwa;
 
 	res = sc_card_ctl(card, SC_CARDCTL_GET_SERIALNR, &serial);
 	LOG_TEST_RET(card->ctx, res, "Error in gettting serial number");
 	/* copy into sn_icc buffer.Remember that dnie sn has 7 bytes length */
-	memset(&sn_icc[0], 0, sizeof(sn_icc));
-	memcpy(&sn_icc[1], serial.value, 7);
-	/* return data */
-	*buf = &sn_icc[0];
+	memset(sm->icc.sn, 0, sizeof(sm->icc.sn));
+	memcpy(&sm->icc.sn[1], serial.value, 7);
 	return SC_SUCCESS;
 }
 
@@ -813,17 +806,6 @@ static int dnie_create_pre_ops(sc_card_t * card, cwa_provider_t * provider)
 }
 
 /**
- * Now in DNIe the channel mode is changed to SM_MODE_TRANSMIT
- * after CWA initialization to be consistent with OpenSC
- */
-static int dnie_create_post_ops(sc_card_t * card, cwa_provider_t * provider)
-{
-	card->sm_ctx.sm_mode = SM_MODE_TRANSMIT;
-
-	return SC_SUCCESS;
-}
-
-/**
  * Main entry point for DNIe CWA14890 SM data provider.
  *
  * Return a pointer to DNIe data provider with proper function pointers
@@ -842,11 +824,9 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card)
 
 	/* pre and post operations */
 	res->cwa_create_pre_ops = dnie_create_pre_ops;
-	res->cwa_create_post_ops = dnie_create_post_ops;
 
 	/* Get ICC intermediate CA  path */
-	res->cwa_get_icc_intermediate_ca_cert =
-	    dnie_get_icc_intermediate_ca_cert;
+	res->cwa_get_icc_intermediate_ca_cert = dnie_get_icc_intermediate_ca_cert;
 	/* Get ICC certificate path */
 	res->cwa_get_icc_cert = dnie_get_icc_cert;
 
@@ -864,8 +844,7 @@ cwa_provider_t *dnie_get_cwa_provider(sc_card_t * card)
 	res->cwa_get_root_ca_pubkey_ref = dnie_get_root_ca_pubkey_ref;
 
 	/* Get public key reference for IFD intermediate CA certificate */
-	res->cwa_get_intermediate_ca_pubkey_ref =
-	    dnie_get_intermediate_ca_pubkey_ref;
+	res->cwa_get_intermediate_ca_pubkey_ref = dnie_get_intermediate_ca_pubkey_ref;
 
 	/* Get public key reference for IFD CVC certificate */
 	res->cwa_get_ifd_pubkey_ref = dnie_get_ifd_pubkey_ref;
@@ -916,25 +895,6 @@ void dnie_change_cwa_provider_to_pin(sc_card_t * card)
 	res->cwa_get_sn_ifd = dnie_get_sn_ifd_pin;
 }
 
-int dnie_transmit_apdu(sc_card_t * card, sc_apdu_t * apdu)
-{
-	int res = SC_SUCCESS;
-	sc_context_t *ctx;
-	cwa_provider_t *provider = NULL;
-	ctx=card->ctx;
-	provider = GET_DNIE_PRIV_DATA(card)->cwa_provider;
-	if ((provider->status.session.state == CWA_SM_ACTIVE) &&
-		(card->sm_ctx.sm_mode == SM_MODE_TRANSMIT)) {
-		res = sc_transmit_apdu(card, apdu);
-		LOG_TEST_RET(ctx, res, "Error in dnie_wrap_apdu process");
-		res = cwa_decode_response(card, provider, apdu);
-		LOG_TEST_RET(ctx, res, "Error in cwa_decode_response process");
-	}
-	else
-		res = sc_transmit_apdu(card, apdu);
-	return res;
-}
-
 void dnie_format_apdu(sc_card_t *card, sc_apdu_t *apdu,
 			int cse, int ins, int p1, int p2, int le, int lc,
 			unsigned char * resp, size_t resplen,
@@ -950,16 +910,6 @@ void dnie_format_apdu(sc_card_t *card, sc_apdu_t *apdu,
 	if (data != NULL) {
 		apdu->data = data;
 		apdu->datalen = datalen;
-	}
-}
-
-void dnie_free_apdu_buffers(sc_apdu_t *apdu,
-				unsigned char * resp, size_t resplen)
-{
-	if (apdu->resp != resp) {
-		free(apdu->resp);
-		apdu->resp = resp;
-		apdu->resplen = resplen;
 	}
 }
 

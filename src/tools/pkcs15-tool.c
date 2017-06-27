@@ -76,7 +76,7 @@ static const char * opt_pin = NULL;
 static const char * opt_puk = NULL;
 static int	compact = 0;
 static int	verbose = 0;
-static int opt_no_prompt = 0;
+static int opt_use_pinpad = 0;
 #if defined(ENABLE_OPENSSL) && (defined(_WIN32) || defined(HAVE_INTTYPES_H))
 static int opt_rfc4716 = 0;
 #endif
@@ -102,7 +102,8 @@ enum {
 	OPT_BIND_TO_AID,
 	OPT_LIST_APPLICATIONS,
 	OPT_LIST_SKEYS,
-	OPT_NO_PROMPT,
+	OPT_USE_PINPAD,
+	OPT_USE_PINPAD_DEPRECATED,
 	OPT_RAW,
 	OPT_PRINT_VERSION,
 	OPT_LIST_INFO,
@@ -149,7 +150,8 @@ static const struct option options[] = {
 	{ "aid",		required_argument, NULL,	OPT_BIND_TO_AID },
 	{ "wait",		no_argument, NULL,		'w' },
 	{ "verbose",		no_argument, NULL,		'v' },
-	{ "no-prompt",		no_argument, NULL,		OPT_NO_PROMPT },
+	{ "use-pinpad",		no_argument, NULL,		OPT_USE_PINPAD },
+	{ "no-prompt",		no_argument, NULL,		OPT_USE_PINPAD_DEPRECATED },
 	{ NULL, 0, NULL, 0 }
 };
 
@@ -191,6 +193,7 @@ static const char *option_help[] = {
 	"Wait for card insertion",
 	"Verbose operation. Use several times to enable debug output.",
 	"Do not prompt the user; if no PINs supplied, pinpad will be used.",
+	NULL,
 	NULL
 };
 
@@ -530,7 +533,8 @@ static int list_data_objects(void)
 					return 1;
 				}
 				sc_pkcs15_free_data_object(data_object);
-				printf("  Size:%5lu", cinfo->data.len);
+				printf("  Size:%5"SC_FORMAT_LEN_SIZE_T"u",
+				       cinfo->data.len);
 			} else {
 				printf("  AuthID:%-3s", sc_pkcs15_print_id(&objs[i]->auth_id));
 			}
@@ -793,15 +797,18 @@ static int read_public_key(void)
 
 	if (r == SC_ERROR_OBJECT_NOT_FOUND) {
 		fprintf(stderr, "Public key with ID '%s' not found.\n", opt_pubkey);
-		return 2;
+		r = 2;
+		goto out;
 	}
 	if (r < 0) {
 		fprintf(stderr, "Public key enumeration failed: %s\n", sc_strerror(r));
-		return 1;
+		r = 1;
+		goto out;
 	}
 	if (!pubkey) {
 		fprintf(stderr, "Public key not available\n");
-		return 1;
+		r = 1;
+		goto out;
 	}
 
 	r = sc_pkcs15_encode_pubkey_as_spki(ctx, pubkey, &pem_key.value, &pem_key.len);
@@ -813,6 +820,7 @@ static int read_public_key(void)
 		free(pem_key.value);
 	}
 
+out:
 	if (cert)
 		sc_pkcs15_free_certificate(cert);
 	else if (pubkey)
@@ -823,12 +831,12 @@ static int read_public_key(void)
 
 static void print_skey_info(const struct sc_pkcs15_object *obj)
 {
+	static const char *skey_types[] = { "", "Generic", "DES", "2DES", "3DES", "", "", "" };
 	struct sc_pkcs15_skey_info *skey = (struct sc_pkcs15_skey_info *) obj->data;
-	const char *types[] = { "generic", "DES", "2DES", "3DES"};
 	unsigned char guid[40];
 	size_t guid_len;
 
-	printf("Secret %s Key [%.*s]\n", types[3 & obj->type], (int) sizeof obj->label, obj->label);
+	printf("Secret %s Key [%.*s]\n", skey_types[7 & obj->type], (int) sizeof obj->label, obj->label);
 	print_common_flags(obj);
 	printf("\tUsage          : [0x%X]", skey->usage);
 	print_key_usages(skey->usage);
@@ -866,7 +874,7 @@ static int list_skeys(void)
 		return 1;
 	}
 	if (verbose)
-		printf("Card has %d secret key(s).\n\n", r);
+		printf("Card has %d Secret key(s).\n\n", r);
 	for (i = 0; i < r; i++) {
 		print_skey_info(objs[i]);
 		printf("\n");
@@ -883,6 +891,8 @@ static void print_ssh_key(FILE *outf, const char * alg, struct sc_pkcs15_object 
 	int r;
 
 	uu = malloc(len*2); // Way over - even if we have extra LFs; as each 6 bits take one byte.
+	if (!uu)
+		return;
 
 	if (opt_rfc4716) {
 		r = sc_base64_encode(buf, len, uu, 2*len, 64);
@@ -1177,7 +1187,7 @@ static u8 * get_pin(const char *prompt, sc_pkcs15_object_t *pin_obj)
 	size_t len = 0;
 	int r;
 
-	if (opt_no_prompt) {
+	if (opt_use_pinpad) {
 		// defer entry of the PIN to the readers pinpad.
 		if (verbose)
 			printf("%s [%.*s]: entry deferred to the reader keypad\n", prompt, (int) sizeof pin_obj->label, pin_obj->label);
@@ -1607,6 +1617,7 @@ static int dump(void)
 	list_pins();
 	list_private_keys();
 	list_public_keys();
+	list_skeys();
 	list_certificates();
 	list_data_objects();
 
@@ -2188,8 +2199,11 @@ int main(int argc, char * const argv[])
 		case 'w':
 			opt_wait = 1;
 			break;
-		case OPT_NO_PROMPT:
-			opt_no_prompt = 1;
+		case OPT_USE_PINPAD_DEPRECATED:
+			fprintf(stderr, "'--no-prompt' is deprecated , use '--use-pinpad' instead.\n");
+			/* fallthrough */
+		case OPT_USE_PINPAD:
+			opt_use_pinpad = 1;
 			break;
 		}
 	}

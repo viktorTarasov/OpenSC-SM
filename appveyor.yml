@@ -29,22 +29,18 @@ install:
         throw "There are newer queued builds for this pull request, failing early." }
   - date /T & time /T
   - set PATH=C:\cygwin\bin;%PATH%
-  - set OPENSSL_VER=1_0_2e
+  - set OPENSSL_VER=1_0_2f
   - set OPENPACE_VER=1.0.1
   - set ZLIB_VER_DOT=1.2.8
   - ps: $env:PACKAGE_NAME=(git describe --tags)
   - ps: >-
       If ($env:Platform -Match "x86") {
         $env:VCVARS_PLATFORM="x86"
-        $env:ENV_PLATFORM="x86"
         $env:OPENSSL_PF="Win32"
-        $env:NMAKE_ARCH=""
         $env:ARTIFACT="OpenSC-win32_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       } Else {
         $env:VCVARS_PLATFORM="amd64"
-        $env:ENV_PLATFORM="x64"
         $env:OPENSSL_PF="Win64"
-        $env:NMAKE_ARCH="BUILD_ON=WIN64 BUILD_FOR=WIN64"
         $env:ARTIFACT="OpenSC-win64_vs${env:VSVER}-${env:CONFIGURATION}.msi"
       }
   - ps: >-
@@ -58,16 +54,16 @@ install:
           C:\WinOpenSSL.exe /SILENT /VERYSILENT /SP- /SUPPRESSMSGBOXES /NORESTART
         }
         $env:NMAKE_EXTRA="OPENSSL_DEF=/DENABLE_OPENSSL ${env:NMAKE_EXTRA}"
-        If (!(Test-Path zlib.zip )) {
-           appveyor DownloadFile "https://github.com/madler/zlib/archive/v${env:ZLIB_VER_DOT}.zip" -FileName zlib.zip
+        If (!(Test-Path C:\zlib )) {
+          appveyor DownloadFile "https://github.com/madler/zlib/archive/v${env:ZLIB_VER_DOT}.zip" -FileName zlib.zip
+          7z x zlib.zip -oC:\
+          Rename-Item -path "c:\zlib-${env:ZLIB_VER_DOT}" -newName "zlib"
         }
-        7z x zlib.zip -oC:\
-        Rename-Item -path "c:\zlib-${env:ZLIB_VER_DOT}" -newName "zlib"
-        If (!(Test-Path openpace.zip )) {
+        If (!(Test-Path C:\openpace )) {
           appveyor DownloadFile "https://github.com/frankmorgner/openpace/archive/${env:OPENPACE_VER}.zip" -FileName openpace.zip
+          7z x openpace.zip -oC:\
+          Rename-Item -path "c:\openpace-${env:OPENPACE_VER}" -newName "openpace"
         }
-        7z x openpace.zip -oC:\
-        Rename-Item -path "c:\openpace-${env:OPENPACE_VER}" -newName "openpace"
       }
   - ps: $env:VSCOMNTOOLS=(Get-Content ("env:VS" + "$env:VSVER" + "0COMNTOOLS"))
   - echo "Using Visual Studio %VSVER%.0 at %VSCOMNTOOLS%"
@@ -80,29 +76,35 @@ install:
 build_script:
   - ps: >-
       if (!($env:Configuration -Like "*Light*")) {
+        If (!(Test-Path -Path "C:\zlib-${env:OPENSSL_PF}" )) {
           # build zlib.lib as a static library
-          cd C:\zlib
+          xcopy C:\zlib C:\zlib-${env:OPENSSL_PF} /e /i /y /s
+          cd C:\zlib-${env:OPENSSL_PF}
           (Get-Content win32/Makefile.msc).replace('-MD', '-MT') | Set-Content win32/Makefile.msc
           If ($env:Platform -Match "x86") {
              nmake -f win32/Makefile.msc LOC="-DASMV -DASMINF" OBJA="inffas32.obj match686.obj" zlib.lib
           } Else {
              nmake -f win32/Makefile.msc AS=ml64 LOC="-DASMV -DASMINF -I." OBJA="inffasx64.obj gvmat64.obj inffas8664.obj" zlib.lib
           }
-          $env:NMAKE_EXTRA="ZLIBSTATIC_DEF=/DENABLE_ZLIB_STATIC ${env:NMAKE_EXTRA}"
+        }
+        $env:NMAKE_EXTRA="ZLIBSTATIC_DEF=/DENABLE_ZLIB_STATIC ZLIB_INCL_DIR=/IC:\zlib-${env:OPENSSL_PF} ZLIB_LIB=C:\zlib-${env:OPENSSL_PF}\zlib.lib ${env:NMAKE_EXTRA}"
+        If (!(Test-Path -Path "C:\openpace-${env:OPENSSL_PF}" )) {
           # build libeac.lib as a static library
-          cd C:\openpace\src
-          cl /IC:\OpenSSL-${env:OPENSSL_PF}\include /I. /DX509DIR=\`"/\`" /DCVCDIR=\`"/\`" /W3 /D_CRT_SECURE_NO_DEPRECATE /DWIN32_LEAN_AND_MEAN /GS /MT /c ca_lib.c cv_cert.c cvc_lookup.c x509_lookup.c eac_asn1.c eac.c eac_ca.c eac_dh.c eac_ecdh.c eac_kdf.c eac_lib.c eac_print.c eac_util.c misc.c pace.c pace_lib.c pace_mappings.c ri.c ri_lib.c ta.c ta_lib.c objects.c ssl_compat.c
-          lib /out:libeac.lib ca_lib.obj cv_cert.obj cvc_lookup.obj x509_lookup.obj eac_asn1.obj eac.obj eac_ca.obj eac_dh.obj eac_ecdh.obj eac_kdf.obj eac_lib.obj eac_print.obj eac_util.obj misc.obj pace.obj pace_lib.obj pace_mappings.obj ri.obj ri_lib.obj ta.obj ta_lib.obj objects.obj ssl_compat.obj
-          $env:NMAKE_EXTRA="OPENPACE_DEF=/DENABLE_OPENPACE ${env:NMAKE_EXTRA}"
+          xcopy C:\openpace C:\openpace-${env:OPENSSL_PF} /e /i /y /s
+          cd C:\openpace-${env:OPENSSL_PF}\src
+          cl /IC:\OpenSSL-${env:OPENSSL_PF}\include /I. /DX509DIR=\`"/\`" /DCVCDIR=\`"/\`" /W3 /D_CRT_SECURE_NO_DEPRECATE /DWIN32_LEAN_AND_MEAN /GS /MT /c ca_lib.c cv_cert.c cvc_lookup.c x509_lookup.c eac_asn1.c eac.c eac_ca.c eac_dh.c eac_ecdh.c eac_kdf.c eac_lib.c eac_print.c eac_util.c misc.c pace.c pace_lib.c pace_mappings.c ri.c ri_lib.c ta.c ta_lib.c objects.c
+          lib /out:libeac.lib ca_lib.obj cv_cert.obj cvc_lookup.obj x509_lookup.obj eac_asn1.obj eac.obj eac_ca.obj eac_dh.obj eac_ecdh.obj eac_kdf.obj eac_lib.obj eac_print.obj eac_util.obj misc.obj pace.obj pace_lib.obj pace_mappings.obj ri.obj ri_lib.obj ta.obj ta_lib.obj objects.obj
           cd C:\projects\OpenSC
+        }
+        $env:NMAKE_EXTRA="OPENPACE_DEF=/DENABLE_OPENPACE OPENPACE_DIR=C:\openpace-${env:OPENSSL_PF} ${env:NMAKE_EXTRA}"
       }
   - bash -c "exec 0</dev/null && ./bootstrap"
   # disable features to speed up the script
   - bash -c "exec 0</dev/null && ./configure --disable-openssl --disable-readline --disable-zlib || cat config.log"
   - bash -c "make -C etc opensc.conf"
   - cp win32/winconfig.h config.h
-  - nmake /f Makefile.mak %NMAKE_ARCH% %NMAKE_EXTRA%
-  - cd win32 && nmake /f Makefile.mak %NMAKE_ARCH% %NMAKE_EXTRA% VSVER=%VSVER% OpenSC.msi
+  - nmake /f Makefile.mak %NMAKE_EXTRA%
+  - cd win32 && nmake /f Makefile.mak %NMAKE_EXTRA% VSVER=%VSVER% OpenSC.msi
   - move OpenSC.msi %ARTIFACT%
   - appveyor PushArtifact %ARTIFACT%
   # put all pdb files for dump analysis, but this consumes approx 100 MB per build
@@ -114,7 +116,12 @@ build_script:
 cache:
   - C:\OpenSSL-Win32 -> appveyor.yml
   - C:\OpenSSL-Win64 -> appveyor.yml
-  - zlib.zip -> appveyor.yml
+  - C:\zlib -> appveyor.yml
+  - C:\zlib-Win32 -> appveyor.yml
+  - C:\zlib-Win64 -> appveyor.yml
+  - C:\openpace -> appveyor.yml
+  - C:\openpace-Win32 -> appveyor.yml
+  - C:\openpace-Win64 -> appveyor.yml
 
 deploy:
   - provider: GitHub

@@ -186,12 +186,14 @@ CK_RV push_login_state(struct sc_pkcs11_slot *slot,
 		goto err;
 	}
 
-	login->pPin = sc_mem_alloc_secure(context, (sizeof *pPin)*ulPinLen);
-	if (login->pPin == NULL) {
-		goto err;
+	if (pPin && ulPinLen) {
+		login->pPin = sc_mem_alloc_secure(context, (sizeof *pPin)*ulPinLen);
+		if (login->pPin == NULL) {
+			goto err;
+		}
+		memcpy(login->pPin, pPin, (sizeof *pPin)*ulPinLen);
+		login->ulPinLen = ulPinLen;
 	}
-	memcpy(login->pPin, pPin, (sizeof *pPin)*ulPinLen);
-	login->ulPinLen = ulPinLen;
 	login->userType = userType;
 
 	if (0 > list_append(&slot->logins, login)) {
@@ -408,6 +410,18 @@ CK_RV attr_find_ptr(CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, CK_ULONG type,
 		*sizep = pTemplate->ulValueLen;
 	*ptr = pTemplate->pValue;
 	return CKR_OK;
+}
+
+CK_RV attr_find_ptr2(CK_ATTRIBUTE_PTR pTemp1, CK_ULONG ulCount1,
+		 CK_ATTRIBUTE_PTR pTemp2, CK_ULONG ulCount2, CK_ULONG type, void **ptr, size_t * sizep)
+{
+	CK_RV rv;
+
+	rv = attr_find_ptr(pTemp1, ulCount1, type, ptr, sizep);
+	if (rv != CKR_OK)
+		rv = attr_find_ptr(pTemp2, ulCount2, type, ptr, sizep);
+
+	return rv;
 }
 
 CK_RV attr_find_var(CK_ATTRIBUTE_PTR pTemplate, CK_ULONG ulCount, CK_ULONG type, void *ptr, size_t * sizep)
