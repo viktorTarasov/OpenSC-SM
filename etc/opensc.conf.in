@@ -504,6 +504,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 
 	# GoID with fingerprint sensor and PIN pad
@@ -522,6 +529,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:85:80:01:47:6f:49:44:00:00 {
@@ -539,6 +553,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:86:80:01:47:6f:49:44:00:00:00 {
@@ -556,6 +577,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:87:80:01:47:6f:49:44:00:00:00:00 {
@@ -573,6 +601,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:88:80:01:47:6f:49:44:00:00:00:00:00 {
@@ -590,6 +625,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:89:80:01:47:6f:49:44:00:00:00:00:00:00 {
@@ -607,6 +649,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:8A:80:01:47:6f:49:44:00:00:00:00:00:00:00 {
@@ -624,6 +673,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:8B:80:01:47:6f:49:44:00:00:00:00:00:00:00:00 {
@@ -641,6 +697,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 	# GoID with fingerprint sensor and PIN pad
 	card_atr 3B:8C:80:01:47:6f:49:44:00:00:00:00:00:00:00:00:00 {
@@ -658,6 +721,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 
 	# GoID with fingerprint sensor and PIN pad
@@ -676,6 +746,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 
 	# GoID with fingerprint sensor and PIN pad
@@ -694,6 +771,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 
 	# GoID with fingerprint sensor and PIN pad
@@ -712,6 +796,13 @@ app default {
 		md_pinpad_dlg_expanded_cancel = "Die Karte unterstützt das Abbrechen ausschließlich am PIN-Pad. Nutzen Sie das PIN-Pad, um die Eingabe abzubrechen oder entfernen Sie die Karte.";
 		md_pinpad_dlg_allow_cancel = false;
 		md_pinpad_dlg_timeout = 30;
+		notify_card_inserted = "GoID erkannt";
+		notify_card_inserted_text = "";
+		notify_card_removed = "GoID entfernt";
+		notify_pin_good = "Fingerabdruck bzw. PIN verifiziert";
+		notify_pin_good_text = "GoID ist entsperrt";
+		notify_pin_bad = "Fingerabdruck bzw. PIN nicht verifiziert";
+		notify_pin_bad_text = "GoID ist gesperrt";
 	}
 
 	secure_messaging local_authentic  {
