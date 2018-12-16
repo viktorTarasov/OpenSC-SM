@@ -74,8 +74,10 @@ static const struct sc_atr_table iasecc_known_atrs[] = {
 	{ "3B:7F:96:00:00:00:31:B8:64:40:70:14:10:73:94:01:80:82:90:00",
 	  "FF:FF:FF:FF:FF:FF:FF:FE:FF:FF:00:00:FF:FF:FF:FF:FF:FF:FF:FF",
 		"IAS/ECC Gemalto", SC_CARD_TYPE_IASECC_GEMALTO,  0, NULL },
-        { "3B:DD:18:00:81:31:FE:45:80:F9:A0:00:00:00:77:01:08:00:07:90:00:FE", NULL,
+    { "3B:DD:18:00:81:31:FE:45:80:F9:A0:00:00:00:77:01:08:00:07:90:00:FE", NULL,
 		"IAS/ECC v1.0.1 Oberthur", SC_CARD_TYPE_IASECC_OBERTHUR,  0, NULL },
+    { "3B:DD:96:00:81:31:FE:45:80:F9:A0:00:00:00:77:01:08:00:07:90:00:70", NULL,
+		"ID-One v8.1 IAS/ECC v2 Oberthur", SC_CARD_TYPE_IASECC_OBERTHUR,  0, NULL },
 	{ "3B:7D:13:00:00:4D:44:57:2D:49:41:53:2D:43:41:52:44:32", NULL,
 		"IAS/ECC v1.0.1 Sagem MDW-IAS-CARD2", SC_CARD_TYPE_IASECC_SAGEM,  0, NULL },
 	{ "3B:7F:18:00:00:00:31:B8:64:50:23:EC:C1:73:94:01:80:82:90:00", NULL,
@@ -2207,8 +2209,15 @@ iasecc_pin_get_policy (struct sc_card *card, struct sc_pin_cmd_data *data)
 			se.reference = acl->key_ref;
 
 			rv = iasecc_se_get_info(card, &se);
+#if 0
 			LOG_TEST_GOTO_ERR(ctx, rv, "SDO get data error");
-		}
+#else
+            if (rv)   {
+				acl->method = SC_AC_NEVER;
+                continue;
+            }
+#endif
+        }
 
 		if (scb & IASECC_SCB_METHOD_USER_AUTH)   {
 			rv = iasecc_se_get_crt_by_usage(card, &se,

@@ -39,24 +39,38 @@
 
 static const char *app_name = "iasecc-tool";
 
-static char * opt_bind_to_aid = NULL;
-static char * opt_reader = NULL;
-static char * opt_sdo_tag = 0;
-static int opt_wait = 0;
-static int verbose = 0;
-
 enum {
 	OPT_READER = 0x100,
 	OPT_BIND_TO_AID,
 	OPT_LIST_SDOS,
-	OPT_LIST_APPLICATIONS
+	OPT_LIST_APPLICATIONS,
+	OPT_UPDATE_TOKEN_LABEL,
+	OPT_SOPIN,
+	OPT_CARD_TYPE,
 };
+
+enum {
+    CARD_TYPE_UNKNOWN = 0,
+    CARD_TYPE_OBERTHUR_IASECC = 1,
+};
+
+static char * opt_bind_to_aid = NULL;
+static char * opt_reader = NULL;
+static char * opt_sdo_tag = NULL;
+static char * opt_sopin = NULL;
+static char * opt_new_token_label = NULL;
+static int opt_wait = 0;
+static int verbose = 0;
+static int opt_card_type = CARD_TYPE_UNKNOWN;
 
 static const struct option options[] = {
 	{ "reader",	required_argument, NULL, OPT_READER },
 	{ "aid",	required_argument, NULL, OPT_BIND_TO_AID },
 	{ "list-applications",  no_argument, NULL,              OPT_LIST_APPLICATIONS },
 	{ "list-sdos",	required_argument, NULL, OPT_LIST_SDOS },
+	{ "update-token-label",	required_argument, NULL, OPT_UPDATE_TOKEN_LABEL },
+	{ "card-type",	required_argument, NULL, OPT_CARD_TYPE },
+	{ "sopin",	required_argument, NULL, OPT_SOPIN },
 	{ "wait",	no_argument, NULL, 'w' },
 	{ "verbose",	no_argument, NULL, 'v' },
 	{ NULL, 0, NULL, 0 }
@@ -67,6 +81,9 @@ static const char *option_help[] = {
 	"Specify AID of the on-card PKCS#15 application to be binded to (in hexadecimal form)",
 	"List the on-card PKCS#15 applications",
 	"List the SDOs with the <arg> tag in the current ADF",
+	"Set token label",
+	"Card type ('oberthur-iasecc')",
+	"SoPIN to det token label",
 	"Wait for card insertion",
 	"Verbose operation. Use several times to enable debug output.",
 	NULL
@@ -197,11 +214,117 @@ static int list_apps(FILE *fout)
 	return 0;
 }
 
+
+static int
+update_token_label(int card_type, char *sopin, char *new_token_label)
+{
+    sc_path_t path;
+    sc_file_t *file = NULL;
+    unsigned char *data = NULL;
+    unsigned char pin[0x40];
+    unsigned char label[0x40];
+    struct sc_pin_cmd_data pin_cmd;
+    int rv = -1, tries_left = -1;
+    size_t offs = 0, label_len;
+
+    if (card_type != CARD_TYPE_OBERTHUR_IASECC)   {
+	    fprintf(stderr, "Only Oberthur flavor of IAS/ECC can be used.\n");
+		return -1;
+    }
+
+    if (!sopin || !new_token_label)   {
+	    fprintf(stderr, "SOPIN and NewTokenLabel are mandatory arguments.\n");
+		return -1;
+    }
+
+    if (strlen(sopin) > sizeof(pin))   {
+	    fprintf(stderr, "Invalid SOPIN value\n");
+		return -1;
+    }
+
+    memset(pin, 0xFF, sizeof(pin));
+    memcpy(pin, sopin, strlen(sopin));
+
+    memset(&pin_cmd, 0, sizeof(pin_cmd));
+    pin_cmd.cmd = SC_PIN_CMD_VERIFY;
+    pin_cmd.pin_type = SC_AC_CHV;
+    pin_cmd.pin_reference = 2;
+    pin_cmd.pin1.data = pin;
+    pin_cmd.pin1.len = sizeof(pin);
+
+    memset(label, ' ', sizeof(label));
+    
+    sc_format_path("5032", &path);
+    if (sc_select_file(card, &path, &file))   {
+	    fprintf(stderr, "Cannot select TokenInfo file (5032).\n");
+		return -1;
+    }
+
+    data = calloc(1, file->size);
+    if (!data)   {
+	    fprintf(stderr, "Memory allocation error.\n");
+		return -1;
+    }
+
+    if (sc_pin_cmd(card, &pin_cmd, &tries_left))  {
+	    fprintf(stderr, "Failed to verify SoPIN\n");
+		goto err;
+    }
+
+    rv = sc_read_binary(card, 0, data, file->size, 0);
+    if (rv < 0)   {
+	    fprintf(stderr, "Memory allocation error.\n");
+		goto err;
+    }
+
+    offs = 0;
+    if (*(data + offs) != (SC_ASN1_SEQUENCE | SC_ASN1_TAG_CONSTRUCTED))
+        goto err;
+    offs++;
+    offs += (*(data + offs) & 0x1F) + 1;
+    if (*(data + offs) != SC_ASN1_INTEGER)
+        goto err;
+    offs++;
+    offs += *(data + offs) + 1;
+
+    if (*(data + offs) != SC_ASN1_UTF8STRING)
+        goto err;
+    offs++;
+    offs += *(data + offs) + 1;
+
+    if (*(data + offs) != SC_ASN1_TAG_CONTEXT)
+        goto err;
+    label_len = *(data + offs + 1);
+    offs += 2;
+
+    if (label_len > sizeof(label))
+        label_len = sizeof(label);
+    if (strlen(new_token_label) > label_len)   {
+	    fprintf(stderr, "Invalid new label length\n");
+        return -1;
+    }
+    memcpy(label, new_token_label, strlen(new_token_label));
+
+    rv = sc_update_binary(card, offs, label, label_len, 0);
+    if (rv < 0)   {
+	    fprintf(stderr, "Cannot update binary file\n");
+		goto err;
+    }
+
+    rv = 0;
+err:
+    free(data);
+    sc_file_free(file);
+    return rv;
+}
+
+
 int main(int argc, char *argv[])
 {
 	int err = 0, r, c, long_optind = 0;
 	int do_list_sdos = 0;
 	int do_list_apps = 0;
+	int do_update_token_label = 0;
 	int action_count = 0;
 	sc_context_param_t ctx_param;
 
@@ -215,21 +338,38 @@ int main(int argc, char *argv[])
 		if (c == '?')
 			util_print_usage_and_die(app_name, options, option_help, NULL);
 		switch (c) {
-                case OPT_LIST_SDOS:
-                        do_list_sdos = 1;
-                        opt_sdo_tag = optarg;
-                        action_count++;
-                        break;
+        case OPT_LIST_SDOS:
+            do_list_sdos = 1;
+            opt_sdo_tag = optarg;
+            action_count++;
+            break;
 		case OPT_LIST_APPLICATIONS:
 			do_list_apps = 1;
 			action_count++;
 			break;
-                case OPT_BIND_TO_AID:
+        case OPT_BIND_TO_AID:
 			opt_bind_to_aid = optarg;
 			break;
 		case OPT_READER:
 			opt_reader = optarg;
 			break;
+		case OPT_UPDATE_TOKEN_LABEL:
+			do_update_token_label = 1;
+			action_count++;
+            opt_new_token_label = optarg;
+			break;
+		case OPT_SOPIN:
+			opt_sopin = optarg;
+			break;
+        case OPT_CARD_TYPE:
+            if (!strcmp(optarg, "oberthur-iasecc"))   {
+                opt_card_type = CARD_TYPE_OBERTHUR_IASECC;
+            }
+            else   {
+		        fprintf(stderr, "Card type '%s' is not allowed\n", optarg);
+		        return 1;
+            }
+            break;
 		case 'v':
 			verbose++;
 			break;
@@ -282,6 +422,11 @@ int main(int argc, char *argv[])
 	}
 	if (do_list_apps) {
 		if ((err = list_apps(stdout)))
+			goto end;
+		action_count--;
+	}
+	if (do_update_token_label) {
+		if ((err = update_token_label(opt_card_type, opt_sopin, opt_new_token_label)))
 			goto end;
 		action_count--;
 	}
