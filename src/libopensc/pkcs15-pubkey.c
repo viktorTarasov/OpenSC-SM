@@ -1129,6 +1129,11 @@ sc_pkcs15_dup_pubkey(struct sc_context *ctx, struct sc_pkcs15_pubkey *key, struc
 			rv = SC_ERROR_OUT_OF_MEMORY;
 			break;
 		}
+		if (!key->u.ec.params.der.len) {
+                        rv = SC_ERROR_WRONG_LENGTH;
+                        sc_log(ctx, "Key legnth is null, will not be able to copy it (badly with segmentation fault");
+                        break;
+                }
 		memcpy(pubkey->u.ec.params.der.value, key->u.ec.params.der.value, key->u.ec.params.der.len);
 		pubkey->u.ec.params.der.len = key->u.ec.params.der.len;
 
