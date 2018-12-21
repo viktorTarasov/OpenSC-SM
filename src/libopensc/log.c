@@ -331,7 +331,7 @@ sc_dump_hex(const u8 * in, size_t count)
 
 	for (ii=0; ii<count; ii++) {
 		if (ii && !(ii%16))   {
-			if (!(ii%48))
+			if (!(ii%64))
 				snprintf(dump_buf + offs, size - offs, "\n");
 			else
 				snprintf(dump_buf + offs, size - offs, " ");
