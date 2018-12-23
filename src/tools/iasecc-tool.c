@@ -34,6 +34,7 @@
 #include "libopensc/opensc.h"
 #include "libopensc/cardctl.h"
 #include "libopensc/asn1.h"
+#include "libopensc/log.h"
 #include "libopensc/iasecc.h"
 #include "util.h"
 
@@ -215,6 +216,7 @@ static int list_apps(FILE *fout)
 }
 
 
+#if 0
 static int
 update_token_label(int card_type, char *sopin, char *new_token_label)
 {
@@ -317,6 +319,160 @@ err:
     sc_file_free(file);
     return rv;
 }
+
+#else
+
+static int
+verify_sopin(char *value)
+{
+    unsigned char pin[0x40];
+    struct sc_pin_cmd_data pin_cmd;
+    int tries_left = -1;
+
+    if (!value)   {
+	    fprintf(stderr, "SOPIN is mandatory arguments.\n");
+		return -1;
+    }
+
+    if (strlen(value) > sizeof(pin))   {
+	    fprintf(stderr, "Invalid SOPIN value\n");
+		return -1;
+    }
+
+    memset(pin, 0xFF, sizeof(pin));
+    memcpy(pin, value, strlen(value));
+
+    memset(&pin_cmd, 0, sizeof(pin_cmd));
+    pin_cmd.cmd = SC_PIN_CMD_VERIFY;
+    pin_cmd.pin_type = SC_AC_CHV;
+    pin_cmd.pin_reference = 2;
+    pin_cmd.pin1.data = pin;
+    pin_cmd.pin1.len = sizeof(pin);
+
+    if (sc_pin_cmd(card, &pin_cmd, &tries_left))
+		return -1;
+    
+    return 0;
+}
+
+
+static int
+update_token_label(int card_type, char *sopin, char *new_token_label)
+{
+    struct sc_path path;
+    struct sc_file *file = NULL;
+    unsigned char *data = NULL;
+    int rv = -1;
+    size_t offs = 0, ii, label_len, asn1_total_len;
+
+    if (card_type != CARD_TYPE_OBERTHUR_IASECC)   {
+	    fprintf(stderr, "Only Oberthur flavor of IAS/ECC can be used.\n");
+		return -1;
+    }
+
+    if (!sopin || !new_token_label)   {
+	    fprintf(stderr, "SOPIN and NewTokenLabel are mandatory arguments.\n");
+		return -1;
+    }
+
+    if (strlen(new_token_label) > 0x20)   {
+	    fprintf(stderr, "New label length cannot be more then 32 characters.\n");
+        return -1;
+    }
+    
+    sc_format_path("5032", &path);
+    if (sc_select_file(card, &path, &file))   {
+	    fprintf(stderr, "Cannot select TokenInfo file (5032).\n");
+		return -1;
+    }
+
+    data = calloc(1, file->size + 0x20);
+    if (!data)   {
+	    fprintf(stderr, "Memory allocation error.\n");
+		return -1;
+    }
+
+    if (verify_sopin(sopin))   {
+	    fprintf(stderr, "Cannot verify SoPIN\n");
+        return -1;
+    }
+
+    rv = sc_read_binary(card, 0, data, file->size, 0);
+    if (rv < 0)   {
+	    fprintf(stderr, "Memory allocation error.\n");
+		goto err;
+    }
+
+    printf("%s +%i: TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    offs = 0;
+    if (*(data + offs) != (SC_ASN1_SEQUENCE | SC_ASN1_TAG_CONSTRUCTED))
+        goto err;
+    offs++;
+
+    for (ii=0, asn1_total_len = 0; ii < (*(data + offs) & 0x1F); ii++)
+        asn1_total_len = asn1_total_len * 0x100 + *(data + offs + ii + 1);
+    offs += (*(data + offs) & 0x1F) + 1;
+
+    if (*(data + offs) != SC_ASN1_INTEGER)
+        goto err;
+    offs++;
+    offs += *(data + offs) + 1;
+
+    if (*(data + offs) != SC_ASN1_UTF8STRING)
+        goto err;
+    offs++;
+    offs += *(data + offs) + 1;
+
+    if (*(data + offs) != SC_ASN1_TAG_CONTEXT)
+        goto err;
+    label_len = *(data + offs + 1);
+
+    printf("%s +%i: file size %li, new label length %li, current label length %li\n", __FILE__, __LINE__, file->size, strlen(new_token_label), label_len);
+    if (strlen(new_token_label) > label_len)   {
+        /* Shift file data after 'Label' on the difference between new and current labels */
+        memcpy(data + offs + 2 + strlen(new_token_label), data + offs + 2 + label_len, file->size - offs - label_len);
+        file->size += strlen(new_token_label) - label_len;
+        asn1_total_len += strlen(new_token_label) - label_len;
+
+        label_len = strlen(new_token_label);
+        /* Update 'label' size */
+        *(data + offs + 1) = label_len;
+
+        /* Update token-info total size */
+        *(data + 2) = (asn1_total_len >> 8) & 0xFF;
+        *(data + 3) = asn1_total_len & 0xFF;
+
+        /* Delete TokenInfo file and then ... */
+        rv = sc_delete_file(card, &file->path);
+        if (rv < 0)   {
+	        fprintf(stderr, "Fatal error: cannot delete TokenInfo file\n");
+		    goto err;
+        }
+
+        /* ... create TokenInfo file with increased size.*/
+        rv = sc_create_file(card, file);
+        if (rv < 0)   {
+	        fprintf(stderr, "Fatal error: cannot create TokenInfo file\n");
+		    goto err;
+        }
+    }
+    offs += 2;
+    memset(data + offs, ' ', label_len);
+    memcpy(data + offs, new_token_label, strlen(new_token_label));
+
+    printf("%s +%i: new TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    rv = sc_update_binary(card, 0, data, file->size, 0);
+    if (rv < 0)   {
+	    fprintf(stderr, "Cannot update TokenInfo binary file\n");
+		goto err;
+    }
+    rv = 0;
+err:
+    free(data);
+    sc_file_free(file);
+    return rv;
+}
+#endif
 
 
 int main(int argc, char *argv[])
