@@ -2506,13 +2506,24 @@ iasecc_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
-	sc_log(ctx, "iasecc_pin_cmd() cmd 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i, PIN-2 %p:%i",
-			data->cmd, data->pin_type, data->pin_reference,
-			data->pin1.data, data->pin1.len, data->pin2.data, data->pin2.len);
+	sc_log(ctx, "iasecc_pin_cmd() cmd 0x%X, flags 0x%X, PIN type 0x%X, PIN reference %i, PIN-1 %p:%i:%li, PIN-2 %p:%i:%li",
+			data->cmd, data->flags, data->pin_type, data->pin_reference,
+			data->pin1.data, data->pin1.len, data->pin1.pad_length,
+            data->pin2.data, data->pin2.len, data->pin2.pad_length);
 
 	switch (data->cmd)   {
 	case SC_PIN_CMD_VERIFY:
-		rv = iasecc_pin_verify(card, data->pin_type, data->pin_reference, data->pin1.data, data->pin1.len, tries_left);
+        if (((data->flags & SC_PIN_CMD_NEED_PADDING)) != 0 && (data->pin1.pad_length > (size_t)data->pin1.len))    {
+            unsigned char pin_data[256];
+            size_t pin_len = data->pin1.pad_length;
+
+            memcpy(pin_data, data->pin1.data, data->pin1.len);
+            memset(pin_data + data->pin1.len, data->pin1.pad_char, pin_len - data->pin1.len);
+		    rv = iasecc_pin_verify(card, data->pin_type, data->pin_reference, pin_data, pin_len, tries_left);
+        }
+        else   {
+		    rv = iasecc_pin_verify(card, data->pin_type, data->pin_reference, data->pin1.data, data->pin1.len, tries_left);
+        }
 		break;
 	case SC_PIN_CMD_CHANGE:
 		if (data->pin_type == SC_AC_AUT)
