@@ -1593,6 +1593,17 @@ static int change_pin(CK_SLOT_ID slot, CK_SESSION_HANDLE sess)
 	rv = p11->C_SetPIN(sess,
 		(CK_UTF8CHAR *) old_pin, old_pin == NULL ? 0 : strlen(old_pin),
 		(CK_UTF8CHAR *) new_pin, new_pin == NULL ? 0 : strlen(new_pin));
+	
+	if (rv == CKR_FUNCTION_NOT_SUPPORTED) { // try ot login and change again
+        	rv = p11->C_Login(sess, CKU_USER,
+                        (CK_UTF8CHAR *) old_pin, old_pin == NULL ? 0 : strlen(old_pin));
+        	if (rv != CKR_OK)
+                	p11_fatal("C_Login", rv);
+		rv = p11->C_SetPIN(sess,
+                (CK_UTF8CHAR *) old_pin, old_pin == NULL ? 0 : strlen(old_pin),
+                (CK_UTF8CHAR *) new_pin, new_pin == NULL ? 0 : strlen(new_pin));
+	}
+
 	if (rv != CKR_OK)
 		p11_fatal("C_SetPIN", rv);
 	printf("PIN successfully changed\n");
