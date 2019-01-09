@@ -2341,7 +2341,8 @@ iasecc_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries
 	struct sc_context *ctx = card->ctx;
 	struct sc_apdu apdu;
 	unsigned reference = data->pin_reference;
-	unsigned char pin_data[0x100];
+	unsigned char pin_data[0x100], pin1[0x80], pin2[0x80];
+    size_t pin1_len, pin2_len;
 	int rv;
 
 	LOG_FUNC_CALLED(ctx);
@@ -2355,27 +2356,53 @@ iasecc_pin_change(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries
 		}
 	}
 
-	if (!data->pin1.data && data->pin1.len)
+	if ((!data->pin1.data && data->pin1.len) || ((unsigned)data->pin1.len > sizeof(pin1)))
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 arguments");
 
-	if (!data->pin2.data && data->pin2.len)
+	if ((!data->pin2.data && data->pin2.len) || ((unsigned)data->pin2.len > sizeof(pin2)))
 		LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 arguments");
 
-	rv = iasecc_pin_verify(card, data->pin_type, reference, data->pin1.data, data->pin1.len, tries_left);
+    if (((data->flags & SC_PIN_CMD_NEED_PADDING)) != 0 && (data->pin1.pad_length > (size_t)data->pin1.len))    {
+        if (data->pin1.pad_length > sizeof(pin1))
+		    LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN1 pad length");
+
+        memset(pin1, data->pin1.pad_char, data->pin1.pad_length);
+        memcpy(pin1, data->pin1.data, data->pin1.len);
+        pin1_len = data->pin1.pad_length;
+    }
+    else   {
+        memcpy(pin1, data->pin1.data, data->pin1.len);
+        pin1_len = data->pin1.len;
+    }
+
+    if (((data->flags & SC_PIN_CMD_NEED_PADDING)) != 0 && (data->pin2.pad_length > (size_t)data->pin2.len))    {
+        if (data->pin2.pad_length > sizeof(pin2))
+		    LOG_TEST_RET(ctx, SC_ERROR_INVALID_ARGUMENTS, "Invalid PIN2 pad length");
+
+        memset(pin2, data->pin2.pad_char, data->pin2.pad_length);
+        memcpy(pin2, data->pin2.data, data->pin2.len);
+        pin2_len = data->pin2.pad_length;
+    }
+    else   {
+        memcpy(pin2, data->pin2.data, data->pin2.len);
+        pin2_len = data->pin2.len;
+    }
+
+	rv = iasecc_pin_verify(card, data->pin_type, reference, pin1, pin1_len, tries_left);
 	sc_log(ctx, "iasecc_pin_cmd(SC_PIN_CMD_CHANGE) pin_verify returned %i", rv);
 	LOG_TEST_RET(ctx, rv, "PIN verification error");
 
-	if ((unsigned)(data->pin1.len + data->pin2.len) > sizeof(pin_data))
+	if ((pin1_len + pin2_len) > sizeof(pin_data))
 		LOG_TEST_RET(ctx, SC_ERROR_BUFFER_TOO_SMALL, "Buffer too small for the 'Change PIN' data");
 
 	if (data->pin1.data)
-		memcpy(pin_data, data->pin1.data, data->pin1.len);
+		memcpy(pin_data, pin1, pin1_len);
 	if (data->pin2.data)
-		memcpy(pin_data + data->pin1.len, data->pin2.data, data->pin2.len);
+		memcpy(pin_data + pin1_len, pin2, pin2_len);
 
 	sc_format_apdu(card, &apdu, SC_APDU_CASE_3_SHORT, 0x24, 0, reference);
 	apdu.data = pin_data;
-	apdu.datalen = data->pin1.len + data->pin2.len;
+	apdu.datalen = pin1_len + pin2_len;
 	apdu.lc = apdu.datalen;
 
 	rv = sc_transmit_apdu(card, &apdu);
