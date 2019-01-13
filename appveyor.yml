@@ -10,11 +10,11 @@ configuration:
 
 environment:
   GH_TOKEN:
-    secure: aLu3tFc7lRJbotnmnHLx/QruIHc5rLaGm1RttoEdy4QILlPXzVkCZ6loYMz0sfrY
+    secure: sqeeb8zAA9GXuk+E1zgeYsO4Lqdaae2JMGRYoZOrIq4FHRO0OBBLu/xX7BDYfdqu
   matrix:
     - VSVER: 14
     - VSVER: 12
-      DO_PUSH_ARTIFACT: yes
+      DO_PUSH_ARTIFACT: no
 
 install:
   - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -and $env:APPVEYOR_BUILD_NUMBER -ne ((Invoke-RestMethod `
@@ -30,11 +30,11 @@ install:
       If ($env:Platform -Match "x86") {
         $env:VCVARS_PLATFORM="x86"
         $env:OPENSSL_PF="Win32"
-        $env:ARTIFACT="OpenSC-${env:PACKAGE_NAME}_win32"
+        $env:ARTIFACT="OpenSC-SM-${env:PACKAGE_NAME}_win32"
       } Else {
         $env:VCVARS_PLATFORM="amd64"
         $env:OPENSSL_PF="Win64"
-        $env:ARTIFACT="OpenSC-${env:PACKAGE_NAME}_win64"
+        $env:ARTIFACT="OpenSC-SM-${env:PACKAGE_NAME}_win64"
       }
   - ps: >-
       If ($env:Configuration -Like "*Light*") {
@@ -83,7 +83,7 @@ build_script:
           # OpenSSL 1.0.2
           cl /IC:\OpenSSL-${env:OPENSSL_PF}\include /I. /DX509DIR=\`"/\`" /DCVCDIR=\`"/\`" /W3 /D_CRT_SECURE_NO_DEPRECATE /DWIN32_LEAN_AND_MEAN /GS /MT /c ca_lib.c cv_cert.c cvc_lookup.c x509_lookup.c eac_asn1.c eac.c eac_ca.c eac_dh.c eac_ecdh.c eac_kdf.c eac_lib.c eac_print.c eac_util.c misc.c pace.c pace_lib.c pace_mappings.c ri.c ri_lib.c ta.c ta_lib.c objects.c ssl_compat.c
           lib /out:libeac.lib ca_lib.obj cv_cert.obj cvc_lookup.obj x509_lookup.obj eac_asn1.obj eac.obj eac_ca.obj eac_dh.obj eac_ecdh.obj eac_kdf.obj eac_lib.obj eac_print.obj eac_util.obj misc.obj pace.obj pace_lib.obj pace_mappings.obj ri.obj ri_lib.obj ta.obj ta_lib.obj objects.obj ssl_compat.obj
-          cd C:\projects\OpenSC
+          cd C:\projects\opensc-sm
         }
         $env:NMAKE_EXTRA="OPENPACE_DEF=/DENABLE_OPENPACE OPENPACE_DIR=C:\openpace-${env:OPENSSL_PF} ${env:NMAKE_EXTRA}"
       }
@@ -98,7 +98,7 @@ build_script:
   # put all pdb files for dump analysis, but this consumes approx 100 MB per build
   - md %ARTIFACT%-Debug
   - ps: >-
-      Get-ChildItem -recurse C:\projects\OpenSC -exclude vc*.pdb *.pdb | % {
+      Get-ChildItem -recurse C:\projects\opensc-sm -exclude vc*.pdb *.pdb | % {
         7z a -tzip ${env:ARTIFACT}-Debug.zip $_.FullName
       }
 

@@ -403,13 +403,13 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
 		goto err;
     }
 
-    printf("%s +%i: TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    // printf("%s +%i: TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
     offs = 0;
     if (*(data + offs) != (SC_ASN1_SEQUENCE | SC_ASN1_TAG_CONSTRUCTED))
         goto err;
     offs++;
 
-    for (ii=0, asn1_total_len = 0; ii < (*(data + offs) & 0x1F); ii++)
+    for (ii=0, asn1_total_len = 0; ii < (unsigned)(*(data + offs) & 0x1F); ii++)
         asn1_total_len = asn1_total_len * 0x100 + *(data + offs + ii + 1);
     offs += (*(data + offs) & 0x1F) + 1;
 
@@ -427,7 +427,7 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
         goto err;
     label_len = *(data + offs + 1);
 
-    printf("%s +%i: file size %li, new label length %li, current label length %li\n", __FILE__, __LINE__, file->size, strlen(new_token_label), label_len);
+    // printf("%s +%i: file size %li, new label length %li, current label length %li\n", __FILE__, __LINE__, file->size, strlen(new_token_label), label_len);
     if (strlen(new_token_label) > label_len)   {
         /* Shift file data after 'Label' on the difference between new and current labels */
         memcpy(data + offs + 2 + strlen(new_token_label), data + offs + 2 + label_len, file->size - offs - label_len);
@@ -460,7 +460,7 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
     memset(data + offs, ' ', label_len);
     memcpy(data + offs, new_token_label, strlen(new_token_label));
 
-    printf("%s +%i: new TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    // printf("%s +%i: new TokenInfo file content(%li):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
     rv = sc_update_binary(card, 0, data, file->size, 0);
     if (rv < 0)   {
 	    fprintf(stderr, "Cannot update TokenInfo binary file\n");
