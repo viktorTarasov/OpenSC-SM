@@ -48,6 +48,14 @@
 	<Icon Id="OpenSC.ico" SourceFile="OpenSC.ico" />
 	<Property Id="ARPPRODUCTICON" Value="OpenSC.ico" />
 
+    <Property Id="CERTPROPSVCPRESENT">
+	<RegistrySearch Id="SearchCertPropSvc"
+		Root="HKLM"
+		Key="SYSTEM\CurrentControlSet\Services\CertPropSvc"
+		Name="ImagePath"
+		Type="raw" />
+    </Property>
+
     <!--Custom actions-->
     <Binary Id="customactions" SourceFile="$(var.SOURCE_DIR)\win32\customactions.dll" />
     <CustomAction Id="RemoveSmartCardConfiguration" BinaryKey="customactions" DllEntry="RemoveSmartCardConfiguration" Execute="deferred" Impersonate="no"/>
@@ -101,6 +109,7 @@
                     -->
               </Component>
               <Component Id="CertPropSvc" Guid="*" Win64="$(var.Win64YesNo)" Permanent="yes">
+		<Condition> <![CDATA[Installed OR CERTPROPSVCPRESENT]]> </Condition>
                 <!-- CertPropSvc loads the minidriver and propagates the smart card's
                      certificates to the user's certificate store, see https://technet.microsoft.com/en-us/itpro/windows/keep-secure/smart-card-certificate-propagation-service -->
                 <ServiceControl Id="ControlCertPropSvcStart" Name="CertPropSvc" Start="install" Wait="no" />
