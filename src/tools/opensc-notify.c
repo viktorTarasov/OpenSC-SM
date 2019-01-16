@@ -153,13 +153,14 @@ WinMain(HINSTANCE hInstance, HINSTANCE prevInstance, LPSTR lpCmdLine, int nShowC
 {
 	LPCTSTR lpszClassName = "OPENSC_NOTIFY_CLASS";
 	HWND hwnd = create_invisible_window(lpszClassName, WndProc, hInstance);
+	HANDLE hThread;
+	MSG msg;
+	BOOL bRet = FALSE;
 
 	sc_notify_init();
 	run_daemon = 1;
-	HANDLE hThread = CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL);
+	hThread = CreateThread(NULL, 0, ThreadProc, NULL, 0, NULL);
 
-	MSG msg;
-	BOOL bRet = FALSE;
 	while((bRet = GetMessage( &msg, NULL, 0, 0 )) != 0) {
 		if (bRet == -1) {
 			// handle the error and possibly exit

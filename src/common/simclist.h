@@ -30,6 +30,7 @@ extern "C" {
 /* work around lack of inttypes.h support in broken Microsoft Visual Studio compilers */
 #if defined(_MSC_VER)
 #include <basetsd.h>
+typedef unsigned int UINT;
 typedef UINT8   uint8_t;
 typedef UINT16  uint16_t;
 typedef ULONG32 uint32_t;

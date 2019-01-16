@@ -1,7 +1,8 @@
 OPENSC_FEATURES = pcsc
 
 #Include support for minidriver
-MINIDRIVER_DEF = /DENABLE_MINIDRIVER
+# MINIDRIVER_DEF = /DENABLE_MINIDRIVER
+MINIDRIVER_DEF = /DDISABLE_MINIDRIVER
 
 #Build MSI with the Windows Installer XML (WIX) toolkit, requires WIX >= 3.9
 !IF "$(WIX)" == ""

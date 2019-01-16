@@ -264,6 +264,9 @@ int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
 		sc_card_t uninitialized = *card;
 		sc_log(ctx, "matching built-in ATRs");
 		for (i = 0; ctx->card_drivers[i] != NULL; i++) {
+			struct sc_card_driver *drv = ctx->card_drivers[i];
+			const struct sc_card_operations *ops = drv->ops;
+
 			/* FIXME If we had a clean API description, we'd propably get a
 			 * cleaner implementation of the driver's match_card and init,
 			 * which should normally *not* modify the card object if
@@ -276,9 +279,6 @@ int sc_connect_card(sc_reader_t *reader, sc_card_t **card_out)
 			 * modify sc_card_t until complete success (possibly by combining
 			 * `match_card()` and `init()`) */
 			*card = uninitialized;
-
-			struct sc_card_driver *drv = ctx->card_drivers[i];
-			const struct sc_card_operations *ops = drv->ops;
 
 			sc_log(ctx, "trying driver '%s'", drv->short_name);
 			if (ops == NULL || ops->match_card == NULL)   {

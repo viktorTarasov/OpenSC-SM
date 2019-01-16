@@ -456,12 +456,12 @@ _add_supported_algo(struct sc_profile *profile, struct sc_pkcs15_card *p15card, 
 {
 	struct sc_supported_algo_info *algo;
 	struct sc_context *ctx = p15card->card->ctx;
+	int rv;
 	if (oid == NULL) {
 		sc_log(ctx, "Failed to add algorithms refs - invalid arguments.");
 		return;
 	}
 	algo = sc_pkcs15_get_specific_supported_algo(p15card, operations, mechanism, oid);
-	int rv;
 
 	LOG_FUNC_CALLED(ctx);
 	if (!algo) {
