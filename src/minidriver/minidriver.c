@@ -35,10 +35,6 @@
 #include <string.h>
 #include <time.h>
 
-#ifdef WIN32_LEAN_AND_MEAN
-    #undef WIN32_LEAN_AND_MEAN
-#endif
-
 #include <windows.h>
 #include <Commctrl.h>
 #include <timeapi.h>
