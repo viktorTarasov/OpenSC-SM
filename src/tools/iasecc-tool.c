@@ -570,6 +570,11 @@ int main(int argc, char *argv[])
 	else   if (!do_list_sdos) {
 		r = sc_pkcs15_bind(card, NULL, &p15card);
 	}
+	if (r != SC_SUCCESS) {
+		fprintf(stderr, "Failed to bind PKCS#15 card: %s\n", sc_strerror(r));
+		return 1;
+	}
+
 
 	if (do_list_sdos) {
 		if ((err = list_sdos(opt_sdo_tag)))

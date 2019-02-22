@@ -2576,7 +2576,7 @@ iasecc_pin_cmd(struct sc_card *card, struct sc_pin_cmd_data *data, int *tries_le
 static int
 iasecc_get_serialnr(struct sc_card *card, struct sc_serial_number *serial)
 {
-#if 1
+#if 0
 	/* the current implementation doesn't perform any bounds check when parsing
 	 * the serial number. Hence, we disable this code until someone has time to
 	 * fix this. */
