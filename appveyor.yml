@@ -2,23 +2,18 @@ version: 0.19.0.{build}
 
 platform:
   - x86
-    # - x64
+  - x64
 
 configuration:
   - Release
-    # - Light
+  - Light
 
 environment:
   GH_TOKEN:
     secure: sqeeb8zAA9GXuk+E1zgeYsO4Lqdaae2JMGRYoZOrIq4FHRO0OBBLu/xX7BDYfdqu
   matrix:
-          # - VSVER: 14
-          # DO_PUSH_ARTIFACT: no
-          # - VSVER: 12
-          #  DO_PUSH_ARTIFACT: no
-    - VSVER: 10
-      DO_PUSH_ARTIFACT: no
-    - VSVER: 8
+    - VSVER: 14
+    - VSVER: 12
       DO_PUSH_ARTIFACT: no
 
 install:
