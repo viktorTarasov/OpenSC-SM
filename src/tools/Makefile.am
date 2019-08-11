@@ -31,7 +31,8 @@ noinst_HEADERS = util.h fread_to_eof.h
 noinst_PROGRAMS = sceac-example
 bin_PROGRAMS = opensc-tool opensc-explorer opensc-notify \
 	pkcs15-tool pkcs15-crypt pkcs11-tool \
-	cardos-tool eidenv openpgp-tool iasecc-tool egk-tool opensc-asn1
+	cardos-tool eidenv openpgp-tool iasecc-tool egk-tool opensc-asn1 \
+	emv-tool
 if ENABLE_OPENSSL
 bin_PROGRAMS += cryptoflex-tool pkcs15-init netkey-tool piv-tool \
 	westcos-tool sc-hsm-tool dnie-tool gids-tool npa-tool
@@ -50,6 +51,7 @@ sceac_example_LDADD = $(top_builddir)/src/libopensc/libopensc.la $(OPENPACE_LIBS
 sceac_example_CFLAGS = -I$(top_srcdir)/src $(OPENPACE_CFLAGS)
 
 opensc_tool_SOURCES = opensc-tool.c util.c
+emv_tool_SOURCES = emv-tool.c util.c
 piv_tool_SOURCES = piv-tool.c util.c
 piv_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
 opensc_explorer_SOURCES = opensc-explorer.c util.c
@@ -156,6 +158,7 @@ $(abs_builddir)/opensc-asn1.ggo: opensc-asn1.ggo.in
 
 if WIN32
 opensc_tool_SOURCES += versioninfo-tools.rc
+emv_tool_SOURCES += versioninfo-tools.rc
 piv_tool_SOURCES += versioninfo-tools.rc
 opensc_explorer_SOURCES += versioninfo-tools.rc
 pkcs15_tool_SOURCES += versioninfo-tools.rc
