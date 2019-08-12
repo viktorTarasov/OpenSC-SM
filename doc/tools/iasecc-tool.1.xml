@@ -74,6 +74,24 @@
 				</varlistentry>
 				<varlistentry>
 					<term>
+						<option>--sopin</option> <replaceable>sopin</replaceable>,
+					</term>
+					<listitem><para>SoPIN to set token label</para></listitem>
+				</varlistentry>
+				<varlistentry>
+					<term>
+						<option>--card-type</option> <replaceable>card-type</replaceable>,
+					</term>
+					<listitem>Card type ('oberthur-iasecc')</para></listitem>
+				</varlistentry>
+				<varlistentry>
+					<term>
+						<option>--update-token-label</option> <replaceable>label</replaceable>,
+					</term>
+					<listitem><para>Set token label</para></listitem>
+				</varlistentry>
+				<varlistentry>
+					<term>
 						<option>--wait</option>,
 						<option>-w</option>
 					</term>
