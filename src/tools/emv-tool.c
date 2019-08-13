@@ -34,13 +34,14 @@
 #include "libopensc/opensc.h"
 #include "libopensc/cardctl.h"
 #include "libopensc/gp.h"
+#include "libopensc/asn1.h"
 #include "util.h"
 
-/* type for associations of IDs to names */
-typedef struct _id2str {
-	unsigned int id;
-	const char *str;
-} id2str_t;
+struct POD {
+	unsigned char sfi;
+    unsigned char idx_beg; 
+    unsigned char idx_end; 
+};
 
 static const char *app_name = "emv-tool";
 
@@ -52,15 +53,14 @@ static int	opt_apdu_count = 0;
 static int	verbose = 0;
 
 enum {
-	OPT_SERIAL = 0x100,
-	OPT_SELECT_AID,
+	OPT_SELECT_AID = 0x100,
 	OPT_RESET
 };
 
 static const struct option options[] = {
 	{ "atr",		0, NULL,		'a' },
 	{ "aid",        1, NULL,    OPT_SELECT_AID },
-	{ "serial",		0, NULL,	OPT_SERIAL  },
+	{ "pan",		0, NULL,	'p'},
 	{ "list-readers",	0, NULL,		'l' },
 	{ "send-apdu",		1, NULL,		's' },
 	{ "reader",		1, NULL,		'r' },
@@ -73,7 +73,7 @@ static const struct option options[] = {
 static const char *option_help[] = {
 	"Prints the ATR bytes of the card",
 	"Select application (Visa, MasterCard, ...)", 
-    "Prints the card serial number",
+    "Print the card's PAN",
 	"Lists readers",
 	"Sends an APDU in format AA:BB:CC:DD:EE:FF...",
 	"Uses reader number <arg> [0]",
@@ -122,43 +122,19 @@ static int list_readers(void)
 	return 0;
 }
 
-
-
-#if 0
-/* The AID of the Card Manager defined by Open Platform 2.0.1 specification */
-static const struct sc_aid gp_card_manager = {
-    {0xA0, 0x00, 0x00, 0x00, 0x03, 0x00, 0x00}, 7
-};
-
-/* The AID of the Issuer Security Domain defined by GlobalPlatform 2.3.1 specification. */
-static const struct sc_aid gp_isd_rid = {
-    {0xA0, 0x00, 0x00, 0x01, 0x51, 0x00, 0x00}, 7
-};
-
-static const struct sc_aid visa_app = {
-    {0xA0, 0x00, 0x00, 0x00, 0x03, 0x10, 0x10}, 7
-};
-#endif
-
-// byte[] getProcessingOptions={(byte)0x80,(byte)0xA8,(byte)0x00,(byte)0x00,(byte)0x02,(byte)0x83,(byte)0x00,(byte)0x00};
-// byte[] readRecord={(byte)0x00,(byte)0xB2,(byte)0x02,(byte)0x0C,(byte)0x00};
-
-
 int
-select_aid(struct sc_card *card, const struct sc_aid *aid)
+select_aid(struct sc_card *card, const struct sc_aid *aid, unsigned char *resp, size_t resp_len)
 {
     struct sc_apdu apdu;
     int rv;
-	unsigned char rbuf[0x400];
 
     sc_format_apdu(card, &apdu, SC_APDU_CASE_4_SHORT, 0xA4, 0x04, 0x00);
     apdu.lc = aid->len;
     apdu.data = aid->value;
     apdu.datalen = aid->len;
-    apdu.resp = rbuf;
-    apdu.resplen = sizeof(rbuf);
-    apdu.le = 0x100;
-
+    apdu.resp = resp;
+    apdu.resplen = resp_len;
+    apdu.le = resp_len;
 
     rv = sc_transmit_apdu(card, &apdu);
 
@@ -174,9 +150,26 @@ select_aid(struct sc_card *card, const struct sc_aid *aid)
 
 
 int
-getProcessingOptions(struct sc_card *card)
+select_named_directory (struct sc_card *card, const char *dir, unsigned char *resp, size_t resp_len)
+{
+    struct sc_aid aid;
+    
+    if (strlen(dir) > sizeof(aid.value))
+        return -1;
+    memset(&aid, 0, sizeof(aid));
+    memcpy(aid.value, dir, strlen(dir));
+    aid.len = strlen(dir);
+
+    return select_aid(card, &aid, resp, resp_len);
+}
+
+
+int
+getPODL(struct sc_card *card, struct POD *podl, size_t podl_len)
 {
     struct sc_apdu apdu;
+    const unsigned char *tag_value = NULL;
+    size_t ii, tag_len = 0;
     int rv;
 	unsigned char rbuf[0x400];
     unsigned char GetProcessingOptions[] = {0x83, 0x00};
@@ -191,15 +184,34 @@ getProcessingOptions(struct sc_card *card)
     apdu.le = 0x100;
 
     rv = sc_transmit_apdu(card, &apdu);
-
     if (rv < 0)
         return rv;
-
     rv = sc_check_sw(card, apdu.sw1, apdu.sw2);
     if (rv < 0)
         return rv;
 
-    return apdu.resplen;
+    tag_value = sc_asn1_find_tag(card->ctx, apdu.resp, apdu.resplen, 0x80, &tag_len);
+    if (tag_value)   {
+        tag_value += 2;
+        tag_len -= 2;
+    }
+    else   {
+        tag_value = sc_asn1_find_tag(card->ctx, apdu.resp, apdu.resplen, 0x77, &tag_len);
+        if (tag_value)
+            tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x94, &tag_len);
+        if (!tag_value)   {
+            fprintf(stderr, "Cannot find AFL data in 'Format 2' GetPODL response.\n");
+            return -1;
+        }
+    }
+
+    for (ii=0; ii<tag_len/4 && ii < podl_len; ii++)   {
+        (podl + ii)->sfi = *(tag_value + 4*ii + 0) >> 3;
+        (podl + ii)->idx_beg = *(tag_value + 4*ii + 1);
+        (podl + ii)->idx_end = *(tag_value + 4*ii + 2);
+    }
+
+    return ii;
 }
 
 
@@ -207,12 +219,11 @@ static int
 send_apdu(void)
 {
 	sc_apdu_t apdu;
-	u8 buf[SC_MAX_EXT_APDU_BUFFER_SIZE],
-	  rbuf[SC_MAX_EXT_APDU_BUFFER_SIZE];
+	unsigned char buf[SC_MAX_EXT_APDU_BUFFER_SIZE];
+	unsigned char rbuf[SC_MAX_EXT_APDU_BUFFER_SIZE];
 	size_t len0, r;
 	int c;
 
-    printf("%s +%i: '%s'\n", __FILE__, __LINE__, opt_aid);
     if (opt_aid)   {
         struct sc_aid aid;
 
@@ -222,7 +233,7 @@ send_apdu(void)
             return 2;
         }
 	
-		if (select_aid(card, &aid) < 0)   {
+		if (select_aid(card, &aid, rbuf, sizeof(rbuf)) < 0)   {
             fprintf(stderr, "Cannot select application '%s'\n", opt_aid);
             return 2;
         }
@@ -263,44 +274,129 @@ send_apdu(void)
 
 
 
-static void print_serial(sc_card_t *in_card)
+static void print_pan(sc_card_t *in_card)
 {
-    unsigned char resp[0x200];
-	int r = 0;
+    struct POD podl[8];
+    unsigned char resp[254];
+    char pan[0x80];
+	int rec, podl_len, pp, idx, r = 0;
+    const unsigned char *tag_value = NULL;
+    size_t tag_len = 0;
+    struct sc_aid aid;
 
-	r = sc_lock(card);
+    memset(pan, 0, sizeof(pan));
+    memset(&aid, 0, sizeof(aid));
+	sc_lock(card);
+    r = select_named_directory(card, "1PAY.SYS.DDF01", resp, sizeof(resp));
+    if (r > 0)   {
+        unsigned char sfi = 0;
+
+        tag_value = sc_asn1_find_tag(card->ctx, resp, r, 0x6F, &tag_len);
+        if (tag_value)
+            tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0xA5, &tag_len);
+        if (tag_value)
+            tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x88, &tag_len);
+        if (tag_value)
+            sfi = *tag_value;
+
+        if (sfi)   {
+            for (rec=1; ; rec++)   {
+                unsigned char rec_data[254];
+                int rec_len = 0;
+
+                rec_len = sc_read_record(card, rec, rec_data, sizeof(rec_data), SC_RECORD_BY_REC_NR | sfi);
+                if (rec_len < 0)
+                    break;
+
+                tag_value = sc_asn1_find_tag(card->ctx, rec_data, rec_len, 0x70, &tag_len);
+                if (tag_value)
+                    tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x61, &tag_len);
+                if (tag_value)
+                    tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x4F, &tag_len);
+                if (tag_value)   {
+                    if (tag_len > sizeof(aid.value))   {
+                        fprintf(stderr, "Invalid AID length in DIR record\n");
+                        return;
+                    }
+                    aid.len = tag_len;
+                    memcpy(aid.value, tag_value, tag_len);
+                }
+            }
+        }
+    }
+
+    if (aid.len == 0)   {
+        r = select_named_directory(card, "2PAY.SYS.DDF01", resp, sizeof(resp));
+        if (r >=0)
+            fprintf(stdout, "Read applications from 2PAY.SYS.DDF01 is not yet supporeted.\n");
+        return;
+    }
+
     if (opt_aid)   {
-        struct sc_aid aid;
-
         aid.len = sizeof(aid.value);
         if (sc_hex_to_bin(opt_aid, aid.value, &aid.len))   {
             fprintf(stderr, "Invalid AID value: '%s'\n", opt_aid);
             return;
         }
+    }
 	
-		r = select_aid(card, &aid);
-        if (r < 0)   {
-            fprintf(stderr, "Cannot select application '%s'\n", opt_aid);
-            return;
-        }
+	r = select_aid(card, &aid, resp, sizeof(resp));
+    if (r < 0)   {
+        fprintf(stderr, "Cannot select application '%s'\n", opt_aid);
+        return;
 	}
 
-    r = getProcessingOptions(card);
+    r = getPODL(card, podl, sizeof(podl)/sizeof(podl[0]));
     if (r < 0)   {
         fprintf(stderr, "Cannot get ProcessingOptions.\n");
         return;
     }
+    podl_len = r;
 
-    r = sc_read_record(card, 2, resp, sizeof(resp), SC_RECORD_BY_REC_NR | 0x01);
-    sc_unlock(card);
-	
-    if (r < 0)   {
-        fprintf(stderr, "Cannot read record\n");
-        return;
+    for (pp = 0; pp < podl_len; pp++)   {
+        for (idx = podl[pp].idx_beg; idx <= podl[pp].idx_end; idx++)   {
+            const unsigned char *tag70_value = NULL, *tag_value = NULL;
+            size_t tag70_len = 0, tag_len = 0;
+
+            r = sc_read_record(card, idx, resp, sizeof(resp), SC_RECORD_BY_REC_NR | podl[pp].sfi);
+            if (r < 0)   {
+                fprintf(stderr, "Failed to read SFI:%i REC:%i\n", podl[pp].sfi, idx);
+                return;
+            }
+
+            tag70_value = sc_asn1_find_tag(card->ctx, resp, r, 0x70, &tag70_len);
+            if (!tag70_value)   {
+                fprintf(stderr, "Invalid data in SFI:%i REC:%i\n", podl[pp].sfi, idx);
+                return;
+            }
+
+            tag_value = sc_asn1_find_tag(card->ctx, tag70_value, tag70_len, 0x5A, &tag_len);
+            if (!tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag70_value, tag70_len, 0x57, &tag_len);
+
+            if (tag_value)   {
+                size_t ii;
+                char *ptr = NULL;
+
+                memset(pan, 0, sizeof(pan));
+                for(ii=0, ptr = pan; ii < tag_len; ii++)   {
+                    if ((tag_value[ii] >> 4) == 0x0D)
+                        break;
+                    *ptr++ = (tag_value[ii] >> 4) + '0';
+
+                    if ((tag_value[ii] & 0x0F) == 0x0D)
+                        break;
+                    *ptr++ = (tag_value[ii] & 0x0F) + '0';
+                }
+                printf("PAN: %s\n", pan);
+                return;
+            }
+        }
+        if (idx < podl[pp].idx_end)
+            break;
     }
 
-    printf("Read record:\n");
-    util_hex_dump_asc(stdout, resp, r, -1);
+    sc_unlock(card);
     return;
 }
 
@@ -336,7 +432,7 @@ int main(int argc, char *argv[])
 	int do_list_readers = 0;
 	int do_send_apdu = 0;
 	int do_print_atr = 0;
-	int do_print_serial = 0;
+	int do_print_pan = 0;
 	int do_reset = 0;
 	int action_count = 0;
 	const char *opt_reset_type = NULL;
@@ -347,7 +443,7 @@ int main(int argc, char *argv[])
 	setbuf(stdout, NULL);
 
 	while (1) {
-		c = getopt_long(argc, argv, "lr:vs:aw", options, &long_optind);
+		c = getopt_long(argc, argv, "lr:vs:awp", options, &long_optind);
 		if (c == -1)
 			break;
 		if (c == '?')
@@ -386,11 +482,10 @@ int main(int argc, char *argv[])
 			opt_wait = 1;
 			break;
 		case OPT_SELECT_AID:
-            printf("%s +%i: '%s'\n", __FILE__, __LINE__, opt_aid);
 			opt_aid = optarg;
 			break;
-		case OPT_SERIAL:
-			do_print_serial = 1;
+		case 'p':
+			do_print_pan = 1;
 			action_count++;
 			break;
 		case OPT_RESET:
@@ -428,11 +523,15 @@ int main(int argc, char *argv[])
 	if (action_count <= 0)
 		goto end;
 
+    err = sc_set_card_driver(ctx, "default");
+    if (err < 0) {
+        fprintf(stderr, "Cannot set default driver\n");
+        goto end;
+    }
+
 	err = util_connect_card_ex(ctx, &card, opt_reader, opt_wait, 0, verbose);
 	if (err)
 		goto end;
-
-
 
 	if (do_print_atr) {
 		if (verbose) {
@@ -445,10 +544,10 @@ int main(int argc, char *argv[])
 		}
 		action_count--;
 	}
-	if (do_print_serial) {
+	if (do_print_pan) {
 		if (verbose)
-			printf("Card serial number:");
-		print_serial(card);
+			printf("Card PAN:");
+		print_pan(card);
 		action_count--;
 	}
 	if (do_send_apdu) {
