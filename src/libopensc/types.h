@@ -284,6 +284,8 @@ typedef struct sc_file {
 /* APDU is from Secure Messaging  */
 #define SC_APDU_FLAGS_NO_SM		0x00000008UL
 
+#define SC_APDU_INCLUDE_LE		0x00000010UL
+
 #define SC_APDU_ALLOCATE_FLAG		0x01
 #define SC_APDU_ALLOCATE_FLAG_DATA	0x02
 #define SC_APDU_ALLOCATE_FLAG_RESP	0x04

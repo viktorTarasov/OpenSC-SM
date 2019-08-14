@@ -182,6 +182,7 @@ getPODL(struct sc_card *card, struct POD *podl, size_t podl_len)
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
     apdu.le = 0x100;
+    apdu.flags |= SC_APDU_INCLUDE_LE;
 
     rv = sc_transmit_apdu(card, &apdu);
     if (rv < 0)
@@ -287,50 +288,6 @@ static void print_pan(sc_card_t *in_card)
     memset(pan, 0, sizeof(pan));
     memset(&aid, 0, sizeof(aid));
 	sc_lock(card);
-    r = select_named_directory(card, "1PAY.SYS.DDF01", resp, sizeof(resp));
-    if (r > 0)   {
-        unsigned char sfi = 0;
-
-        tag_value = sc_asn1_find_tag(card->ctx, resp, r, 0x6F, &tag_len);
-        if (tag_value)
-            tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0xA5, &tag_len);
-        if (tag_value)
-            tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x88, &tag_len);
-        if (tag_value)
-            sfi = *tag_value;
-
-        if (sfi)   {
-            for (rec=1; ; rec++)   {
-                unsigned char rec_data[254];
-                int rec_len = 0;
-
-                rec_len = sc_read_record(card, rec, rec_data, sizeof(rec_data), SC_RECORD_BY_REC_NR | sfi);
-                if (rec_len < 0)
-                    break;
-
-                tag_value = sc_asn1_find_tag(card->ctx, rec_data, rec_len, 0x70, &tag_len);
-                if (tag_value)
-                    tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x61, &tag_len);
-                if (tag_value)
-                    tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x4F, &tag_len);
-                if (tag_value)   {
-                    if (tag_len > sizeof(aid.value))   {
-                        fprintf(stderr, "Invalid AID length in DIR record\n");
-                        return;
-                    }
-                    aid.len = tag_len;
-                    memcpy(aid.value, tag_value, tag_len);
-                }
-            }
-        }
-    }
-
-    if (aid.len == 0)   {
-        r = select_named_directory(card, "2PAY.SYS.DDF01", resp, sizeof(resp));
-        if (r >=0)
-            fprintf(stdout, "Read applications from 2PAY.SYS.DDF01 is not yet supporeted.\n");
-        return;
-    }
 
     if (opt_aid)   {
         aid.len = sizeof(aid.value);
@@ -340,6 +297,74 @@ static void print_pan(sc_card_t *in_card)
         }
     }
 	
+    if (aid.len == 0)   {
+        r = select_named_directory(card, "1PAY.SYS.DDF01", resp, sizeof(resp));
+        if (r > 0)   {
+            unsigned char sfi = 0;
+
+            tag_value = sc_asn1_find_tag(card->ctx, resp, r, 0x6F, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0xA5, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x88, &tag_len);
+            if (tag_value)
+                sfi = *tag_value;
+
+            if (sfi)   {
+                for (rec=1; ; rec++)   {
+                    unsigned char rec_data[254];
+                    int rec_len = 0;
+
+                    rec_len = sc_read_record(card, rec, rec_data, sizeof(rec_data), SC_RECORD_BY_REC_NR | sfi);
+                    if (rec_len < 0)
+                        break;
+
+                    tag_value = sc_asn1_find_tag(card->ctx, rec_data, rec_len, 0x70, &tag_len);
+                    if (tag_value)
+                        tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x61, &tag_len);
+                    if (tag_value)
+                        tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x4F, &tag_len);
+                    if (tag_value)   {
+                        if (tag_len > sizeof(aid.value))   {
+                            fprintf(stderr, "Invalid AID length in DIR record\n");
+                            return;
+                        }
+                        aid.len = tag_len;
+                        memcpy(aid.value, tag_value, tag_len);
+                    }
+                }
+            }
+        }
+    }
+
+    if (aid.len == 0)   {
+        r = select_named_directory(card, "2PAY.SYS.DDF01", resp, sizeof(resp));
+        if (r > 0 )   {
+            tag_value = sc_asn1_find_tag(card->ctx, resp, r, 0x6F, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0xA5, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0xBF0C, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x61, &tag_len);
+            if (tag_value)
+                tag_value = sc_asn1_find_tag(card->ctx, tag_value, tag_len, 0x4F, &tag_len);
+            if (tag_value)   {
+                if (tag_len > sizeof(aid.value))   {
+                    fprintf(stderr, "Invalid AID length in DIR record\n");
+                    return;
+                }
+                aid.len = tag_len;
+                memcpy(aid.value, tag_value, tag_len);
+            }
+        }
+    }
+
+    if (aid.len == 0)   {
+        fprintf(stdout, "Cannot find PAY application to select.\n");
+        return;
+    }
+
 	r = select_aid(card, &aid, resp, sizeof(resp));
     if (r < 0)   {
         fprintf(stderr, "Cannot select application '%s'\n", opt_aid);

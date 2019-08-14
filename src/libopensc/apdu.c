@@ -62,6 +62,8 @@ size_t sc_apdu_get_length(const sc_apdu_t *apdu, unsigned int proto)
 		break;
 	case SC_APDU_CASE_4_SHORT:
 		ret += apdu->lc + (proto != SC_PROTO_T0 ? 2 : 1);
+        if ((apdu->flags & SC_APDU_INCLUDE_LE) != 0)
+            ret++;
 		break;
 	case SC_APDU_CASE_4_EXT:
 		ret += apdu->lc + (proto == SC_PROTO_T0 ? 1 : 5);
@@ -143,9 +145,9 @@ int sc_apdu2bytes(sc_context_t *ctx, const sc_apdu_t *apdu,
 		memcpy(p, apdu->data, apdu->lc);
 		p += apdu->lc;
 		/* in case of T0 no Le byte is added */
-		if (proto != SC_PROTO_T0)
-			*p = (u8)apdu->le;
-		break;
+		if (proto != SC_PROTO_T0 || (apdu->flags & SC_APDU_INCLUDE_LE) != 0)
+			*p = (u8)(apdu->le >= 0x100 ? 0x00 : apdu->le);
+        break;
 	case SC_APDU_CASE_4_EXT:
 		if (proto == SC_PROTO_T0) {
 			/* again a T0 extended case 4 APDU looks just
