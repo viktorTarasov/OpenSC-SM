@@ -6,7 +6,7 @@ default: all
 
 TARGETS = opensc-tool.exe opensc-explorer.exe pkcs15-tool.exe pkcs15-crypt.exe \
 		pkcs11-tool.exe cardos-tool.exe eidenv.exe openpgp-tool.exe iasecc-tool.exe \
-		opensc-notify.exe egk-tool.exe opensc-asn1.exe \
+		opensc-notify.exe egk-tool.exe opensc-asn1.exe emv-tool.exe \
 		$(PROGRAMS_OPENSSL)
 
 OBJECTS = util.obj versioninfo-tools.res
