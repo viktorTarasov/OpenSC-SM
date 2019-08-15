@@ -51,10 +51,16 @@ static char	*opt_reader;
 static char *opt_aid = NULL;
 static int	opt_apdu_count = 0;
 static int	verbose = 0;
+static int	use_le_select_aid = 0;
+static int	use_le_processing_options = 0;
+static int	use_T0 = 0;
 
 enum {
 	OPT_SELECT_AID = 0x100,
-	OPT_RESET
+    OPT_USE_LE_SELECT_AID,
+    OPT_USE_LE_PROCESSING_OPTIONS,
+    OPT_USE_T0,
+	OPT_RESET,
 };
 
 static const struct option options[] = {
@@ -67,6 +73,9 @@ static const struct option options[] = {
 	{ "reset",		2, NULL,	OPT_RESET   },
 	{ "wait",		0, NULL,		'w' },
 	{ "verbose",		0, NULL,		'v' },
+	{ "use-le-select-aid",		0, NULL, OPT_USE_LE_SELECT_AID },
+	{ "use-le-processing-options",		0, NULL, OPT_USE_LE_PROCESSING_OPTIONS },
+	{ "use-T0",		0, NULL, OPT_USE_T0 },
 	{ NULL, 0, NULL, 0 }
 };
 
@@ -135,6 +144,9 @@ select_aid(struct sc_card *card, const struct sc_aid *aid, unsigned char *resp, 
     apdu.resp = resp;
     apdu.resplen = resp_len;
     apdu.le = resp_len;
+    
+    if (use_le_select_aid)
+        apdu.flags |= SC_APDU_INCLUDE_LE;
 
     rv = sc_transmit_apdu(card, &apdu);
 
@@ -182,7 +194,9 @@ getPODL(struct sc_card *card, struct POD *podl, size_t podl_len)
     apdu.resp = rbuf;
     apdu.resplen = sizeof(rbuf);
     apdu.le = 0x100;
-    apdu.flags |= SC_APDU_INCLUDE_LE;
+
+    if (use_le_processing_options)
+        apdu.flags |= SC_APDU_INCLUDE_LE;
 
     rv = sc_transmit_apdu(card, &apdu);
     if (rv < 0)
@@ -513,6 +527,15 @@ int main(int argc, char *argv[])
 			do_print_pan = 1;
 			action_count++;
 			break;
+        case OPT_USE_LE_SELECT_AID:
+            use_le_select_aid = 1;
+            break;
+        case OPT_USE_LE_PROCESSING_OPTIONS:
+            use_le_processing_options = 1;
+            break;
+        case OPT_USE_T0:
+            use_T0 = 1;
+            break;
 		case OPT_RESET:
 			do_reset = 1;
 			opt_reset_type = optarg;
