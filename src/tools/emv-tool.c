@@ -387,8 +387,13 @@ static void print_pan(sc_card_t *in_card)
 
     r = getPODL(card, podl, sizeof(podl)/sizeof(podl[0]));
     if (r < 0)   {
-        fprintf(stderr, "Cannot get ProcessingOptions.\n");
-        return;
+        podl[0].sfi = 0x01, podl[0].idx_beg = 0x01, podl[0].idx_end = 0x06;
+        podl[1].sfi = 0x02, podl[1].idx_beg = 0x01, podl[1].idx_end = 0x06;
+        podl[2].sfi = 0x03, podl[2].idx_beg = 0x01, podl[2].idx_end = 0x06;
+        podl[3].sfi = 0x04, podl[3].idx_beg = 0x01, podl[3].idx_end = 0x06;
+        podl[4].sfi = 0x05, podl[4].idx_beg = 0x01, podl[4].idx_end = 0x06;
+        podl[5].sfi = 0x06, podl[5].idx_beg = 0x01, podl[5].idx_end = 0x06;
+        r = 6;
     }
     podl_len = r;
 
@@ -400,13 +405,13 @@ static void print_pan(sc_card_t *in_card)
             r = sc_read_record(card, idx, resp, sizeof(resp), SC_RECORD_BY_REC_NR | podl[pp].sfi);
             if (r < 0)   {
                 fprintf(stderr, "Failed to read SFI:%i REC:%i\n", podl[pp].sfi, idx);
-                return;
+                continue;
             }
 
             tag70_value = sc_asn1_find_tag(card->ctx, resp, r, 0x70, &tag70_len);
             if (!tag70_value)   {
                 fprintf(stderr, "Invalid data in SFI:%i REC:%i\n", podl[pp].sfi, idx);
-                return;
+                continue;
             }
 
             tag_value = sc_asn1_find_tag(card->ctx, tag70_value, tag70_len, 0x5A, &tag_len);
