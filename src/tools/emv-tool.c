@@ -292,7 +292,7 @@ send_apdu(void)
 static void print_pan(sc_card_t *in_card)
 {
     struct POD podl[8];
-    unsigned char resp[254];
+    unsigned char resp[256];
     char pan[0x80];
 	int rec, podl_len, pp, idx, r = 0;
     const unsigned char *tag_value = NULL;
@@ -326,7 +326,7 @@ static void print_pan(sc_card_t *in_card)
 
             if (sfi)   {
                 for (rec=1; ; rec++)   {
-                    unsigned char rec_data[254];
+                    unsigned char rec_data[256];
                     int rec_len = 0;
 
                     rec_len = sc_read_record(card, rec, rec_data, sizeof(rec_data), SC_RECORD_BY_REC_NR | sfi);
