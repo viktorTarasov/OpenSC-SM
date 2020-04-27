@@ -403,10 +403,8 @@ static void print_pan(sc_card_t *in_card)
             size_t tag70_len = 0, tag_len = 0;
 
             r = sc_read_record(card, idx, resp, sizeof(resp), SC_RECORD_BY_REC_NR | podl[pp].sfi);
-            if (r < 0)   {
-                fprintf(stderr, "Failed to read SFI:%i REC:%i\n", podl[pp].sfi, idx);
+            if (r < 0)
                 continue;
-            }
 
             tag70_value = sc_asn1_find_tag(card->ctx, resp, r, 0x70, &tag70_len);
             if (!tag70_value)   {
