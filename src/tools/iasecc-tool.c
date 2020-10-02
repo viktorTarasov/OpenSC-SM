@@ -366,7 +366,7 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
     size_t offs = 0, ii, label_len, asn1_total_len;
 
     if (card_type != CARD_TYPE_OBERTHUR_IASECC)   {
-	    fprintf(stderr, "Only Oberthur flavor of IAS/ECC can be used.\n");
+	    fprintf(stderr, "Only Oberthur flavor of IAS/ECC can be used. Card type %d\n", card_type);
 		return -1;
     }
 
@@ -403,7 +403,8 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
 		goto err;
     }
 
-    printf("%s +%i: TokenInfo file content(%zi):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    if (verbose)
+        printf("%s +%i: TokenInfo file content(%zi):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
     offs = 0;
     if (*(data + offs) != (SC_ASN1_SEQUENCE | SC_ASN1_TAG_CONSTRUCTED))  {
 	    fprintf(stderr, "Parse TokenInfo: expected SC_ASN1_SEQUENCE | SC_ASN1_TAG_CONSTRUCTED, have %02X\n", *(data + offs));
@@ -422,12 +423,12 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
     offs++;
     offs += *(data + offs) + 1;
 
-    if (*(data + offs) != SC_ASN1_UTF8STRING)   {
-	    fprintf(stderr, "Parse TokenInfo: expected SC_ASN1_UTF8STRING, have %02X\n", *(data + offs));
-        goto err;
+    while ((*(data + offs) == SC_ASN1_UTF8STRING) || (*(data + offs) == SC_ASN1_TAG_OCTET_STRING))   {
+        if (verbose)
+            printf("%s +%i: waiting label tag ... current tag is 0x%02X\n", __FILE__, __LINE__, *(data + offs));
+        offs++;
+        offs += *(data + offs) + 1;
     }
-    offs++;
-    offs += *(data + offs) + 1;
 
     if (*(data + offs) != SC_ASN1_TAG_CONTEXT)   {
 	    fprintf(stderr, "Parse TokenInfo: expected SC_ASN1_TAG_CONTEXT, have %02X\n", *(data + offs));
@@ -435,7 +436,8 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
     }
     label_len = *(data + offs + 1);
 
-    printf("%s +%i: file size %zi, new label length %zi, current label length %zi\n", __FILE__, __LINE__, file->size, strlen(new_token_label), label_len);
+    if (verbose)
+        printf("%s +%i: file size %zi, new label length %zi, current label length %zi\n", __FILE__, __LINE__, file->size, strlen(new_token_label), label_len);
     if (strlen(new_token_label) > label_len)   {
         /* Shift file data after 'Label' on the difference between new and current labels */
         memcpy(data + offs + 2 + strlen(new_token_label), data + offs + 2 + label_len, file->size - offs - label_len);
@@ -468,7 +470,8 @@ update_token_label(int card_type, char *sopin, char *new_token_label)
     memset(data + offs, ' ', label_len);
     memcpy(data + offs, new_token_label, strlen(new_token_label));
 
-    printf("%s +%i: new TokenInfo file content(%zi):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
+    if (verbose)
+        printf("%s +%i: new TokenInfo file content(%zi):\n%s\n", __FILE__, __LINE__, file->size, sc_dump_hex(data, file->size));
     rv = sc_update_binary(card, 0, data, file->size, 0);
     if (rv < 0)   {
 	    fprintf(stderr, "Cannot update TokenInfo binary file\n");
