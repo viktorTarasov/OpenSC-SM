@@ -278,6 +278,7 @@ _validate_pin(struct sc_pkcs15_card *p15card, struct sc_pkcs15_auth_info *auth_i
 
 	/* If pin is given, make sure it is within limits */
 	max_length = auth_info->attrs.pin.max_length != 0 ? auth_info->attrs.pin.max_length : SC_MAX_PIN_SIZE;
+    printf("%s +%i: max_length %lu, pinlen %lu, auth_info->attrs.pin.min_length %lu\n", __FILE__, __LINE__, max_length, pinlen, auth_info->attrs.pin.min_length);
 	if (pinlen > max_length || pinlen < auth_info->attrs.pin.min_length)
 		return SC_ERROR_INVALID_PIN_LENGTH;
 
@@ -579,12 +580,15 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	struct sc_card *card = p15card->card;
 	int r;
 
+    printf("%s +%i: Here we are\n", __FILE__, __LINE__);
+
 	LOG_FUNC_CALLED(ctx);
 	if (auth_info->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
 		LOG_FUNC_RETURN(ctx, SC_ERROR_NOT_SUPPORTED);
 
 	/* make sure the pins are in valid range */
 	r = _validate_pin(p15card, auth_info, newpinlen);
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	LOG_TEST_RET(ctx, r, "New PIN value do not conform PIN policy");
 
 	/* get pin_info object of the puk (this is a little bit complicated
@@ -593,6 +597,7 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	 * is found */
 	/* first step: try to get the pkcs15 object of the puk */
 	r = sc_pkcs15_find_pin_by_auth_id(p15card, &pin_obj->auth_id, &puk_obj);
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	if (r >= 0 && puk_obj) {
 		/* second step:  get the pkcs15 info object of the puk */
 		puk_info = (struct sc_pkcs15_auth_info *)puk_obj->data;
@@ -604,6 +609,7 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	}
 	/* make sure the puk is in valid range */
 	r = _validate_pin(p15card, puk_info, puklen);
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	LOG_TEST_RET(ctx, r, "PIN do not conforms PIN policy");
 
 	r = sc_lock(card);
@@ -616,6 +622,7 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 			goto out;
 	}
 
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	/* set pin_cmd data */
 	memset(&data, 0, sizeof(data));
 	data.cmd             = SC_PIN_CMD_UNBLOCK;
@@ -655,6 +662,7 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 		break;
 	}
 
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	if((p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD
 				|| p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH)) {
 		data.flags |= SC_PIN_CMD_USE_PINPAD;
@@ -669,6 +677,7 @@ int sc_pkcs15_unblock_pin(struct sc_pkcs15_card *p15card,
 	}
 
 	r = sc_pin_cmd(card, &data, &auth_info->tries_left);
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 	if (r == SC_SUCCESS)
 		sc_pkcs15_pincache_add(p15card, pin_obj, newpin, newpinlen);
 

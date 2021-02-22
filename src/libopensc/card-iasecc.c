@@ -1958,7 +1958,8 @@ iasecc_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 	struct sc_context *ctx = card->ctx;
 	struct sc_pin_cmd_data pin_cmd;
 	unsigned chv_ref = reference;
-	int rv;
+	int rv, BIG_HOOK = 0;
+    unsigned char BIG_HOOK_DATA[64];
 
 	LOG_FUNC_CALLED(ctx);
 	sc_log(ctx,
@@ -1980,15 +1981,22 @@ iasecc_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 		}
 	}
 
-	if (type == SC_AC_SEN)   {
-		rv = iasecc_se_at_to_chv_reference(card, reference,  &chv_ref);
-		LOG_TEST_RET(ctx, rv, "SE AT to CHV reference error");
-	}
-
 	memset(&pin_cmd, 0, sizeof(pin_cmd));
 	pin_cmd.pin_type = SC_AC_CHV;
-	pin_cmd.pin_reference = chv_ref;
 	pin_cmd.cmd = SC_PIN_CMD_VERIFY;
+	
+    if (type == SC_AC_SEN)   {
+        if (reference == 3)   {
+            chv_ref = 2;
+            BIG_HOOK = 1;
+        }
+        else   {
+		    rv = iasecc_se_at_to_chv_reference(card, reference,  &chv_ref);
+		    LOG_TEST_RET(ctx, rv, "SE AT to CHV reference error");
+        }
+	}
+
+	pin_cmd.pin_reference = chv_ref;
 
 	rv = iasecc_pin_get_policy(card, &pin_cmd);
 	LOG_TEST_RET(ctx, rv, "Get 'PIN policy' error");
@@ -2009,6 +2017,13 @@ iasecc_pin_verify(struct sc_card *card, unsigned type, unsigned reference,
 	}
 
 	iasecc_chv_cache_clean(card, &pin_cmd);
+
+    if (BIG_HOOK)   {
+            memset(BIG_HOOK_DATA, 0xFF, sizeof(BIG_HOOK_DATA));
+            memcpy(BIG_HOOK_DATA, data, data_len);
+	        pin_cmd.pin1.data = BIG_HOOK_DATA;
+            pin_cmd.pin1.len = sizeof(BIG_HOOK_DATA);
+    }
 
 	rv = iasecc_chv_verify(card, &pin_cmd, tries_left);
 	LOG_TEST_RET(ctx, rv, "PIN CHV verification error");

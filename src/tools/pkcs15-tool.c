@@ -1696,16 +1696,24 @@ static int unblock_pin(void)
 	sc_pkcs15_object_t *pin_obj;
 	u8 *pin, *puk;
 	int r, pinpad_present = 0;
+    long unsigned int pin_len = 0;
+    u8 pin_hex[64];
 
+    printf("%s +%i: Here we are\n", __FILE__, __LINE__);
 	pinpad_present = p15card->card->reader->capabilities & SC_READER_CAP_PIN_PAD
 	   	|| p15card->card->caps & SC_CARD_CAP_PROTECTED_AUTHENTICATION_PATH;
 
-	if (!(pin_obj = get_pin_info()))
+	if (!(pin_obj = get_pin_info()))   {
+		fprintf(stderr, "PIN unblocking failed: No PIN object found\n");
 		return 2;
+    }
+
 	pinfo = (sc_pkcs15_auth_info_t *) pin_obj->data;
 
 	if (pinfo->auth_type != SC_PKCS15_PIN_AUTH_TYPE_PIN)
 		return 1;
+
+    printf("%s +%i: Here we are\n", __FILE__, __LINE__);
 
 	puk = (u8 *) opt_puk;
 	if (puk == NULL) {
@@ -1737,6 +1745,7 @@ static int unblock_pin(void)
 	if (puk == NULL && verbose)
 		printf("PUK value will be prompted with pinpad.\n");
 
+    printf("%s +%i: Here we are\n", __FILE__, __LINE__);
 	/* FIXME should OPENSSL_cleanse on pin/puk data */
 	pin = opt_pin ? (u8 *) opt_pin : (u8 *) opt_newpin;
 	while (pin == NULL) {
@@ -1767,9 +1776,22 @@ static int unblock_pin(void)
 		free(pin2);
 	}
 
+    if (strlen((char *)pin) == 128)   {
+        pin_len = sizeof(pin_hex);
+        sc_hex_to_bin((char *)pin, pin_hex, &pin_len);
+        pin = pin_hex;
+    }
+    else   {
+        pin_len = strlen((char *)pin);
+    }
+
+    printf("%s +%i: Here we are\n", __FILE__, __LINE__);
 	r = sc_pkcs15_unblock_pin(p15card, pin_obj,
 			puk, puk ? strlen((char *) puk) : 0,
-			pin, pin ? strlen((char *) pin) : 0);
+			// pin, pin ? strlen((char *) pin) : 0);
+			pin, pin_len);
+
+    printf("%s +%i: rv %i\n", __FILE__, __LINE__, r);
 
 	if (NULL == opt_puk)
 		free(puk);
