@@ -175,6 +175,9 @@
               <Component Id="iasecc_tool.exe" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\tools\iasecc-tool.exe" Vital="yes"/>
               </Component>
+              <Component Id="safenet_tool.exe" Guid="*" Win64="$(var.Win64YesNo)">
+                <File Source="$(var.SOURCE_DIR)\src\tools\safenet-tool.exe" Vital="yes"/>
+              </Component>
               <Component Id="emv_tool.exe" Guid="*" Win64="$(var.Win64YesNo)">
                 <File Source="$(var.SOURCE_DIR)\src\tools\emv-tool.exe" Vital="yes"/>
               </Component>
@@ -379,6 +382,7 @@
         <ComponentRef Id="pkcs15_crypt.exe"/>
         <ComponentRef Id="openpgp_tool.exe"/>
         <ComponentRef Id="iasecc_tool.exe"/>
+        <ComponentRef Id="safenet_tool.exe"/>
         <ComponentRef Id="emv_tool.exe"/>
         <?ifdef OpenSSL ?>
           <ComponentRef Id="cryptoflex_tool.exe"/>

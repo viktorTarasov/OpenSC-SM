@@ -24,6 +24,7 @@
 	<xi:include href="pkcs15-crypt.1.xml"/>
 	<xi:include href="pkcs15-init.1.xml"/>
 	<xi:include href="pkcs15-tool.1.xml"/>
+	<xi:include href="safenet-tool.1.xml"/>
 	<xi:include href="sc-hsm-tool.1.xml"/>
 	<xi:include href="westcos-tool.1.xml"/>
 </book>

@@ -32,7 +32,7 @@ noinst_PROGRAMS = sceac-example
 bin_PROGRAMS = opensc-tool opensc-explorer opensc-notify \
 	pkcs15-tool pkcs15-crypt pkcs11-tool \
 	cardos-tool eidenv openpgp-tool iasecc-tool egk-tool opensc-asn1 \
-	emv-tool
+	emv-tool safenet-tool
 if ENABLE_OPENSSL
 bin_PROGRAMS += cryptoflex-tool pkcs15-init netkey-tool piv-tool \
 	westcos-tool sc-hsm-tool dnie-tool gids-tool npa-tool
@@ -79,6 +79,8 @@ openpgp_tool_SOURCES = openpgp-tool.c util.c
 openpgp_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
 iasecc_tool_SOURCES = iasecc-tool.c util.c
 iasecc_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
+safenet_tool_SOURCES = safenet-tool.c util.c
+safenet_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
 sc_hsm_tool_SOURCES = sc-hsm-tool.c util.c
 sc_hsm_tool_LDADD = $(OPTIONAL_OPENSSL_LIBS)
 dnie_tool_SOURCES = dnie-tool.c util.c
@@ -172,6 +174,7 @@ netkey_tool_SOURCES += versioninfo-tools.rc
 westcos_tool_SOURCES += versioninfo-tools.rc
 openpgp_tool_SOURCES += versioninfo-tools.rc
 iasecc_tool_SOURCES += versioninfo-tools.rc
+safenet_tool_SOURCES += versioninfo-tools.rc
 sc_hsm_tool_SOURCES += versioninfo-tools.rc
 gids_tool_SOURCES += versioninfo-tools.rc
 opensc_notify_SOURCES += versioninfo-opensc-notify.rc
