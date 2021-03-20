@@ -276,7 +276,7 @@ update_token_label(char *pin, char *new_token_label)
     unsigned char content[0x100];
     char *content_char = NULL;
     char buff_char[0x300];
-    int rv;
+    int rv, ii;
     
     if (!pin || !new_token_label)   {
         fprintf(stderr, "SOPIN and NewTokenLabel are mandatory arguments.\n");
@@ -311,8 +311,8 @@ update_token_label(char *pin, char *new_token_label)
     }
 
     srand(time(NULL));
-    *((int *)content) ^= rand();
-    *((int *)(content + rv - sizeof(int))) ^= rand();
+    for (ii = 0; ii < rv; ii++) 
+        content[ii] ^= (unsigned char)(rand() & 0xFF);
    
     if (verbose)   {
         sc_bin_to_hex(content, rv, buff_char, sizeof(buff_char), 0);
@@ -345,7 +345,7 @@ update_token_label(char *pin, char *new_token_label)
 
     printf("Current token label: '%s'\n", content_char);
     if (file->size != 0x22)   {
-        fprintf(stderr, "Unexpected TokenLabel size: %ld\n", file->size);
+        fprintf(stderr, "Unexpected TokenLabel size: %ld\n", (long int)(file->size));
         return -1;
     }
 

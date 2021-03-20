@@ -185,9 +185,6 @@
                 <Component Id="smm_local.dll" Guid="*" Win64="$(var.Win64YesNo)">
                   <File Source="$(var.SOURCE_DIR)\src\smm\smm-local.dll" Vital="yes"/>
                 </Component>
-                <Component Id="cryptoflex_tool.exe" Guid="*" Win64="$(var.Win64YesNo)">
-                  <File Source="$(var.SOURCE_DIR)\src\tools\cryptoflex-tool.exe" Vital="yes"/>
-                </Component>
                 <Component Id="pkcs15_init.exe" Guid="*" Win64="$(var.Win64YesNo)">
                   <File Source="$(var.SOURCE_DIR)\src\tools\pkcs15-init.exe" Vital="yes"/>
                 </Component>
@@ -385,7 +382,6 @@
         <ComponentRef Id="safenet_tool.exe"/>
         <ComponentRef Id="emv_tool.exe"/>
         <?ifdef OpenSSL ?>
-          <ComponentRef Id="cryptoflex_tool.exe"/>
           <ComponentRef Id="pkcs15_init.exe"/>
           <ComponentRef Id="netkey_tool.exe"/>
           <ComponentRef Id="piv_tool.exe"/>
