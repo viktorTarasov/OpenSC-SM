@@ -26,6 +26,9 @@
 #ifdef HAVE_UNISTD_H
 #include <unistd.h>
 #endif
+
+#include <sys/types.h>
+
 #include <string.h>
 #include <errno.h>
 #include <ctype.h>
@@ -37,6 +40,8 @@
 #include "libopensc/asn1.h"
 #include "libopensc/internal.h"
 #include "util.h"
+
+
 
 struct POD {
 	unsigned char sfi;
@@ -305,7 +310,7 @@ update_token_label(char *pin, char *new_token_label)
         printf("Current stamp: '%s'\n", buff_char);
     }
 
-    srand(time(NULL) ^ getpid());
+    srand(time(NULL));
     *((int *)content) ^= rand();
     *((int *)(content + rv - sizeof(int))) ^= rand();
    
