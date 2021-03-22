@@ -59,6 +59,7 @@ static int	opt_apdu_count = 0;
 static char * opt_pin = NULL;
 static char * opt_new_token_label = NULL;
 static int	verbose = 0;
+static int	silent = 0;
 
 #define SC_CARD_TYPE_SAFENET_IDPRIME_MD 68000
 
@@ -78,6 +79,7 @@ enum {
 	OPT_SELECT_AID = 0x100,
     OPT_UPDATE_TOKEN_LABEL,
     OPT_PIN,
+    OPT_SILENT,
 	OPT_RESET,
 };
 
@@ -92,6 +94,7 @@ static const struct option options[] = {
     { "reset",		2, NULL,	OPT_RESET   },
 	{ "wait",		0, NULL,		'w' },
 	{ "verbose",		0, NULL,		'v' },
+	{ "silent",		0, NULL,		OPT_SILENT },
 	{ NULL, 0, NULL, 0 }
 };
 
@@ -106,6 +109,7 @@ static const char *option_help[] = {
 	"Does card reset of type <cold|warm> [cold]",
 	"Wait for a card to be inserted",
 	"Verbose operation. Use several times to enable debug output.",
+    "Silent mode",
 };
 
 static sc_context_t *ctx = NULL;
@@ -269,30 +273,14 @@ reset_pin(void)
 
 
 static int
-update_token_label(char *pin, char *new_token_label)
+update_stamp(void)
 {
     struct sc_path path;
     struct sc_file *file = NULL;
     unsigned char content[0x100];
-    char *content_char = NULL;
     char buff_char[0x300];
     int rv, ii;
     
-    if (!pin || !new_token_label)   {
-        fprintf(stderr, "SOPIN and NewTokenLabel are mandatory arguments.\n");
-        return -1;
-    }
-
-    if (strlen(new_token_label) > 0x20)   {
-        fprintf(stderr, "New label length cannot be more then 32 characters.\n");
-        return -1;
-    }
-
-    if (verify_pin(pin))   {
-        fprintf(stderr, "Cannot verify SoPIN\n");
-        return -1;
-    }
-
     sc_format_path("0202", &path);
     if (sc_select_file(card, &path, &file))   {
         fprintf(stderr, "Cannot select 0202.\n");
@@ -324,26 +312,94 @@ update_token_label(char *pin, char *new_token_label)
         fprintf(stderr, "Cannot update TokenInfo binary file\n");
         return -1;
     }
-    rv = 0;
+
+    return 0;
+}
+
+static int
+update_token_label(char *pin, char *new_token_label)
+{
+    struct sc_path path;
+    struct sc_file *file = NULL;
+    unsigned char content[0x100];
+    char *content_char = NULL;
+    int rv;
+    
+    if (!pin || !new_token_label)   {
+        fprintf(stderr, "SOPIN and NewTokenLabel are mandatory arguments.\n");
+        return -1;
+    }
+
+    if (strlen(new_token_label) > 0x20)   {
+        fprintf(stderr, "New label length cannot be more then 32 characters.\n");
+        return -1;
+    }
+
+    if (verify_pin(pin))   {
+        fprintf(stderr, "Cannot verify SoPIN\n");
+        return -1;
+    }
+
+    if (update_stamp())   {
+        fprintf(stderr, "Cannot update stamp\n");
+        return -1;
+    }
 
     sc_format_path("0205", &path);
-    if (sc_select_file(card, &path, &file))   {
-        fprintf(stderr, "Cannot select DF 0205\n");
+    rv = sc_select_file(card, &path, &file);
+    if (rv == SC_ERROR_FILE_NOT_FOUND)   {
+        char *create_0205[] = {
+            "00:A4:00:00:02:01:02",
+            "00:C0:00:00:1A",
+            "00:D6:00:00:13:02:6D:73:63:70:00:00:00:00:01:70:31:31:00:00:00:00:00:01",
+            
+            "00:A4:00:00:02:01:01",
+            "00:C0:00:00:1A",
+            "00:D6:00:00:6A:05:02:01:00:10:63:61:72:64:69:64:00:00:00:00:00:00:00:00:00:00:03:02:02:00:06:63:61:72:64:63:66:00:00:00:00:00:00:00:00:00:00:01:02:03:00:08:63:61:72:64:61:70:70:73:00:00:00:00:00:00:00:00:01:02:04:06:B8:63:6D:61:70:66:69:6C:65:6D:73:63:70:00:00:00:00:01:02:05:00:22:74:69:6E:66:6F:00:00:00:70:31:31:00:00:00:00:00:01",
+
+            "00:A4:00:0C:02:3F:00",
+            "00:E0:00:00:1C:62:1A:81:02:00:22:82:01:01:83:02:02:05:8A:01:05:8C:04:43:18:18:00:9C:04:43:18:18:00",
+
+            "00:A4:00:00:02:00:01",
+            "00:C0:00:00:1A",
+            "00:D6:00:02:02:23:D0",
+        };
+        int create_0205_count = sizeof(create_0205)/sizeof(create_0205[0]);
+
+        rv = send_apdu(create_0205, create_0205_count);
+        if (rv < 0)   {
+            fprintf(stderr, "Failed to create TokenLabel file\n");
+            return -1;
+        }
+        
+        if (sc_select_file(card, &path, &file))   {
+            fprintf(stderr, "Cannot select newly created TokenLabel\n");
+            return -1;
+        }
+
+        if (verbose)
+            printf("Created TokenLabel file\n");
+    }
+    else if (rv != SC_SUCCESS)   {
+        fprintf(stderr, "Cannot select TokenLabel\n");
         return -1;
     }
-
+        
     rv = sc_read_binary(card, 0, content, file->size, 0);
     if (rv < 0)   {
-        fprintf(stderr, "Cannot read 0202.\n");
+        fprintf(stderr, "Cannot read TokenLabel.\n");
         return -1;
     }
+    
     content[rv] = '\0';
     content_char = (char *)(content + 2);
     
     while (*(content_char + strlen(content_char) - 1) == ' ')   
         *(content_char+ strlen(content_char) - 1) = '\0';
 
-    printf("Current token label: '%s'\n", content_char);
+    if (verbose || !silent)
+        printf("Current token label: '%s'\n", content_char);
+
     if (file->size != 0x22)   {
         fprintf(stderr, "Unexpected TokenLabel size: %ld\n", (long int)(file->size));
         return -1;
@@ -352,7 +408,8 @@ update_token_label(char *pin, char *new_token_label)
     memset(content + 2, ' ', 0x20);
     memcpy(content + 2, new_token_label, strlen(new_token_label));
 
-    printf("New token label: '%s'\n", new_token_label);
+    if (verbose || !silent)
+        printf("New token label: '%s'\n", new_token_label);
     rv = sc_update_binary(card, 0, content, file->size, 0);
     if (rv < 0)   {
         fprintf(stderr, "Cannot update TokenLabel file\n");
@@ -443,6 +500,9 @@ int main(int argc, char *argv[])
 			break;
 		case 'v':
 			verbose++;
+			break;
+		case OPT_SILENT:
+			silent = 1;
 			break;
 		case 'w':
 			opt_wait = 1;
