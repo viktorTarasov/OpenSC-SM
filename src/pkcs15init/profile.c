@@ -43,6 +43,7 @@
 #endif
 
 #include "common/compat_strlcpy.h"
+#include "common/libscdl.h"
 #include "scconf/scconf.h"
 #include "libopensc/log.h"
 #include "libopensc/pkcs15.h"
