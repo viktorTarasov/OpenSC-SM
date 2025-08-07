@@ -153,6 +153,7 @@ rm %{buildroot}%{_mandir}/man1/opensc-notify.1*
 %{_bindir}/cryptoflex-tool
 %{_bindir}/eidenv
 %{_bindir}/iasecc-tool
+%{_bindir}/safenet-tool
 %{_bindir}/gids-tool
 %{_bindir}/netkey-tool
 %if ! 0%{?rhel}
