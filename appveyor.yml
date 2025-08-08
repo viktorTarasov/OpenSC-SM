@@ -31,7 +31,7 @@ environment:
 
 init:
   # Fixes "fatal: detected dubious ownership in repository at '/cygdrive/c/projects/opensc'" with recent images
-  - git config --global --add safe.directory /cygdrive/c/projects/opensc
+  - git config --global --add safe.directory /cygdrive/c/projects/opensc-sm
 
 install:
   - ps: if ($env:APPVEYOR_PULL_REQUEST_NUMBER -and $env:APPVEYOR_BUILD_NUMBER -ne ((Invoke-RestMethod `
